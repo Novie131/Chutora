@@ -14,6 +14,8 @@
 | 分清事實與推測的調查、找根因、審查結論，回答要分 觀察／推論／未知 並附出處 | `/evidence-analysis` |
 | 對自己的程式碼做靜態安全審查（OWASP、附證據與修補、嚴重度分級） | `security-review` |
 | 對自己、已授權且隔離的 dev 環境做動態安全測試（開工先確認授權範圍） | `security-test` |
+| 哪些工具／MCP 長期沒用到、可以關掉省 token | `/toolprune` |
+| 讓這套 harness 針對某類任務越調越好（改前確認、可回滾） | `/harness-tune` |
 
 以 plugin 安裝時，上表名稱前面會加 `smart-agent-route:`（例如 `smart-agent-route:worker`、`/smart-agent-route:research`）。
 
@@ -31,5 +33,7 @@
 - 失敗升級依序：補背景後同一個 agent 重派 → bulk 失敗改 worker → worker 失敗改 worker-hard（附失敗報告）→ 仍失敗就停下，重新規劃或詢問使用者，不再往上升。
 - 完成要有可執行的驗證（測試、lint、實際執行），「看起來完成」不算。
 - 持續萃取：做出決定、完成子任務、查到關鍵事實時，就順手更新 handoff，不要等 context 提醒。
+- micro-skills：這個 repo 怎麼跑的固定指令事實（測試怎麼下、哪個指令才對、要吃哪個環境變數、產出檔放哪），確認後記進 `claude-memory/` MEMORY.md 的「指令事實」區，讓之後的 session 不用重新摸索同一件事。
 - 對話變長時，UserPromptSubmit hook 會帶入目前的 context 大小；那時用 handoff skill 寫交接筆記，並照提醒文字的指示回報（有設自動壓縮就只需告知，不用手動處理）。
+- loop guard：PostToolUse hook 會偵測同一個錯誤反覆出現，並注入一句提醒換方向；看到這類提醒就認真考慮改路、退一步或回報使用者，別用同樣方式硬重試。
 - 專案有 `claude-memory/` 時，下方會附上它的記憶索引；有 `handoff.md` 時也會附上，那是上一個對話留下的進度。沒有 `claude-memory/` 時記憶在 auto memory（Claude Code 自己會帶入它的 MEMORY.md；handoff.md 則由本 hook 帶入）。

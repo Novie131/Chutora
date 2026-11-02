@@ -24,6 +24,17 @@
 
 - (還沒有)
 
+## 指令事實（micro-skills）
+
+<!--
+  這個 repo 怎麼跑的固定事實:測試怎麼下、哪個指令才對(例如這裡用 `python -m pytest` 而不是 `pytest`)、
+  某個指令要吃哪個環境變數、產出檔放哪。取自 TokenEconomizer 的 micro-skills。
+  紀律:同一件事在不同 session 被確認過大約三次才升上來當常駐;之後若有 session 證明它不成立,就刪掉。
+  目的是讓每個 session 不要一再重新摸索同樣的指令。
+-->
+
+- (還沒有)
+
 ---
 
 ## 觸發索引

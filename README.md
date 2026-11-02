@@ -96,8 +96,8 @@ context 長度提醒需要 `python3`，沒有的話會安靜停用。不想用 m
           ├──► security-review(Sonnet) ← 靜態安全審查你自己的碼。唯讀
           └──► security-test(Sonnet)   ← 授權動態測試你自己的 dev 環境
 
-skill:handoff(交接筆記)、research(查外部資料並附來源)、usage-stats(量測 context 與子 agent 用量)、route-setup(一次性完整設定)、evidence-analysis(證據導向分析)
-hook :session 開始帶入分工慣例與記憶;context 過長時提醒
+skill:handoff(交接筆記)、research(查外部資料並附來源)、usage-stats(量測 context 與子 agent 用量)、route-setup(一次性完整設定)、evidence-analysis(證據導向分析)、toolprune(工具修剪)、harness-tune(自我強化)
+hook :session 開始帶入分工慣例與記憶;context 過長時提醒;工具呼叫後偵測錯誤迴圈並提醒(loop guard)
 ```
 
 | 元件 | 模型 | 做什麼 |
@@ -114,6 +114,7 @@ hook :session 開始帶入分工慣例與記憶;context 過長時提醒
 - **Skills**：`handoff` 寫 `handoff.md`；`research` 查外部資料並附來源；`usage-stats` 量測主對話 context 長度、各 agent 的派工次數、token 用量與估計金額（唯讀；加 `--html` 可輸出圖表報表）；`route-setup` 是一次性完整設定。
 - **Hooks**：SessionStart 帶入分工慣例、記憶索引與交接筆記；UserPromptSubmit 在 context 過長時提醒。
 - **新增能力**：`evidence-analysis`（證據導向分析：結論分 觀察／推論／未知 並附出處）；`security-review`／`security-test`（防禦性安全：靜態審查＋授權動態測試）。安全能力只用於你自己或明確授權的程式碼與環境，動態測試只在隔離環境、不碰 production、不外送資料。
+- **省 token 與自我強化**：`toolprune`（指認長期沒用到的工具、建議停用，可逆）；`harness-tune`（針對某類任務調整 harness，改前確認、可回滾，取自 harness2）；PostToolUse `loop guard` hook（同一錯誤重複就提醒換方向，只提醒不中斷，取自 TokenEconomizer）；micro-skills（把這個 repo 的固定指令事實記進記憶，少走回頭路）。
 
 主對話怎麼分工，不靠你的 CLAUDE.md：SessionStart hook 會在每個 session 開始時把分工表帶進去（內容見 `hooks/guide.md`）。設計理由與取捨見 [docs/spec.md](docs/spec.md)。
 

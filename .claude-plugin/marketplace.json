@@ -9,7 +9,7 @@
       "name": "smart-agent-route",
       "source": "./plugins/smart-agent-route",
       "description": "分層委派架構：Opus 規劃、Sonnet 執行、Haiku 檢索與大量讀取，搭配 context 長度提醒與交接筆記讓對話可以放心清空，以及可跨對話累積、附來源的知識庫。",
-      "version": "0.9.0",
+      "version": "0.10.0",
       "author": {
         "name": "Novie131"
       }
