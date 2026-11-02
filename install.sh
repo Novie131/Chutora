@@ -130,7 +130,7 @@ if [[ "$MODE" == "uninstall" ]]; then
     fi
   done
   # --link 裝的 skill 與 hook:只移除連到本 repo 的符號連結,不碰同名的其他檔案
-  for d in "${SKILLS_DEST}"/* "$HOOKS_LINK"; do
+  for d in "${AGENTS_DEST}"/*.md "${SKILLS_DEST}"/* "$HOOKS_LINK"; do
     if [[ -L "$d" && "$(readlink "$d")" == "${SRC_DIR}/"* ]]; then
       rm -f "$d" && ok "已移除連結 ${d/#$HOME/~}"
     fi
