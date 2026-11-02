@@ -92,9 +92,11 @@ context 長度提醒需要 `python3`，沒有的話會安靜停用。不想用 m
           │      └► worker-hard      ← worker 失敗後的升級
           ├──► bulk(Haiku)          ← 大量讀取只要結論:圖片、長 log、網頁
           ├──► librarian(Haiku)     ← 查知識庫。唯讀
-          └──► harvester(Sonnet)    ← 挖歷史對話進知識庫。手動觸發
+          ├──► harvester(Sonnet)    ← 挖歷史對話進知識庫。手動觸發
+          ├──► security-review(Sonnet) ← 靜態安全審查你自己的碼。唯讀
+          └──► security-test(Sonnet)   ← 授權動態測試你自己的 dev 環境
 
-skill:handoff(交接筆記)、research(查外部資料並附來源)、usage-stats(量測 context 與子 agent 用量)、route-setup(一次性完整設定)
+skill:handoff(交接筆記)、research(查外部資料並附來源)、usage-stats(量測 context 與子 agent 用量)、route-setup(一次性完整設定)、evidence-analysis(證據導向分析)
 hook :session 開始帶入分工慣例與記憶;context 過長時提醒
 ```
 
@@ -105,10 +107,13 @@ hook :session 開始帶入分工慣例與記憶;context 過長時提醒
 | bulk | Haiku | 大量讀取、只回結論：大量圖片、長 log、網頁、輸出很多的指令，以及機械式的批次修改 |
 | librarian | Haiku，effort low | 查知識庫與記憶。只有 `Read`、`Glob`、`Grep`，什麼都改不了；回傳原文片段與來源，並說明搜過哪些詞、什麼沒找到 |
 | harvester | Sonnet | 把歷史對話逐字稿挖進知識庫筆記。只在你明確要求時才跑，成本不低 |
+| security-review | Sonnet，effort medium | 對你自己的程式碼做靜態安全審查（OWASP 類別、附證據與修補、嚴重度分級）。只讀不改，只用於你擁有或授權的碼 |
+| security-test | Sonnet，effort medium | 對你自己、已授權且隔離的 dev 環境做動態安全測試，驗證漏洞是否可利用。開工先確認授權範圍，不碰 production、不外送資料 |
 | Explore（選裝） | Haiku | 內建 Explore 在主對話是 Opus 時也跑 Opus。plugin 蓋不掉它（只有使用者或專案層級、名為 `Explore` 的 agent 能覆蓋），所以用 route-setup 或 `bash install.sh --with-explore` 把 Haiku 版裝進 `~/.claude/agents/` |
 
 - **Skills**：`handoff` 寫 `handoff.md`；`research` 查外部資料並附來源；`usage-stats` 量測主對話 context 長度、各 agent 的派工次數、token 用量與估計金額（唯讀；加 `--html` 可輸出圖表報表）；`route-setup` 是一次性完整設定。
 - **Hooks**：SessionStart 帶入分工慣例、記憶索引與交接筆記；UserPromptSubmit 在 context 過長時提醒。
+- **新增能力**：`evidence-analysis`（證據導向分析：結論分 觀察／推論／未知 並附出處）；`security-review`／`security-test`（防禦性安全：靜態審查＋授權動態測試）。安全能力只用於你自己或明確授權的程式碼與環境，動態測試只在隔離環境、不碰 production、不外送資料。
 
 主對話怎麼分工，不靠你的 CLAUDE.md：SessionStart hook 會在每個 session 開始時把分工表帶進去（內容見 `hooks/guide.md`）。設計理由與取捨見 [docs/spec.md](docs/spec.md)。
 
@@ -274,7 +279,7 @@ smart-agent-route/
 ├── .claude-plugin/marketplace.json   ← 市集目錄
 ├── plugins/smart-agent-route/            ← plugin 本體
 │   ├── .claude-plugin/plugin.json
-│   ├── agents/                       ← worker / worker-hard / bulk / librarian / harvester
+│   ├── agents/                       ← worker / worker-hard / bulk / librarian / harvester / security-review / security-test
 │   ├── skills/                       ← handoff / research / usage-stats / route-setup
 │   ├── hooks/                        ← SessionStart 帶入、context 長度提醒
 │   （範本在 skills/route-setup/templates/：MEMORY.md、知識庫說明、Explore、Haiku 層範本）

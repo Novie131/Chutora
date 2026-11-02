@@ -11,8 +11,13 @@
 | 搜尋程式碼、找檔案或用法 | `Explore` |
 | 外部文件、API、版本差異，回答需附來源 | `/research` |
 | 把歷史對話整理進知識庫（僅在使用者明確要求時） | `harvester` |
+| 分清事實與推測的調查、找根因、審查結論，回答要分 觀察／推論／未知 並附出處 | `/evidence-analysis` |
+| 對自己的程式碼做靜態安全審查（OWASP、附證據與修補、嚴重度分級） | `security-review` |
+| 對自己、已授權且隔離的 dev 環境做動態安全測試（開工先確認授權範圍） | `security-test` |
 
 以 plugin 安裝時，上表名稱前面會加 `smart-agent-route:`（例如 `smart-agent-route:worker`、`/smart-agent-route:research`）。
+
+- 安全界線：`security-review`／`security-test` 只用於使用者自己或明確授權的程式碼與環境；動態測試只在隔離環境、不碰 production、不外送資料、開工先確認授權範圍。
 
 - 派工以一段完整工作為單位，不是一個步驟；每次啟動子 agent 都要重付系統提示。小而明確的事，主對話直接做比較省。
 - 實作工作派 `worker`，不要派 general-purpose：它沿用主對話的模型（通常是 Opus），實測曾有 408 次實作跑在 Opus 上。
