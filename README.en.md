@@ -92,10 +92,12 @@ You ──► main conversation (Opus)  ← the front door: understands, decides
           │      └► worker-hard       ← escalation after worker fails
           ├──► bulk (Haiku)          ← lots to read, only conclusions needed: images, long logs, web pages
           ├──► librarian (Haiku)     ← searches the knowledge base. Read-only
-          └──► harvester (Sonnet)    ← mines past conversations into the knowledge base. Manual trigger
+          ├──► harvester (Sonnet)    ← mines past conversations into the knowledge base. Manual trigger
+          ├──► security-review (Sonnet) ← static security review of your own code. Read-only
+          └──► security-test (Sonnet)   ← authorized dynamic testing of your own dev environment
 
-skill: handoff (handoff notes), research (look up external info with sources), usage-stats (measure context and subagent usage), route-setup (one-time full setup)
-hook : session start injects the delegation guide and memory; a reminder fires when the context gets long
+skill: handoff (handoff notes), research (look up external info with sources), usage-stats (measure context and subagent usage), route-setup (one-time full setup), evidence-analysis (evidence-based analysis), toolprune (tool pruning), harness-tune (self-improvement)
+hook : session start injects the delegation guide and memory; a reminder fires when the context gets long; after each tool call it watches for repeated errors and nudges you to change course (loop guard)
 ```
 
 | Component | Model | What it does |
@@ -105,10 +107,14 @@ hook : session start injects the delegation guide and memory; a reminder fires w
 | bulk | Haiku | Reads large amounts of material and returns only conclusions: many images, long logs, web pages, commands with huge output, and mechanical batch edits |
 | librarian | Haiku, effort low | Searches the knowledge base and memory. It has only `Read`, `Glob`, and `Grep`, so it cannot modify anything; it returns verbatim excerpts with their sources, plus which terms it searched and what it did not find |
 | harvester | Sonnet | Mines past conversation transcripts into knowledge-base notes. Only runs when you explicitly ask; it is costly |
+| security-review | Sonnet, effort medium | Static security review of your own code (OWASP categories, evidence and remediation, severity). Read-only; only for code you own or are authorized to test |
+| security-test | Sonnet, effort medium | Dynamic security testing against your own, authorized, isolated dev environment to confirm whether findings are exploitable. Confirms the authorization scope first, never touches production, never exfiltrates data |
 | Explore (optional) | Haiku | The built-in Explore runs on Opus when the main conversation is Opus. A plugin cannot override it (only a user- or project-level agent named `Explore` can), so route-setup or `bash install.sh --with-explore` installs a Haiku version into `~/.claude/agents/` |
 
 - **Skills**: `handoff` writes `handoff.md`; `research` looks up external information and cites sources; `usage-stats` measures main-conversation context length and, per agent, dispatch counts, token usage, and estimated cost (read-only; add `--html` for a report with charts); `route-setup` is the one-time full setup.
 - **Hooks**: SessionStart injects the delegation guide, the memory index, and the handoff note; UserPromptSubmit reminds you when the context window is too long.
+- **Analysis & security**: `evidence-analysis` (separates observation / inference / unknown and cites sources); `security-review` / `security-test` (defensive security: static review plus authorized dynamic testing). The security capabilities apply only to your own or explicitly authorized code and environments; dynamic testing runs only in an isolated environment, never touches production, and never exfiltrates data.
+- **Saving tokens & self-improvement**: `toolprune` (flags long-unused tools and suggests disabling them, reversibly); `harness-tune` (adjusts the harness for a recurring task type, confirmed before changing and roll-back-able, from harness2); a PostToolUse `loop guard` hook (nudges you to change course when the same error repeats, nudge-only, never interrupts, from TokenEconomizer); micro-skills (records this repo's fixed command facts into memory).
 
 How the main conversation delegates does not depend on your CLAUDE.md: the SessionStart hook injects the delegation table at the start of every session (see `hooks/guide.md`). Design rationale and trade-offs are in [docs/spec.md](docs/spec.md) (Traditional Chinese).
 
@@ -274,8 +280,8 @@ smart-agent-route/
 ├── .claude-plugin/marketplace.json   ← marketplace catalog
 ├── plugins/smart-agent-route/            ← the plugin itself
 │   ├── .claude-plugin/plugin.json
-│   ├── agents/                       ← worker / worker-hard / bulk / librarian / harvester
-│   ├── skills/                       ← handoff / research / usage-stats / route-setup
+│   ├── agents/                       ← worker / worker-hard / bulk / librarian / harvester / security-review / security-test
+│   ├── skills/                       ← handoff / research / usage-stats / route-setup / evidence-analysis / security-review / security-test / toolprune / harness-tune
 │   ├── hooks/                        ← SessionStart injection, context-length reminder
 │   (templates are in skills/route-setup/templates/: MEMORY.md, knowledge-base guide, Explore, Haiku-layer example)
 ├── plugins/agent-board/              ← subagent board mod (optional)

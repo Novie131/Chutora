@@ -18,7 +18,7 @@ The short version:
 
 Click the install button on the `.plugin` file. **It works right after install** (for the full feature set, such as the status line, auto-compact threshold, Haiku Explore, and claude-memory, run `/smart-agent-route:route-setup`), and **it is available in every conversation** (a plugin is user-level, not tied to a conversation).
 
-To verify, ask in a new conversation "which agents are available?". You should see `worker`, `worker-hard`, `bulk`, `librarian`, and `harvester`.
+To verify, ask in a new conversation "which agents are available?". You should see `worker`, `worker-hard`, `bulk`, `librarian`, `harvester`, `security-review`, and `security-test`.
 
 ---
 
@@ -74,7 +74,7 @@ Add `--with-reply-detail` (the restrictions, `--link`/copy modes and `--uninstal
 /agents
 ```
 
-You should see five agents (`worker`, `worker-hard`, `bulk`, `librarian`, `harvester`). Or try an @-mention:
+You should see seven agents (`worker`, `worker-hard`, `bulk`, `librarian`, `harvester`, `security-review`, `security-test`). Or try an @-mention:
 
 ```
 @agent-worker

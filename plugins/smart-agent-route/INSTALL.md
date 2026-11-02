@@ -18,7 +18,7 @@
 
 點 `.plugin` 檔的安裝按鈕就好,**裝完即可用**(想要狀態列、自動壓縮門檻、Haiku Explore、claude-memory 等完整功能,執行 `/smart-agent-route:route-setup`),而且**所有對話都能用**(plugin 是使用者層級,不綁對話)。
 
-要驗證的話,在新對話問「有哪些 agent 可以用?」,應該看得到 `worker`、`worker-hard`、`bulk`、`librarian`、`harvester`。
+要驗證的話,在新對話問「有哪些 agent 可以用?」,應該看得到 `worker`、`worker-hard`、`bulk`、`librarian`、`harvester`、`security-review`、`security-test`。
 
 ---
 
