@@ -31,3 +31,12 @@ hooks 只讀寫本機檔案。只有你要查外部資料時（research）才會
 
 **可以只用一部分功能嗎？**
 可以。看板和回覆格式是選裝；`bash install.sh --agents-only` 只裝 agent；不需要的 skill 可以在 `/plugin` 裡停用整個 plugin，或用 install.sh 安裝後自己刪掉。
+
+**噪音輸出瘦身會不會砍掉重要資訊？**
+它刻意保守：只處理成功、而且超過門檻的安裝／建置／測試輸出；錯誤、警告、assert、stack trace 這類行連同前後 2 行一定保留，開頭與結尾也保留；失敗的指令、讀檔類指令、`git diff` 都不動。萬一真的需要被略過的部分，原文一定在 `~/.claude/chutora/raw/`。
+
+**怎麼看被瘦身前的原文？**
+瘦身後的輸出最後一行會寫原文路徑（`~/.claude/chutora/raw/<id>.log`），直接請 Claude「讀原文」，或自己打開那個檔案。想完全關掉：`/chutora trim off`。
+
+**Benchmark 的數字在哪？**
+還沒公布。`bench/run.py` 已經可以跑，但在實際跑完、核對過之前不放任何數字，見 README 的 [Benchmark](../README.md#benchmark)。

@@ -85,6 +85,18 @@ macOS 從 Dock 或 VS Code 啟動時，常常沒有設定 `LANG`。看到英文�
 - 訂閱方案不是按 token 計費，這個數字只用來比較相對大小。
 - 價格表與 `usage-stats` 共用；要看完整報表用 `/chutora:usage-stats`。
 - 不想看：在 `~/.claude/settings.json` 的 `"env"` 加 `"CHUTORA_WEEKLY": "0"`。
+- 有開噪音輸出瘦身時，同一行會附上「瘦身讓多少 token 沒進到 context」的估算。
+
+### 噪音輸出瘦身
+
+`npm install`、`pytest`、`cargo build` 這類指令常常印出幾百行進度和日誌，真正有用的只有錯誤和最後的摘要，但整段都會進到 context、之後每一輪重送。Chutora 用標準的 PostToolUse hook（`hooks/trim.py`）在結果進到 context 前先瘦身：
+
+- **何時處理**：只處理成功的 Bash 指令，而且輸出超過門檻才動。門檻依模式：省錢 3000 字元或 80 行、平衡 4000 字元或 120 行、品質 8000 字元或 250 行。不認得的指令門檻加倍、保留更多。
+- **怎麼瘦**：去掉色碼與 `\r` 進度覆寫，收斂進度列與重複行，保留開頭與結尾各數十行；含 error、fail、exception、traceback、warning、assert 等關鍵字的行一定保留，連同前後 2 行；測試結果、安裝摘要這類摘要行也保留。瘦身省不到兩成就不動。
+- **絕不動**：讀檔類指令（`cat`、`head`、`tail`、`sed`、`grep`、`ls`…）、`git diff`／`show`／`log`／`status`、已經自己接了 `| head`、`| grep` 的指令、`python -c`、JSON 輸出、背景指令、Claude Code 自己已經另存的超大輸出。失敗的指令走 PostToolUseFailure，那裡不能改寫輸出，所以錯誤輸出一律完整保留。
+- **原文一定留著**：存到 `~/.claude/chutora/raw/<tool_use_id>.log`（保留最近 50 份），瘦身後的輸出最後一行會寫明路徑，Claude 需要被略過的內容時會用 Read 讀回來。
+- **開關**：`/chutora trim off`（寫入 `~/.claude/chutora/trim`）或環境變數 `CHUTORA_TRIM=0`；`/chutora trim on` 改回。
+- **省了多少**：累計瘦身掉的字元數記在 `~/.claude/chutora/trim-stats.json`，`/chutora` 與每週回顧會換算成 token 顯示。換算用「字元數÷4」，是估算。
 
 ---
 
@@ -266,10 +278,11 @@ chutora/
 │   ├── .claude-plugin/plugin.json
 │   ├── agents/                       ← worker / worker-hard / bulk / librarian / harvester / security-review / security-test
 │   ├── skills/                       ← handoff / research / usage-stats / route-setup / evidence-analysis / security-review / security-test / toolprune / harness-tune / chutora-hub
-│   ├── hooks/                        ← SessionStart 帶入、context 長度提醒、loop guard、modes/（三種模式）、weekly.py（每週回顧）
+│   ├── hooks/                        ← SessionStart 帶入、context 長度提醒、loop guard、modes/（三種模式）、weekly.py（每週回顧）、trim.py（噪音輸出瘦身）
 │   （範本在 skills/route-setup/templates/：MEMORY.md、知識庫說明、Explore、Haiku 層範本）
 ├── plugins/agent-board/              ← 子 agent 看板 mod（選裝）
 ├── plugins/reply-detail/             ← 回覆格式 mod（選裝）
+├── bench/                            ← token benchmark：run.py、tasks.json、fixtures/
 ├── docs/
 │   ├── spec.md                       ← 架構設計與實作附錄
 │   ├── 部署安裝.md

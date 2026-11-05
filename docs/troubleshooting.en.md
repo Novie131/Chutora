@@ -46,6 +46,14 @@ Set `LOOP_GUARD_REPEAT` to how many repeats of the same error trigger a nudge (d
 
 Add `"CHUTORA_WEEKLY": "0"` to `"env"` in `~/.claude/settings.json`.
 
+### After trimming, Claude is missing something from a command's output
+
+The last line of the trim note names the original's path; ask Claude to Read that file. If it happens often, switch to quality mode (`/chutora mode quality`, higher threshold, keeps more) or turn trimming off with `/chutora trim off`.
+
+### Checking that noisy-output trimming works
+
+Type `/chutora`: the status shows whether it is on and how many tokens it has trimmed (estimate). With an install.sh install, `/chutora doctor` checks that settings.json has the `trim.py` PostToolUse hook; if not, re-run `bash install.sh` and merge the hooks snippet it prints.
+
 ### Still stuck
 
 Open an issue with the output of `/chutora doctor` and your Claude Code version (`claude --version`).

@@ -31,3 +31,12 @@ Yes, both the Claude Code CLI and the VS Code extension. After installing the op
 
 **Can I use only part of it?**
 Yes. The board and reply-format mods are optional; `bash install.sh --agents-only` installs only the agents; you can disable the whole plugin in `/plugin`, or delete skills you don't want after an install.sh install.
+
+**Can noisy-output trimming cut something important?**
+It is deliberately conservative: it only touches successful install/build/test output over the threshold; error, warning, assert and stack-trace lines are always kept with 2 lines around them, as are the start and the end; failed commands, file-reading commands and `git diff` are never touched. If you do need an omitted part, the original is always in `~/.claude/chutora/raw/`.
+
+**How do I see the original before trimming?**
+The last line of the trimmed output names the original's path (`~/.claude/chutora/raw/<id>.log`). Ask Claude to "read the original", or open the file yourself. To turn trimming off entirely: `/chutora trim off`.
+
+**Where are the benchmark numbers?**
+Not published yet. `bench/run.py` works, but no numbers go up until a real run has been done and checked; see [Benchmark](../README.en.md#benchmark) in the README.

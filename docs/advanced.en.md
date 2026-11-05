@@ -83,6 +83,18 @@ When the first conversation of each ISO week starts, one line of estimate appear
 - Subscriptions aren't billed per token; use the number for relative comparison only.
 - It shares the price table with `usage-stats`; for the full report run `/chutora:usage-stats`.
 - To turn it off, add `"CHUTORA_WEEKLY": "0"` to `"env"` in `~/.claude/settings.json`.
+- With noisy-output trimming on, the same line adds an estimate of how many tokens trimming kept out of the context.
+
+### Noisy-output trimming
+
+Commands such as `npm install`, `pytest` and `cargo build` often print hundreds of lines of progress and logs when only the errors and the final summary matter, yet all of it enters the context and is resent every turn. Chutora uses a standard PostToolUse hook (`hooks/trim.py`) to trim the result before it reaches the context:
+
+- **When**: only successful Bash commands whose output is over the threshold. Thresholds follow the mode: economy 3000 characters or 80 lines, balanced 4000 or 120, quality 8000 or 250. Commands it doesn't recognize get double the threshold and keep more lines.
+- **How**: strips color codes and `\r` progress rewrites, collapses progress bars and repeated lines, and keeps a few dozen lines at the start and end. Lines with error, fail, exception, traceback, warning, assert and similar keywords are always kept, with 2 lines around them, as are summary lines such as test results and install totals. If trimming would save less than a fifth, it leaves the output alone.
+- **Never touched**: file-reading commands (`cat`, `head`, `tail`, `sed`, `grep`, `ls`…), `git diff`/`show`/`log`/`status`, commands already piped into `| head` or `| grep`, `python -c`, JSON output, background commands, and very large output Claude Code already saved to a file. Failed commands go through PostToolUseFailure, which can't rewrite output, so error output always arrives in full.
+- **The original is always kept**: saved to `~/.claude/chutora/raw/<tool_use_id>.log` (the 50 most recent are kept). The last line of the trimmed output names the path, so Claude can Read it when it needs something that was omitted.
+- **Switch**: `/chutora trim off` (saved to `~/.claude/chutora/trim`) or the `CHUTORA_TRIM=0` environment variable; `/chutora trim on` turns it back on.
+- **How much it saved**: trimmed characters accumulate in `~/.claude/chutora/trim-stats.json`; `/chutora` and the weekly recap show them as tokens using "characters ÷ 4", which is an estimate.
 
 ---
 
@@ -264,10 +276,11 @@ chutora/
 │   ├── .claude-plugin/plugin.json
 │   ├── agents/                       ← worker / worker-hard / bulk / librarian / harvester / security-review / security-test
 │   ├── skills/                       ← handoff / research / usage-stats / route-setup / evidence-analysis / security-review / security-test / toolprune / harness-tune / chutora-hub
-│   ├── hooks/                        ← SessionStart injection, context-length reminder, loop guard, modes/ (three modes), weekly.py (weekly recap)
+│   ├── hooks/                        ← SessionStart injection, context-length reminder, loop guard, modes/ (three modes), weekly.py (weekly recap), trim.py (noisy-output trimming)
 │   (templates are in skills/route-setup/templates/: MEMORY.md, knowledge-base guide, Explore, Haiku-layer example)
 ├── plugins/agent-board/              ← subagent board mod (optional)
 ├── plugins/reply-detail/             ← reply format mod (optional)
+├── bench/                            ← token benchmark: run.py, tasks.json, fixtures/
 ├── docs/
 │   ├── spec.md                       ← architecture design and implementation appendix (Traditional Chinese)
 │   └── ...                           ← deployment and publishing notes (Traditional Chinese only)

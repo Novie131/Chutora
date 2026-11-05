@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/Novie131/chutora/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Novie131/chutora/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="version 0.12.0" src="https://img.shields.io/badge/version-0.12.0-FF6A26">
+  <img alt="version 0.13.0" src="https://img.shields.io/badge/version-0.13.0-FF6A26">
   <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-1B2D52">
   <img alt="VS Code supported" src="https://img.shields.io/badge/VS%20Code-supported-1B2D52">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-2EA043"></a>
@@ -146,6 +146,7 @@
 | 功能 | 觸發 | 做什麼 |
 |---|---|---|
 | loop guard | 自動 | 同一個錯誤一再重複時提醒換方向，只提醒不中斷；同時記錄各工具的使用次數 |
+| 噪音輸出瘦身 | 自動 | 安裝、建置、測試這類又長又雜的指令輸出，進到 context 前先瘦身：去色碼、收斂進度列與重複行，保留開頭、結尾、錯誤與摘要。原文一定另存在 `~/.claude/chutora/raw/`，Claude 需要時會讀；讀檔類指令、`git diff`、失敗的指令都不動。`/chutora trim off` 或 `CHUTORA_TRIM=0` 關閉 |
 | `toolprune` | 指令 | 讀工具使用記錄，列出長期沒用到、可以關掉的工具或 MCP。只建議不自動改，一步就能復原 |
 | 每週回顧 | 自動 | 每週第一個對話附一行估算：子 agent 的工作若改由主對話模型處理，依 API 牌價要多花多少；`CHUTORA_WEEKLY=0` 關閉 |
 | `usage-stats` | 指令 | 量主對話 context 長度、各 agent 的派工次數、token 用量與估計金額；加 `--html` 輸出有每日圖表的報表 |
@@ -213,6 +214,29 @@ flowchart LR
 
 ---
 
+<a name="benchmark"></a>
+
+## <img src="assets/icons/stopwatch.svg" width="26" height="26" alt=""> Benchmark
+
+「用最少的 token」要用數字說話，所以 repo 內附一套可以重複跑的量測工具 `bench/run.py`。
+
+**量什麼**：3 個固定的小任務（修 bug、從又長又雜的建置 log 找出失敗原因並修好、在一堆檔案裡找出某個函式），「沒有 Chutora」和「有 Chutora」各跑 N 次。每次記錄總 token（含快取讀寫）、`claude -p` 回報的花費、輪數，以及有沒有通過任務的驗收指令，最後取中位數。
+
+**怎麼跑**：
+
+```
+python3 bench/run.py --dry-run                              # 先看會跑哪些，不呼叫模型
+ANTHROPIC_API_KEY=... python3 bench/run.py --runs 3 --model opus
+```
+
+- 每次都在全新的暫存資料夾、暫存 HOME 與 `CLAUDE_CONFIG_DIR` 裡跑，不讀你的 `~/.claude`；「有 Chutora」用 `--plugin-dir` 載入 repo 裡的 `plugins/chutora`。
+- 需要 API key，**會產生費用**。每次執行預設上限 $1（`--max-budget-usd` 可調）。
+- 結果寫到 `bench/results/`（Markdown 表與 JSON），這個資料夾不進版控。
+
+**目前尚未公布數字。** 實際跑完、核對過之前，這裡不放任何數字。限制也先講清楚：任務小、樣本少，只能看方向；花費是 `claude -p` 在用戶端的估算，不等於帳單。
+
+---
+
 <a name="docs"></a>
 
 ## <img src="assets/icons/clipboard.svg" width="26" height="26" alt=""> 更多文件
@@ -234,8 +258,8 @@ flowchart LR
 | 狀態 | 項目 | 說明 |
 |---|---|---|
 | <img src="assets/icons/shield.svg" width="18" height="18" alt=""> 已完成（0.12） | 好用優化 | `/chutora` 單一入口、`/chutora doctor` 安裝健檢、中英雙語提醒、三種模式、每週回顧、文件分成三分鐘上手與進階說明 |
-| <img src="assets/icons/next.svg" width="18" height="18" alt=""> 下一步 | **噪音輸出瘦身** | 測試 log、安裝輸出這類又長又雜的指令結果，進到主對話前先瘦身，只留錯誤、摘要與關鍵行；可以關閉，也能看原文 |
-| <img src="assets/icons/next.svg" width="18" height="18" alt=""> 下一步 | **token benchmark** | 用固定任務實測「有／沒有 Chutora」的 token、花費與完成率，結果公開在 README |
+| <img src="assets/icons/shield.svg" width="18" height="18" alt=""> 已完成（0.13） | 噪音輸出瘦身 | 又長又雜的指令輸出進到主對話前先瘦身，只留錯誤、摘要與關鍵行；可以關閉，原文另存可讀 |
+| <img src="assets/icons/shield.svg" width="18" height="18" alt=""> 已完成（0.13） | token benchmark 工具 | `bench/run.py` 用固定任務實測有／沒有 Chutora 的 token、花費與完成率；**數字尚未公布**，見 [Benchmark](#benchmark) |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 程式碼地圖與影響範圍 | 產生精簡的符號索引存進記憶，改函式前先列出會受影響的地方；檔案改了會提醒索引過期 |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 危險操作守門 | 刪檔、force push、動 production 這類操作一律先確認 |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 路由從結果學習 | 記下每次派工的結果，整理成委派表的修正建議，你確認才改 |
@@ -252,7 +276,7 @@ flowchart LR
 
 ## <img src="assets/icons/pin.svg" width="26" height="26" alt=""> 狀態
 
-**v0.12.0 — 早期版本。** 0.10.0 以前叫 smart-agent-route、0.7.0 以前叫 tiered-agents，升級請先移除舊版（見 [docs/部署安裝.md](docs/部署安裝.md#從-smart-agent-route0100-以前升級)）。 context 提醒 hook、handoff、bulk、Explore 覆蓋版移植自作者的個人設定：hook 已在真實對話中觸發、Explore 與 bulk 已確認跑在 Haiku，但都還在驗證期。worker-hard 升級鏈、research skill 與 plugin 形式的 hook 尚未實際使用。agent-board 與 reply-detail 已在 VS Code 擴充 2.1.301 實測過看板；常駐模式、看板裡的按鈕與回覆格式注入還在驗證。0.12 新增的 `/chutora`、doctor、三種模式、中英雙語與每週回顧已有單元測試，還沒在真實對話中長期驗證。
+**v0.13.0 — 早期版本。** 0.10.0 以前叫 smart-agent-route、0.7.0 以前叫 tiered-agents，升級請先移除舊版（見 [docs/部署安裝.md](docs/部署安裝.md#從-smart-agent-route0100-以前升級)）。 context 提醒 hook、handoff、bulk、Explore 覆蓋版移植自作者的個人設定：hook 已在真實對話中觸發、Explore 與 bulk 已確認跑在 Haiku，但都還在驗證期。worker-hard 升級鏈、research skill 與 plugin 形式的 hook 尚未實際使用。agent-board 與 reply-detail 已在 VS Code 擴充 2.1.301 實測過看板；常駐模式、看板裡的按鈕與回覆格式注入還在驗證。0.12 新增的 `/chutora`、doctor、三種模式、中英雙語與每週回顧已有單元測試，還沒在真實對話中長期驗證。
 
 已知會需要調整的地方：
 

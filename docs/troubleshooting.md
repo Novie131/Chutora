@@ -46,6 +46,14 @@ plugin 沒辦法自己設定主狀態列。plugin 安裝的用 `/chutora:route-s
 
 在 `~/.claude/settings.json` 的 `"env"` 加 `"CHUTORA_WEEKLY": "0"`。
 
+### 指令輸出被瘦身後，Claude 少看到需要的內容
+
+瘦身說明的最後一行有原文路徑，請 Claude 用 Read 讀那個檔案即可。常常遇到的話：改用品質模式（`/chutora mode quality`，門檻較高、保留較多），或 `/chutora trim off` 關掉。
+
+### 想確認噪音輸出瘦身有沒有作用
+
+輸入 `/chutora`，狀態裡會顯示開關與累計瘦身的 token（估算）。用 install.sh 安裝的，`/chutora doctor` 會檢查 settings.json 裡有沒有 `trim.py` 這個 PostToolUse hook；沒有就重跑 `bash install.sh`，把印出的 hooks 片段合併進去。
+
 ### 還是不行
 
 開一個 issue，附上 `/chutora doctor` 的輸出和 Claude Code 版本（`claude --version`）。

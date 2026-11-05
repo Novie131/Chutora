@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/Novie131/chutora/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Novie131/chutora/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="version 0.12.0" src="https://img.shields.io/badge/version-0.12.0-FF6A26">
+  <img alt="version 0.13.0" src="https://img.shields.io/badge/version-0.13.0-FF6A26">
   <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-1B2D52">
   <img alt="VS Code supported" src="https://img.shields.io/badge/VS%20Code-supported-1B2D52">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-2EA043"></a>
@@ -146,6 +146,7 @@ Grouped into eight categories. In the "Trigger" column, **auto** means it works 
 | Feature | Trigger | What it does |
 |---|---|---|
 | Loop guard | auto | Reminds you to change direction when the same error keeps repeating (reminds, never blocks); also records per-tool usage counts |
+| Noisy-output trimming | auto | Long, noisy command output such as installs, builds and test runs is trimmed before it reaches the context: color codes stripped, progress bars and repeated lines collapsed, the start, the end, errors and summaries kept. The original is always saved in `~/.claude/chutora/raw/` for Claude to read when needed; file-reading commands, `git diff` and failed commands are left alone. Turn off with `/chutora trim off` or `CHUTORA_TRIM=0` |
 | `toolprune` | command | Reads the tool-usage record and lists tools or MCP servers that have gone unused and could be turned off. Suggests only, never changes settings; one step to undo |
 | Weekly recap | auto | The first conversation each week shows one estimated line: how much more the subagents' work would have cost at API list prices on the main conversation's model; turn off with `CHUTORA_WEEKLY=0` |
 | `usage-stats` | command | Measures main-conversation context length, per-agent delegation counts, token usage and estimated cost; `--html` outputs a report with daily charts |
@@ -213,6 +214,29 @@ How the main conversation delegates does not depend on your CLAUDE.md: the Sessi
 
 ---
 
+<a name="benchmark"></a>
+
+## <img src="assets/icons/stopwatch.svg" width="26" height="26" alt=""> Benchmark
+
+"The fewest tokens" should be backed by numbers, so the repo ships a repeatable measurement tool, `bench/run.py`.
+
+**What it measures**: three small fixed tasks (fix a bug, find and fix why a build fails from a long, noisy log, find a function among many files), each run N times without Chutora and with Chutora. Every run records total tokens (cache reads and writes included), the cost `claude -p` reports, the number of turns, and whether the task's acceptance command passes; the summary uses medians.
+
+**How to run it**:
+
+```
+python3 bench/run.py --dry-run                              # preview what would run, no model calls
+ANTHROPIC_API_KEY=... python3 bench/run.py --runs 3 --model opus
+```
+
+- Every run uses a fresh temp folder, a temp HOME and a temp `CLAUDE_CONFIG_DIR`, so your `~/.claude` is never read; the "with Chutora" arm loads the repo's `plugins/chutora` with `--plugin-dir`.
+- It needs an API key and **costs money**. Each run is capped at $1 by default (`--max-budget-usd`).
+- Results go to `bench/results/` (a Markdown table and JSON), which is not under version control.
+
+**No numbers have been published yet.** Nothing goes here until a real run has been done and checked. Limits up front: the tasks are small and the sample is small, so results only show direction; cost is the client-side estimate from `claude -p`, not your bill.
+
+---
+
 <a name="docs"></a>
 
 ## <img src="assets/icons/clipboard.svg" width="26" height="26" alt=""> More docs
@@ -234,8 +258,8 @@ How the main conversation delegates does not depend on your CLAUDE.md: the Sessi
 | Status | Item | What it does |
 |---|---|---|
 | <img src="assets/icons/shield.svg" width="18" height="18" alt=""> Done (0.12) | Easier to use | `/chutora` entry point, `/chutora doctor` install check, Chinese/English messages, three modes, weekly recap, docs split into a three-minute start and an advanced guide |
-| <img src="assets/icons/next.svg" width="18" height="18" alt=""> Next | **Noisy-output trimming** | Long, noisy command results such as test logs and install output are trimmed before they reach the main conversation, keeping errors, summaries and key lines; can be turned off, and the original stays viewable |
-| <img src="assets/icons/next.svg" width="18" height="18" alt=""> Next | **Token benchmark** | Fixed tasks measured with and without Chutora — tokens, cost and completion rate — with results published in the README |
+| <img src="assets/icons/shield.svg" width="18" height="18" alt=""> Done (0.13) | Noisy-output trimming | Long, noisy command output is trimmed before it reaches the main conversation, keeping errors, summaries and key lines; can be turned off, and the original stays readable |
+| <img src="assets/icons/shield.svg" width="18" height="18" alt=""> Done (0.13) | Token benchmark tool | `bench/run.py` measures tokens, cost and completion rate on fixed tasks with and without Chutora; **no numbers published yet**, see [Benchmark](#benchmark) |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> Planned | Code map and blast radius | A compact symbol index saved to memory; before changing a function, list what it affects; warns when the index is stale |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> Planned | Dangerous-action guard | Always confirm before deleting files, force-pushing or touching production |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> Planned | Routing that learns from outcomes | Record how each delegation turned out and suggest delegation-table fixes, applied only after you confirm |
@@ -252,7 +276,7 @@ Every new feature follows the same principle: **lightweight, manual, reversible*
 
 ## <img src="assets/icons/pin.svg" width="26" height="26" alt=""> Status
 
-**v0.12.0, early version.** Versions up to 0.10.0 were named smart-agent-route, and up to 0.7.0 tiered-agents; to upgrade, remove the old version first (see the section on upgrading from tiered-agents (0.7.0 and earlier) in the [deployment notes](docs/%E9%83%A8%E7%BD%B2%E5%AE%89%E8%A3%9D.md)). The context reminder hook, handoff, bulk, and the Explore override were ported from the author's personal setup: the hook has fired in real conversations and Explore and bulk are confirmed to run on Haiku, but all are still being validated. The worker-hard escalation chain, the research skill, and the plugin form of the hooks have not been used in practice yet. agent-board and reply-detail have been tested in the VS Code extension 2.1.301 for the board; persistent mode, the button in the board, and the reply-format injection are still being validated. The `/chutora` entry point, doctor, modes, bilingual messages and weekly recap added in 0.12 have unit tests but haven't been validated in long real-world use yet.
+**v0.13.0, early version.** Versions up to 0.10.0 were named smart-agent-route, and up to 0.7.0 tiered-agents; to upgrade, remove the old version first (see the section on upgrading from tiered-agents (0.7.0 and earlier) in the [deployment notes](docs/%E9%83%A8%E7%BD%B2%E5%AE%89%E8%A3%9D.md)). The context reminder hook, handoff, bulk, and the Explore override were ported from the author's personal setup: the hook has fired in real conversations and Explore and bulk are confirmed to run on Haiku, but all are still being validated. The worker-hard escalation chain, the research skill, and the plugin form of the hooks have not been used in practice yet. agent-board and reply-detail have been tested in the VS Code extension 2.1.301 for the board; persistent mode, the button in the board, and the reply-format injection are still being validated. The `/chutora` entry point, doctor, modes, bilingual messages and weekly recap added in 0.12 have unit tests but haven't been validated in long real-world use yet.
 
 Known rough edges:
 
