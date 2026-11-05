@@ -12,6 +12,10 @@ import json, os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from compact import compact_point, remind_tokens
+try:
+    from compact import lang
+except ImportError:  # 舊版 compact.py
+    lang = lambda: "zh"  # noqa: E731
 
 REMIND = remind_tokens()
 GREEN, YELLOW, RED, RESET = "\033[32m", "\033[33m", "\033[31m", "\033[0m"
@@ -27,10 +31,11 @@ def main():
             n = sum(u.get(k) or 0 for k in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"))
         color = GREEN if n < 80000 else YELLOW if n < REMIND else RED
         model = (data.get("model") or {}).get("display_name", "")
-        parts = [model, f"{color}ctx {n // 1000}k{RESET}", f"提醒 {REMIND // 1000}k"]
+        zh = lang() == "zh"
+        parts = [model, f"{color}ctx {n // 1000}k{RESET}", f"{'提醒' if zh else 'remind'} {REMIND // 1000}k"]
         compact = compact_point()
         if compact is not None:
-            parts.append(f"壓縮 {compact // 1000}k")
+            parts.append(f"{'壓縮' if zh else 'compact'} {compact // 1000}k")
     except Exception:
         return
     print(" │ ".join(parts))

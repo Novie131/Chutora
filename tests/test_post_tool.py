@@ -6,6 +6,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+# 既有測試斷言中文訊息；英文由 test_lang.py 測
+os.environ["CHUTORA_LANG"] = "zh"
+
 ROOT = Path(__file__).resolve().parent.parent
 POST_TOOL = ROOT / "plugins" / "chutora" / "hooks" / "post-tool.py"
 

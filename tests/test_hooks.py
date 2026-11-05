@@ -7,6 +7,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+# 既有測試斷言中文訊息；英文由 test_lang.py 測
+os.environ["CHUTORA_LANG"] = "zh"
+
 ROOT = Path(__file__).resolve().parent.parent
 HOOKS = ROOT / "plugins" / "chutora" / "hooks"
 CONTEXT_CHECK = HOOKS / "context-check.py"
@@ -374,8 +377,9 @@ class SessionStartTest(SessionStartBase):
         self.assertEqual(r.returncode, 0)
         d = json.loads(r.stdout)
         self.assertEqual(d["hookSpecificOutput"]["hookEventName"], "SessionStart")
+        mode_block = (HOOKS / "modes" / "balanced.zh.md").read_text().strip()
         self.assertEqual(d["hookSpecificOutput"]["additionalContext"].strip(),
-                         GUIDE.read_text().strip())
+                         GUIDE.read_text().strip() + "\n\n" + mode_block)
         self.assertIn("/route-setup", d["systemMessage"])
         self.assertNotIn("chutora:route-setup", d["systemMessage"])
         self.assertEqual(self.shown(), "1")

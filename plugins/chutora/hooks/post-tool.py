@@ -14,6 +14,12 @@ import re
 import sys
 from datetime import date
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from compact import lang
+except Exception:
+    lang = lambda: "zh"  # noqa: E731
+
 THRESHOLD = int(os.environ.get("LOOP_GUARD_REPEAT") or 3)   # 同一錯誤重複幾次才提醒
 SESS_CAP = 200          # 用量記錄最多留幾個 session id
 LG_SESS_CAP = 40        # loop guard 狀態最多留幾個 session
@@ -140,9 +146,15 @@ def check_loop(tool_name, resp, text, session_id):
     count = sigs[sig]
     level = nudged.get(sig, 0)
     msg = None
+    en = lang() == "en"
     if count >= THRESHOLD * 2 and level < 2:
         nudged[sig] = 2
         msg = (
+            f"The same error has now appeared {count} times and the earlier nudge didn't break the loop. "
+            "Strongly consider stopping the retries: step back and re-understand the problem, switch to a "
+            "completely different approach, or report the situation and what has been tried to the user and "
+            "let them decide. Don't retry in a similar way again."
+        ) if en else (
             f"同一個錯誤已經出現 {count} 次，之前的提醒後仍在原地打轉。"
             "強烈建議停止重試：退回去重新理解問題、換一條完全不同的路，"
             "或把目前情況、已試過的做法回報給使用者讓他決定。不要再用類似方式重試。"
@@ -151,6 +163,10 @@ def check_loop(tool_name, resp, text, session_id):
         nudged[sig] = 1
         snippet = sig.split("::", 1)[-1][:80]
         msg = (
+            f"The same error has repeated {count} times ({snippet}). This usually means being stuck on one path. "
+            "Change direction: step back and re-understand the problem, try a different approach, or report "
+            "to the user, instead of retrying the same way."
+        ) if en else (
             f"偵測到同一個錯誤重複出現 {count} 次（{snippet}）。"
             "這通常代表卡在同一條路上。建議換個方向：退一步重新理解問題、"
             "換一種做法，或把情況回報給使用者，而不是再用同樣方式重試。"

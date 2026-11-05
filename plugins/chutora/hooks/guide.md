@@ -16,6 +16,7 @@
 | 對自己、已授權且隔離的 dev 環境做動態安全測試（開工先確認授權範圍） | `security-test` |
 | 哪些工具／MCP 長期沒用到、可以關掉省 token | `/toolprune` |
 | 讓這套 harness 針對某類任務越調越好（改前確認、可回滾） | `/harness-tune` |
+| 使用者想看目前狀態、不知道有哪些功能、要健檢安裝、切換模式或語言 | `/chutora`（`/chutora doctor`、`/chutora mode`、`/chutora lang`） |
 
 以 plugin 安裝時，上表名稱前面會加 `chutora:`（例如 `chutora:worker`、`/chutora:research`）。
 

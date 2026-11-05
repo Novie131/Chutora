@@ -16,6 +16,10 @@ try:
     THRESHOLD = remind_tokens()
 except Exception:  # compact.py 缺檔也不擋提醒
     compact_point = lambda: None  # noqa: E731
+try:
+    from compact import lang
+except Exception:
+    lang = lambda: "zh"  # noqa: E731
     THRESHOLD = int(os.environ.get("CONTEXT_REMIND_TOKENS") or 100000)
 STEP = 40000
 KEEP = 50  # 狀態檔只留最近這麼多個對話
@@ -71,11 +75,29 @@ def remember(path, now_bucket):
 
 
 def reminder(now):
-    head = f"目前對話的 context 約為 {now // 1000}k tokens，已超過 {THRESHOLD // 1000}k 的提醒門檻。"
     try:
         point = compact_point()
     except Exception:
         point = None
+    if lang() == "en":
+        head = (f"The conversation context is now about {now // 1000}k tokens, past the "
+                f"{THRESHOLD // 1000}k reminder threshold. ")
+        if point is not None:
+            return (
+                head + "Use chutora's handoff skill to update the handoff note first, then end your reply "
+                f"with one sentence to the user: \"Handoff note updated; auto-compact kicks in around {point // 1000}k "
+                "and the note is restored automatically afterwards, so nothing to do by hand. If this task is "
+                "wrapped up, a new conversation or /clear is cheaper.\" No need to suggest /compact or /rewind."
+            )
+        return (
+            head + "This is when chutora's handoff skill applies: update the handoff note first (whether or not "
+            "the user will /clear), then end your reply with one copy-paste command that fits the situation: "
+            "task wrapped up → /clear; halfway through → /compact keep <write the decisions and progress to keep>; "
+            "the latter half is mostly debugging or exploration noise → /rewind and pick <the message to start "
+            "from>, then Summarize from here. Also mention that otherwise auto-compact will kick in near the "
+            "context limit, at a time and with a focus nobody chose."
+        )
+    head = f"目前對話的 context 約為 {now // 1000}k tokens，已超過 {THRESHOLD // 1000}k 的提醒門檻。"
     if point is not None:
         return (
             head + "請依 chutora 的 handoff skill 先更新交接筆記，"

@@ -177,6 +177,10 @@ hook 不會自動啟用:本腳本不改你的 settings.json。要啟用請把下
   "UserPromptSubmit": [
     { "hooks": [{ "type": "command",
         "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/context-check.py" }] }
+  ],
+  "PostToolUse": [
+    { "hooks": [{ "type": "command",
+        "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/post-tool.py" }] }
   ]
 MSG
 }
