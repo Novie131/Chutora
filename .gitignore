@@ -3,3 +3,6 @@
 claude-memory/
 .obsidian/
 __pycache__/
+
+# token benchmark 的輸出（bench/run.py）
+bench/results/

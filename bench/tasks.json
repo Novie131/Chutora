@@ -1,0 +1,20 @@
+[
+  {
+    "id": "fix-bug",
+    "fixture": "fix-bug",
+    "prompt": "The unit tests in this folder fail. Find the bug in cart.py and fix it so that `python3 -m unittest -q` passes. Do not change the tests.",
+    "check": ["python3", "-m", "unittest", "-q"]
+  },
+  {
+    "id": "noisy-build",
+    "fixture": "noisy-build",
+    "prompt": "Running `python3 build.py` fails. Run it, find out why from its output, and fix the cause so that it succeeds. Do not edit build.py.",
+    "check": ["python3", "build.py"]
+  },
+  {
+    "id": "explore",
+    "fixture": "explore",
+    "prompt": "Somewhere under app/ there is a function that computes the shipping fee. Find it and write a file ANSWER.txt containing only its file path relative to this folder, a colon, and the function name (for example app/x/y.py:func).",
+    "check": ["python3", "-c", "import sys; t=open('ANSWER.txt').read().strip(); sys.exit(0 if t == 'app/shipping/mod3.py:shipping_fee' else 1)"]
+  }
+]
