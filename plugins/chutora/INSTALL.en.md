@@ -18,6 +18,8 @@ The short version:
 
 Click the install button on the `.plugin` file. **It works right after install** (for the full feature set, such as the status line, auto-compact threshold, Haiku Explore, and claude-memory, run `/chutora:route-setup`), and **it is available in every conversation** (a plugin is user-level, not tied to a conversation).
 
+After installing, type `/chutora` for the status and a menu of what it can do; if nothing seems to happen, run `/chutora doctor`, which checks each piece and tells you how to fix it.
+
 To verify, ask in a new conversation "which agents are available?". You should see `worker`, `worker-hard`, `bulk`, `librarian`, `harvester`, `security-review`, and `security-test`.
 
 ---

@@ -37,6 +37,8 @@
 
 **裝完即可用。** 想要完整功能（狀態列、自動壓縮門檻、Haiku Explore、claude-memory）執行 `/chutora:route-setup`（install.sh 安裝則是 `/route-setup`）；下面各步驟是它在做的事，也可以手動做。
 
+裝完先輸入 `/chutora` 看狀態與功能選單；覺得沒反應就跑 `/chutora doctor`，它會逐項檢查並告訴你怎麼修。
+
 
 ### 1. 安裝 plugin
 

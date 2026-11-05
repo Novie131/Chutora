@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/Novie131/chutora/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Novie131/chutora/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="version 0.11.0" src="https://img.shields.io/badge/version-0.11.0-FF6A26">
+  <img alt="version 0.12.0" src="https://img.shields.io/badge/version-0.12.0-FF6A26">
   <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-1B2D52">
   <img alt="VS Code supported" src="https://img.shields.io/badge/VS%20Code-supported-1B2D52">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-2EA043"></a>
@@ -16,6 +16,7 @@
   <a href="#quick-start"><img src="assets/icons/rocket.svg" width="18" height="18" alt=""> Quick start</a> ·
   <a href="#features"><img src="assets/icons/compass.svg" width="18" height="18" alt=""> Features</a> ·
   <a href="#how-it-works"><img src="assets/icons/branch.svg" width="18" height="18" alt=""> How it works</a> ·
+  <a href="#docs"><img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> Docs</a> ·
   <a href="#roadmap"><img src="assets/icons/flag.svg" width="18" height="18" alt=""> Roadmap</a>
 </p>
 
@@ -54,6 +55,41 @@ The Traditional Chinese docs are the primary version; this English version is a 
 
 <p align="center"><a href="assets/demo.mp4"><img src="assets/demo.gif" alt="Chutora illustrative animation: the Opus main conversation delegates to Sonnet and Haiku and gets back only conclusions" width="100%"></a></p>
 <p align="center"><sub>Illustrative animation, not a screen recording · <a href="assets/demo.mp4">▶ Watch the full 41-second video (Chinese and English captions)</a></sub></p>
+
+---
+
+<a name="quick-start"></a>
+
+## <img src="assets/icons/rocket.svg" width="26" height="26" alt=""> Three-minute start
+
+**1. Install**: inside Claude Code, run
+
+```
+/plugin install chutora --marketplace Novie131/chutora
+/reload-plugins
+/model opus
+```
+
+(Claude Code 2.1.275 and earlier: first `/plugin marketplace add Novie131/chutora`, then `/plugin install chutora@chutora`. To install without the marketplace, see [Other ways to install](docs/advanced.en.md#install). Opus is recommended for the main conversation; the plugin never changes it for you.)
+
+**2. Type `/chutora`**
+
+It's the only command you need to remember. It shows the current status — version, mode, context usage, whether you're stuck on a repeating error — and lists what you can do; just reply with a number. Handoff, usage report, install check, mode and language switching, and full setup are all in there.
+
+If nothing seems to happen after installing, run `/chutora doctor` first; it checks each piece and tells you how to fix it.
+
+**3. Talk normally**
+
+The main conversation decides whether to delegate: "do what we just discussed" goes to worker, "why did this log fail" goes to bulk, "did I note X before" goes to librarian. Past 100k tokens you're reminded to write a handoff note, and after a `/clear` or a new conversation the next day your progress comes back automatically.
+
+**4. When you get stuck**
+
+- When the same error keeps repeating, loop guard nudges Claude to change direction; you can also just say "try a different approach" or "stop and summarize what we've tried".
+- To go back to an earlier state: Claude Code's built-in `/rewind` (or Esc twice) restores files the main conversation edited directly; files changed by subagents or Bash commands are outside its reach, so use git for those.
+- To start over with a clean conversation: say "hand off" to write `handoff.md`, then `/clear`.
+- A one-step "stuck rescue" is in the works; see the [Roadmap](#roadmap).
+
+**For the full feature set**: run `/chutora:route-setup`. It walks you through the status line, the auto-compact threshold, the Haiku-based Explore and a `claude-memory/` store one item at a time, explains the impact and how to undo each, and backs up settings before changing them. The reminder features need `python3`; without it they quietly turn themselves off.
 
 ---
 
@@ -112,6 +148,7 @@ Grouped into eight categories. In the "Trigger" column, **auto** means it works 
 |---|---|---|
 | Loop guard | auto | Reminds you to change direction when the same error keeps repeating (reminds, never blocks); also records per-tool usage counts |
 | `toolprune` | command | Reads the tool-usage record and lists tools or MCP servers that have gone unused and could be turned off. Suggests only, never changes settings; one step to undo |
+| Weekly recap | auto | The first conversation each week shows one estimated line: how much more the subagents' work would have cost at API list prices on the main conversation's model; turn off with `CHUTORA_WEEKLY=0` |
 | `usage-stats` | command | Measures main-conversation context length, per-agent delegation counts, token usage and estimated cost; `--html` outputs a report with daily charts |
 
 ### 7. Self-improvement: gets smoother with use
@@ -121,81 +158,17 @@ Grouped into eight categories. In the "Trigger" column, **auto** means it works 
 | `harness-tune` | command | For a kind of task that keeps going badly: reads past lessons, proposes one to three small adjustments, and after you confirm changes one thing at a time, with a backup and rollback |
 | `harness-lessons.md` | auto (written by harness-tune) | Records each adjustment's result (worked, didn't, rolled back) so the next tune starts from the last conclusion |
 
-### 8. Interface (optional plugins) and setup
+### 8. Entry point, interface and setup
 
 | Feature | Trigger | What it does |
 |---|---|---|
+| `/chutora` | command | Single entry point: status overview (version, mode, context, loop guard) plus a menu; reply with a number to run it |
+| `/chutora doctor` | command | Read-only install check: python3, hooks, status line, memory store, auto-compact, Haiku Explore, old-version leftovers, with a fix for each problem |
+| Three modes | command | `/chutora mode economy` / `balanced` / `quality`: changes the delegation conventions injected at session start (how eagerly to delegate, when to escalate, how much to verify); does not change any agent's model |
+| Chinese and English | auto | Reminders, the status line and `/chutora` follow the system language; pin it with `/chutora lang zh` / `en` / `auto` |
 | `agent-board` | optional | A persistent board above the input box listing each subagent's type, model, status, elapsed time, tokens and estimated cost. Toggle with `/agent-board` |
 | `reply-detail` | optional | Replies default to three short parts (status / what you need to do / what needs your decision or input); switch with the board's reply-mode switch ("⇄ 回覆：精簡／詳細"), or type 「詳細說明」 for a one-off detailed rewrite |
 | `route-setup` | command | One-time full setup: memory folder, Haiku Explore, auto-compact threshold, status line. Asks one item at a time and backs up settings before changing them |
-
----
-
-<a name="problem"></a>
-
-## <img src="assets/icons/puzzle.svg" width="26" height="26" alt=""> What problem this solves
-
-After using Claude Code for a while, two things tend to happen:
-
-- **It gets expensive**: the main conversation's Opus does everything itself, including reading long logs, looking through piles of screenshots, and editing dozens of files. Most of that work is fine on a cheaper model.
-- **Conversations keep growing**: every message and every file read is sent to the model again on every later turn. Late in a long conversation, most of what you pay for is re-reading old content. Measured on one heavy user across 21 sessions, the median context per main-conversation call was about 240k tokens.
-
-This plugin works like a lead running a team: the lead (Opus) listens, thinks it through, and decides who gets the work; the hands-on work goes to team members (Sonnet, Haiku), who finish it at their own desks and hand back only the conclusion, so the lead's desk stays clean. When the desk is nearly full, the lead writes a handoff note, clears the desk, and continues from the note.
-
-**Good fit**: you already use Claude Code for multi-step work (changing code, reading logs, looking things up) and want to save money or keep long conversations under control. If you only ask the occasional one-off question, the benefit of delegation is small.
-
----
-
-<a name="quick-start"></a>
-
-## <img src="assets/icons/rocket.svg" width="26" height="26" alt=""> Quick start
-
-Inside Claude Code, run:
-
-```
-/plugin install chutora --marketplace Novie131/chutora
-/reload-plugins
-```
-
-(Claude Code 2.1.275 and earlier: first run `/plugin marketplace add Novie131/chutora`, then `/plugin install chutora@chutora`.)
-
-It works right after install. Two things are recommended next:
-
-1. **Set the main conversation to Opus**: `/model opus`. The plugin never changes this automatically.
-2. **Turn on the full feature set**: run `/chutora:route-setup` to set up the context status line, the auto-compact threshold, the Haiku-based Explore, and a `claude-memory/` store. It asks one item at a time, explains what each does, its impact, and how to undo it, and you can skip any of them. It backs up `settings.json` before writing and never overwrites values that already exist. If you skip it, the session start hook reminds you (at most 3 times).
-
-The context-length reminder needs `python3`; without it, the reminder hook quietly disables itself. To install without the marketplace, see [Other ways to install](#install).
-
----
-
-<a name="usage"></a>
-
-## <img src="assets/icons/bubble.svg" width="26" height="26" alt=""> Using it
-
-Just talk normally; the main conversation decides whether to delegate:
-
-| You say | Who handles it |
-|---|---|
-| "Help me think through how to do this" | The main conversation (Opus) thinks it through itself |
-| "Do what we just discussed" | worker (Sonnet) does it, verifying before reporting back |
-| "Check these 18 screenshots for layout breakage", "Why did this log fail" | bulk (Haiku) reads it all and returns only the conclusion |
-| "Did I note anything about X before?" | librarian (Haiku) searches memory and cites where it found things |
-| "How do I configure the new version of this API" | The research skill looks it up and cites sources; official material is saved to `claude-memory/web/` |
-| "Hand off" | The handoff skill writes `handoff.md`, after which you can `/clear` |
-
-To force a specific agent, use `@agent-chutora:worker`.
-
-When the conversation gets long (past 100k tokens by default) you get a reminder, and Claude first writes the current progress into `handoff.md`. After that, whether it is an auto-compact, a `/clear`, or a new conversation the next day, the handoff note comes back automatically, so you do not have to explain everything again.
-
-### Glossary
-
-- **context**: everything the model sees on this turn, including the system prompt, conversation history, and tool results. Measured in tokens; the longer it is, the more it costs.
-- **subagent**: a helper the main conversation sends out. It works in its own separate context and hands back only the conclusion.
-- **skill**: a fixed procedure you can invoke, such as `handoff` for writing a handoff note.
-- **hook**: a script Claude Code runs automatically at certain moments, such as when a session starts or when you send a message.
-- **effort**: how hard the model thinks. Higher means longer thinking and higher cost.
-- **auto-compact**: when the context is nearly full, Claude Code condenses the old conversation into a summary.
-- **Cowork**: the agentic work mode in the Claude desktop app.
 
 ---
 
@@ -239,190 +212,19 @@ flowchart LR
 
 How the main conversation delegates does not depend on your CLAUDE.md: the SessionStart hook injects the delegation table at the start of every session (see `hooks/guide.md`). Design rationale and trade-offs are in [docs/spec.md](docs/spec.md) (Traditional Chinese).
 
-### Why this saves money
-
-**Routing happens after Opus, not before.** Judging intent requires reading the message, and reading it is already planning, so a cheap router in front is not possible. Opus is always the entry point and does the delegating.
-
-The savings come from four places, in order of impact:
-
-1. **Context isolation** (the biggest, and it compounds). Running 30 tool calls in the main conversation means paying for those 30 results until the conversation ends; in a subagent, the main conversation receives only a summary. Delegate whole chunks of work, not single steps, because each subagent launch pays the system prompt and memory injection again.
-2. **Model tiering.** Useful but linear: the saving is roughly the price difference.
-3. **`effort` levels.** worker uses `medium`, escalating to worker-hard (`high`) only on failure; librarian uses `low`.
-4. **Do not keep the main conversation open too long.** Isolation only covers tool calls, not the conversation itself growing longer, so the plugin also watches length and reminds you to write a handoff note past a threshold (see [Advanced settings](#advanced)). Starting a new conversation or `/clear` when a topic ends is still the cheapest.
-
-### When things fail
-
-Subagents finish with a fixed report format so the main conversation can decide the next step from the first two lines: a status line (done, failed, or needs a decision) and a verification line (passed, not verified, or failed). Done is only allowed together with verification passed. If a subagent hits a fork that requires a decision, it stops and reports the options and their consequences instead of picking one itself.
-
-Failure escalation order: re-delegate to the same agent with added background, then bulk failure falls back to worker, worker failure goes to worker-hard (with the previous failure report), and if that still fails it stops to re-plan or ask you. It never escalates endlessly.
-
 ---
 
-<a name="advanced"></a>
+<a name="docs"></a>
 
-## <img src="assets/icons/wrench.svg" width="26" height="26" alt=""> Advanced settings
+## <img src="assets/icons/clipboard.svg" width="26" height="26" alt=""> More docs
 
-### Context reminders and auto-compact
-
-- The UserPromptSubmit hook reminds you once when the context passes 100k tokens, then every additional 40k. Adjust the threshold with the environment variable `CONTEXT_REMIND_TOKENS`.
-- On reminder, Claude writes the current state into `handoff.md` with the handoff skill (current task / done / next steps / open questions).
-- If `autoCompactWindow` is set, the reminder just tells you auto-compact will happen at about N k and the handoff will be restored; otherwise it gives you a copyable command: `/clear` at a stopping point, `/compact` with a focus mid-task, or `/rewind` with a partial summary if the later part is debugging noise.
-- The SessionStart hook injects `handoff.md` after every compact, `/clear` and startup: from `claude-memory/` if the project has it, otherwise from the auto memory directory next to the transcript (Claude Code only injects the MEMORY.md index of auto memory, never handoff.md).
-
-Recommended: set auto-compact as a safety net in `~/.claude/settings.json` (a plugin cannot set it for you; `/chutora:route-setup` writes it safely):
-
-```
-"autoCompactWindow": 153000
-```
-
-After subtracting a buffer of about 33k, auto-compact triggers at roughly 120k, leaving about 20k of headroom after the 100k reminder to write the handoff. The 33k figure was measured on the author's machine (it is not known to be fixed); after writing the value, confirm with `/context` that the Autocompact buffer is about 33k and the compact point about 120k (and also check any per-model overrides in `modelSettings`).
-
-### Status line (optional)
-
-Shows `model │ ctx 95k │ reminder 100k │ compact 120k`, with the compact point read from `autoCompactWindow` (not shown if unset). A plugin cannot configure the main status line: plugin users should use `/chutora:route-setup`, which places the file in a fixed location; install.sh users can run `bash install.sh --with-statusline` or paste this into settings.json by hand:
-
-```json
-"statusLine": { "type": "command", "command": "python3 ~/.claude/hooks/chutora/statusline.py" }
-```
-
-### Subagent board and reply-mode switch (optional)
-
-Two optional mods (Claude Code interface extensions; they need 2.1.299 or later and were tested by the author in the VS Code extension 2.1.301):
-
-| mod | What it does |
+| Doc | What's in it |
 |---|---|
-| `agent-board` | A persistent panel listing each subagent's type, model, status, elapsed time, tokens, and estimated cost (API list prices), with totals at the top. It collapses to a one-line summary and toggles with `/agent-board`; a reply-mode switch ("⇄ 回覆：精簡／詳細", concise/detailed) sits at the bottom |
-| `reply-detail` | Injects a reply format into the system prompt: by default a short three-part reply (current state / what you need to do / what you need to decide or provide), for the main conversation only. Switch the board's reply mode to detailed and every reply stays detailed until you switch back; for a one-off, type "詳細說明" to get a detailed rewrite of the previous reply |
-
-Install: from the plugin marketplace, `/plugin install agent-board@chutora` and `/plugin install reply-detail@chutora`; with install.sh, add `--with-agent-board` and `--with-reply-detail` (VS Code cannot pass `--plugin-dir`, so the script adds the folders to `env.CLAUDE_CODE_PLUGIN_DIRS` in `settings.json`). Afterwards, run Developer: Reload Window in VS Code.
-
-agent-board settings (plugin userConfig, all on by default): `autoOpen` opens the panel when a subagent starts, `persistent` opens it when the session starts and keeps it open, `detailButton` shows the reply-mode switch at the bottom (the name is kept from earlier versions). In detailed mode the board attaches a "write this turn in detail" request to every message you send; a reload resets it to concise.
-
-Limits: a mod cannot add buttons to the VS Code prompt toolbar (the row with the model picker), so the switch lives in the board. They could also go under the reply or in the band above the prompt, but VS Code wraps those mod-drawn areas in a frame labeled "From the … plugin" (a mod cannot turn it off), so they are not used. Also, Claude Code applies a width threshold to panes the user did not open (144 columns if never opened by hand), which the VS Code chat panel often falls short of, leaving the pane invisible and "unplaced"; persistent mode checks and reopens it when a surface attaches, the width changes, and a turn starts or ends.
-
-### Checking the fixed cost
-
-To see what every turn pays up front (system prompt, tool definitions, MCP, skills, memory files), type `/context` in a conversation, or run `claude -p "/context"` in a terminal (no interactive session needed; it is computed locally and does not call the model). On the author's machine a fresh conversation starts at about 29k tokens, about 18k of which is Claude Code's own system prompt and tool definitions; tools marked deferred are loaded only when used and are not counted. Fixed content hits the prompt cache every turn, so it is rarely the main cost: deal with conversation length and output first, and only then consider removing unused MCP servers or plugins.
-
----
-
-<a name="memory"></a>
-
-## <img src="assets/icons/brain.svg" width="26" height="26" alt=""> Memory
-
-```
-<your folder>/claude-memory/
-├── MEMORY.md    ← resident index, injected by the hook at session start, 40-line budget
-├── handoff.md   ← handoff note, injected automatically into the next session
-├── topics/      ← knowledge accumulated by agents
-├── kb/          ← your own notes
-└── web/         ← external-info notes saved by research (with source and expiry date)
-```
-
-Without a `claude-memory/` folder, memory falls back to Claude Code's own auto memory, which works fine. `claude-memory/` is an advanced option; its advantage is that it can go into git and be shared across environments.
-
-`MEMORY.md` **holds only trigger conditions; the knowledge itself lives in topic files.** This makes cost proportional to how much you use this time, not to how much is remembered in total: knowledge can grow without limit while the fixed startup cost stays constant. Write the index as conditions, not topics:
-
-- Bad: `setup.md — about environment setup` (a topic)
-- Good: `setup.md — read first when you need to change paths or a command will not run` (a condition)
-
-Where memory lives:
-
-- Agents prefer the `claude-memory/` folder inside a connected (working) folder, and fall back to their own agent memory directory (`~/.claude/agent-memory/worker/`) when it is missing.
-- In Claude Code (terminal) the fallback persists across conversations. In Cowork the sandbox home directory is rebuilt every session, so only the connected folder survives: connect it again in each new conversation.
-- If you disabled `autoMemoryEnabled` or set `CLAUDE_CODE_DISABLE_AUTO_MEMORY`, the `memory` field has no effect, and connecting a folder becomes required rather than optional.
-- The folder opens directly as an Obsidian vault with no integration needed, since a vault is just a pile of `.md` files. Use a new, dedicated vault rather than your existing personal notes, because agents have write access.
-- Memory should record "how to do it next time", not "what was done this time". A running log does not make the next run faster.
-
-Keeping `MEMORY.md` thin matters: it is truncated beyond its limit (the hook injects up to 120 lines; auto memory 200), and resident content is a fixed cost paid in every session. It decays over time, so tidy it periodically; more than 150 lines is the warning sign.
-
-### Knowledge base and harvester
-
-You can feed the knowledge base in two ways: drop `.md` files into `kb/` yourself (no preprocessing, librarian finds them immediately), or ask `harvester` to mine past conversations (it lists the available sessions and lets you choose the scope first). Four limits to know:
-
-- It only sees local sessions; conversations on the web or mobile are out of scope.
-- It is costly, so treat it as an occasional batch job, not an always-on feature.
-- Extraction is always lossy: spot-check the output, especially the first few runs.
-- It writes into `kb/`, which is otherwise yours. If you care about that boundary, have it write to `kb/harvested/` first.
-
-Run it once after first install to seed the knowledge base; after that worker records memory as it goes, so it is rarely needed again.
-
----
-
-<a name="tradeoffs"></a>
-
-## <img src="assets/icons/scale.svg" width="26" height="26" alt=""> Design trade-offs
-
-### This is RAG, just without vectors
-
-`librarian` retrieves using keyword search and conditional judgment. At personal scale (dozens to hundreds of notes) this is usually better than vectors: no extra infrastructure, retrieval failures are explainable, and chunking does not break Markdown structure. It also swaps synonyms, switches languages, and retries by searching file names, which a fixed vector query cannot do.
-
-Vectors are worth considering only for thousands of notes, large numbers of PDFs, or long transcripts. At that point the markdown in `kb/` can serve directly as the corpus.
-
-### When to add a Haiku execution layer
-
-`skills/route-setup/templates/runner.md.example` is a reserved slot that is **deliberately not loaded**. The Haiku layer is the only layer that really saves money and the only one that is really risky: it does not stop to ask, it quietly does what it thinks you meant. So each Haiku agent must be bound to one concrete task.
-
-Enable one only when all three hold:
-
-- You have done the task three to five times with nearly the same steps.
-- Success is obvious at a glance.
-- Mistakes are affordable and reversible (nothing deleted, sent out, or overwritten without a backup).
-
-Otherwise leave it with worker. Retrieval (librarian) is the exception, because it is read-only.
-
----
-
-<a name="install"></a>
-
-## <img src="assets/icons/box.svg" width="26" height="26" alt=""> Other ways to install
-
-If you prefer not to use the marketplace, the repo ships `install.sh`, or you can run `claude --plugin-dir ./plugins/chutora` directly.
-
-```
-bash install.sh                    # copy install (agents, skills, hooks go into ~/.claude/, no namespace prefix; re-run to update)
-bash install.sh --agents-only      # copy agents only (hooks and skills will not take effect)
-bash install.sh --link             # symlink agents, skills, hooks (edits in the repo apply immediately)
-bash install.sh --uninstall        # remove (follows the install manifest, leaves your own files alone)
-bash install.sh --with-explore     # also install the Haiku-based Explore into ~/.claude/agents/
-bash install.sh --with-statusline  # also add the context status line to ~/.claude/settings.json
-bash install.sh --with-agent-board   # also load the subagent board mod (written to env.CLAUDE_CODE_PLUGIN_DIRS in settings.json)
-bash install.sh --with-reply-detail  # also load the reply format mod (same mechanism)
-```
-
-Notes:
-
-- Names have no namespace in this mode: the agent is `worker` and the skill is `/handoff` (plugin install uses `chutora:worker`).
-- Installed items are recorded in `~/.claude/.chutora-installed`. Existing files with identical content are added to the manifest; files with different content (yours) are not overwritten, and you get a warning.
-- `--with-statusline` can be combined with the default copy mode or `--link`, but not with `--agents-only` or `--uninstall`. It touches only the `statusLine` key in `settings.json`: it creates the file if missing, never overwrites an existing `statusLine` (it only prints a suggested snippet), and otherwise backs the file up as `settings.json.bak-<timestamp>` before writing. It does nothing if the JSON is broken or python3 is missing.
-- `--with-agent-board` and `--with-reply-detail` have the same restrictions as `--with-statusline` and can be used together. They touch only `env.CLAUDE_CODE_PLUGIN_DIRS`: existing paths are kept and the file is backed up before writing; `--uninstall` removes only the paths they added.
-- install.sh does not edit your `settings.json` hooks. It prints a snippet at the end that you merge into `"hooks"` yourself. After that, run `/route-setup` for the full feature set.
-
-For more detail, see the [deployment notes](docs/%E9%83%A8%E7%BD%B2%E5%AE%89%E8%A3%9D.md) (Traditional Chinese only) and [plugins/chutora/INSTALL.en.md](plugins/chutora/INSTALL.en.md).
-
----
-
-<a name="layout"></a>
-
-## <img src="assets/icons/folder.svg" width="26" height="26" alt=""> Layout
-
-```
-chutora/
-├── .claude-plugin/marketplace.json   ← marketplace catalog
-├── plugins/chutora/            ← the plugin itself
-│   ├── .claude-plugin/plugin.json
-│   ├── agents/                       ← worker / worker-hard / bulk / librarian / harvester / security-review / security-test
-│   ├── skills/                       ← handoff / research / usage-stats / route-setup / evidence-analysis / security-review / security-test / toolprune / harness-tune
-│   ├── hooks/                        ← SessionStart injection, context-length reminder, loop guard
-│   (templates are in skills/route-setup/templates/: MEMORY.md, knowledge-base guide, Explore, Haiku-layer example)
-├── plugins/agent-board/              ← subagent board mod (optional)
-├── plugins/reply-detail/             ← reply format mod (optional)
-├── docs/
-│   ├── spec.md                       ← architecture design and implementation appendix (Traditional Chinese)
-│   └── ...                           ← deployment and publishing notes (Traditional Chinese only)
-├── claude-memory/                    ← memory store (not under version control)
-└── install.sh                        ← install method that skips the marketplace
-```
+| [Advanced guide](docs/advanced.en.md) | What problem this solves, usage and glossary, modes / language / weekly recap, how it works in detail, advanced settings, memory, design trade-offs, other ways to install, layout |
+| [FAQ](docs/faq.en.md) | Does it cost anything, does it change my settings, how is it different from `/rewind`, does economy mode hurt quality |
+| [Troubleshooting](docs/troubleshooting.en.md) | Nothing happens after install, messages are in the wrong language, no status line, agents show up twice |
+| [Deployment notes](docs/%E9%83%A8%E7%BD%B2%E5%AE%89%E8%A3%9D.md) (Chinese) | install.sh, uninstalling, upgrading from old versions |
+| [Architecture](docs/spec.md) (Chinese) | Design rationale and implementation notes |
 
 ---
 
@@ -432,11 +234,12 @@ chutora/
 
 | Status | Item | What it does |
 |---|---|---|
+| <img src="assets/icons/shield.svg" width="18" height="18" alt=""> Done (0.12) | Easier to use | `/chutora` entry point, `/chutora doctor` install check, Chinese/English messages, three modes, weekly recap, docs split into a three-minute start and an advanced guide |
 | <img src="assets/icons/next.svg" width="18" height="18" alt=""> Next | **Stuck rescue `/chutora:rescue`** (signature feature) | When the AI keeps failing and every fix makes it worse: gather evidence, stop the bleeding, offer two or three ways out, and record the lesson so it doesn't get stuck there again |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> Planned | Code map and blast radius | A compact symbol index saved to memory; before changing a function, list what it affects; warns when the index is stale |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> Planned | Dangerous-action guard | Always confirm before deleting files, force-pushing or touching production |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> Planned | Routing that learns from outcomes | Record how each delegation turned out and suggest delegation-table fixes, applied only after you confirm |
-| <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> Planned | Checkup | One command for test gaps, stale memory, unused tools and a quick security sweep |
+| <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> Planned | Project checkup | Beyond the `/chutora doctor` install check: test gaps, stale memory, unused tools and a quick security sweep in one go |
 
 Every new feature follows the same principle: **lightweight, manual, reversible** — no extra token burn for the sake of automation.
 
@@ -448,7 +251,7 @@ Every new feature follows the same principle: **lightweight, manual, reversible*
 
 ## <img src="assets/icons/pin.svg" width="26" height="26" alt=""> Status
 
-**v0.11.0, early version.** Versions up to 0.10.0 were named smart-agent-route, and up to 0.7.0 tiered-agents; to upgrade, remove the old version first (see the section on upgrading from tiered-agents (0.7.0 and earlier) in the [deployment notes](docs/%E9%83%A8%E7%BD%B2%E5%AE%89%E8%A3%9D.md)). The context reminder hook, handoff, bulk, and the Explore override were ported from the author's personal setup: the hook has fired in real conversations and Explore and bulk are confirmed to run on Haiku, but all are still being validated. The worker-hard escalation chain, the research skill, and the plugin form of the hooks have not been used in practice yet. agent-board and reply-detail have been tested in the VS Code extension 2.1.301 for the board; persistent mode, the button in the board, and the reply-format injection are still being validated.
+**v0.12.0, early version.** Versions up to 0.10.0 were named smart-agent-route, and up to 0.7.0 tiered-agents; to upgrade, remove the old version first (see the section on upgrading from tiered-agents (0.7.0 and earlier) in the [deployment notes](docs/%E9%83%A8%E7%BD%B2%E5%AE%89%E8%A3%9D.md)). The context reminder hook, handoff, bulk, and the Explore override were ported from the author's personal setup: the hook has fired in real conversations and Explore and bulk are confirmed to run on Haiku, but all are still being validated. The worker-hard escalation chain, the research skill, and the plugin form of the hooks have not been used in practice yet. agent-board and reply-detail have been tested in the VS Code extension 2.1.301 for the board; persistent mode, the button in the board, and the reply-format injection are still being validated. The `/chutora` entry point, doctor, modes, bilingual messages and weekly recap added in 0.12 have unit tests but haven't been validated in long real-world use yet.
 
 Known rough edges:
 

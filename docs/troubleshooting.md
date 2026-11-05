@@ -1,0 +1,51 @@
+# 疑難排解
+
+<p><a href="../README.md">← 回到 README</a> · <a href="troubleshooting.en.md">English</a></p>
+
+遇到問題先跑 **`/chutora doctor`**。它是唯讀的，會逐項列出「正常／選用／要修」，要修的項目附上修法。下面是常見情況。
+
+### 裝了沒反應
+
+1. 執行 `/reload-plugins`；VS Code 執行 Developer: Reload Window，終端機重開 `claude`。
+2. 執行 `/chutora doctor`，看 hooks 那一項。
+3. macOS 上 hooks 需要可用的 `python3`。沒裝 Command Line Tools 時，`/usr/bin/python3` 只是一個會跳安裝視窗的殼，Chutora 會安靜跳過提醒功能。執行 `xcode-select --install` 安裝後重開。
+
+### 提醒訊息是英文（或想改成英文）
+
+執行 `/chutora lang zh`（或 `en`）。macOS 從 Dock 或 VS Code 啟動時常常沒有設定 `LANG`，所以會預設成英文。改回依系統語言：`/chutora lang auto`。
+
+### 對話很長卻沒看到 context 提醒
+
+- 門檻預設 10 萬 token，可用環境變數 `CONTEXT_REMIND_TOKENS` 調整。
+- 提醒在你送出下一則訊息時才檢查，而且同一格只提醒一次（之後每多 4 萬再提醒）。
+- 需要 `python3`；`/chutora doctor` 的「hook 觸發紀錄」一直是空的，代表 hooks 沒在跑。
+
+### 狀態列沒出現
+
+plugin 沒辦法自己設定主狀態列。plugin 安裝的用 `/chutora:route-setup`；install.sh 安裝的用 `bash install.sh --with-statusline`。
+
+### 每個 agent 都出現兩份
+
+舊版沒移除：`smart-agent-route`（0.10.0 以前）或 `tiered-agents`（0.7.0 以前）。`/chutora doctor` 會列出殘留位置，照 [部署安裝](部署安裝.md) 的升級章節移除。
+
+### 子 agent 跑在 Opus 上，沒有省到
+
+- 實作要交給 `worker`，不要交給 general-purpose（它會沿用主對話的模型）。
+- 內建的 Explore 會跟著主對話跑 Opus，用 `/chutora:route-setup` 裝 Haiku 版。
+- `/chutora:usage-stats` 的「agent 類型」表可以看到每類 agent 實際跑在哪個模型。
+
+### install.sh 安裝後 loop guard 沒作用
+
+0.12.0 以前的 install.sh 印出的 hooks 片段少了 PostToolUse。重跑 `bash install.sh`，把新印出的片段合併進 `~/.claude/settings.json`。`/chutora doctor` 會檢查這一項。
+
+### loop guard 太敏感或不夠敏感
+
+用環境變數 `LOOP_GUARD_REPEAT` 調整同一錯誤重複幾次才提醒（預設 3）。
+
+### 不想看到每週回顧
+
+在 `~/.claude/settings.json` 的 `"env"` 加 `"CHUTORA_WEEKLY": "0"`。
+
+### 還是不行
+
+開一個 issue，附上 `/chutora doctor` 的輸出和 Claude Code 版本（`claude --version`）。
