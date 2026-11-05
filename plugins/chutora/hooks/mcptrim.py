@@ -186,7 +186,7 @@ def process(data):
     saved = total_before - len(json.dumps(new_resp, ensure_ascii=False))
     if saved <= 0:
         return None
-    add_stats(saved, "mcp")
+    add_stats(saved, "mcp", session_id=data.get("session_id"))
     return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedMCPToolOutput": new_resp}}
 
 

@@ -300,7 +300,8 @@ def doctor():
     else:
         need = {"session-start.sh": "SessionStart", "context-check.py": "UserPromptSubmit", "post-tool.py": "PostToolUse",
                 "trim.py": "PostToolUse (Bash: trim)", "dedup.py": "PostToolUse (Read: dedup)",
-                "mcptrim.py": "PostToolUse (mcp__: MCP trim)", "ask.py": "UserPromptSubmit (ask)"}
+                "mcptrim.py": "PostToolUse (mcp__: MCP trim)", "ask.py": "UserPromptSubmit (ask)",
+                "activity.py": "PreToolUse/PostToolUse (activity)"}
         missing = [ev for f, ev in need.items() if f not in hooks_json]
         if missing:
             add(FIX, "hooks", T("settings.json 缺少：", "missing in settings.json: ") + ", ".join(missing),

@@ -242,8 +242,15 @@ def save_raw_text(tool_use_id, header, body):
     return path
 
 
-def add_stats(saved_chars, kind="bash"):
-    """累計擋在 context 外的字元數。total_chars 是所有來源的合計；kinds 分開記 bash／dedup／mcp。"""
+def add_stats(saved_chars, kind="bash", session_id=None):
+    """累計擋在 context 外的字元數。total_chars 是所有來源的合計；kinds 分開記 bash／dedup／mcp。
+    有 session_id 時另記到這個 session 的 activity 檔，給狀態列與駕駛艙顯示「本次瘦身省≈」。"""
+    if session_id:
+        try:
+            import deck
+            deck.add_saved(session_id, saved_chars, kind)
+        except Exception:
+            pass
     p = os.path.join(conf_dir(), "trim-stats.json")
     try:
         with open(p) as f:
@@ -317,7 +324,7 @@ def process(data):
     saved = len(stdout) + len(stderr) - len(new["stdout"]) - len(new["stderr"])
     if saved <= 0:
         return None
-    add_stats(saved)
+    add_stats(saved, session_id=data.get("session_id"))
     return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedToolOutput": new}}
 
 

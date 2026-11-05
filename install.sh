@@ -191,7 +191,21 @@ hook 不會自動啟用:本腳本不改你的 settings.json。要啟用請把下
         "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/dedup.py" }] },
     { "matcher": "mcp__.*",
       "hooks": [{ "type": "command",
-        "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/mcptrim.py" }] }
+        "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/mcptrim.py" }] },
+    { "hooks": [{ "type": "command",
+        "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/activity.py" }] }
+  ],
+  "PreToolUse": [
+    { "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/activity.py" }] }
+  ],
+  "PostToolUseFailure": [
+    { "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/activity.py" }] }
+  ],
+  "SubagentStart": [
+    { "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/activity.py" }] }
+  ],
+  "SubagentStop": [
+    { "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/activity.py" }] }
   ]
 MSG
 }

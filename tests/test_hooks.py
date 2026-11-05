@@ -439,6 +439,7 @@ class SessionStartTest(SessionStartBase):
         self.assertEqual(r.returncode, 0)
         self.assertEqual((dst / "statusline.py").read_text(), STATUSLINE.read_text())
         self.assertEqual((dst / "compact.py").read_text(), COMPACT.read_text())
+        self.assertEqual((dst / "deck.py").read_text(), (HOOKS / "deck.py").read_text())  # 駕駛艙狀態列需要
 
     def test_statusline_sync_skips_symlink(self):
         dst = self.home / ".claude" / "chutora" / "statusline"

@@ -161,7 +161,7 @@ def process(data):
             new_file = dict(f, content=text, numLines=1)
             out = {"hookSpecificOutput": {"hookEventName": "PostToolUse",
                                           "updatedToolOutput": dict(resp, file=new_file)}}
-            add_stats(len(content) - len(text), "dedup")
+            add_stats(len(content) - len(text), "dedup", session_id=data.get("session_id"))
     if out is None:
         seen[key] = {"hash": h, "id": tuid, "n": 1}
     save_state(st)

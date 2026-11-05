@@ -123,7 +123,7 @@ body() {
 # plugin 安裝且使用者已用 route-setup 把狀態列檔案放到固定位置時，跟著 plugin 升級同步
 # （內容不同才複製；目的地是符號連結就不動）
 if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -d "$HOME/.claude/chutora/statusline" ]; then
-  for f in statusline.py compact.py; do
+  for f in statusline.py compact.py deck.py; do
     src="$CLAUDE_PLUGIN_ROOT/hooks/$f"
     dst="$HOME/.claude/chutora/statusline/$f"
     if [ -f "$src" ] && [ ! -L "$dst" ] && ! cmp -s "$src" "$dst" 2>/dev/null; then
