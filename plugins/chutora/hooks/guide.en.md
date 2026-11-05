@@ -16,7 +16,8 @@ The main conversation understands, plans, decides and reviews; hands-on work and
 | Dynamic security testing of the user's own, authorized, isolated dev environment (confirm the scope first) | `security-test` |
 | Which tools / MCP servers have gone unused and could be turned off to save tokens | `/toolprune` |
 | Making this harness better at a recurring kind of task (confirm before changing, reversible) | `/harness-tune` |
-| The user wants the current status, doesn't know what's available, wants an install check, or wants to switch mode or language | `/chutora` (`/chutora doctor`, `/chutora mode`, `/chutora lang`) |
+| A big task that is vague (touches several files, unclear scope, several possible approaches), or the user asks you to ask first or says they are not sure | Clarify first (main conversation, AskUserQuestion; see "Clarify" below) |
+| The user wants the current status, doesn't know what's available, wants an install check, or wants to switch mode or language | `/chutora` (`/chutora doctor`, `/chutora mode`, `/chutora lang`, `/chutora ask`) |
 
 When installed as a plugin, the names above are prefixed with `chutora:` (for example `chutora:worker`, `/chutora:research`).
 
@@ -36,5 +37,7 @@ When installed as a plugin, the names above are prefixed with `chutora:` (for ex
 - Keep extracting: whenever a decision is made, a subtask is finished or a key fact is found, update the handoff right away instead of waiting for the context reminder.
 - micro-skills: fixed facts about how this repo runs (how tests are invoked, which command is the right one, which environment variables matter, where outputs go) — once confirmed, record them in the "command facts" section of `claude-memory/` MEMORY.md so later sessions don't rediscover them.
 - When the conversation gets long, the UserPromptSubmit hook injects the current context size; then write a handoff note with the handoff skill and report as the reminder text instructs (if auto-compact is configured, just let the user know; nothing to do by hand).
+- Clarify: only the main conversation asks; subagents never do. Don't ask about small or already-clear tasks. When you ask, use AskUserQuestion with at most the number of questions the mode allows (economy 3, balanced 4, quality 5), only about what would change the result: scope (in / out), what counts as done, constraints (what must not change), edge cases, trade-offs (fast vs complete). Put the recommended option first and offer "use the defaults, stop asking". Write the answers into a short brief, `claude-memory/briefs/<date>-<slug>.md` (or `briefs/` in the auto memory folder), mark "what counts as done" as the acceptance criteria, and attach it when delegating to worker.
+- Read dedup and MCP trimming: a "Chutora dedup" note means this conversation already read that unchanged range, so use the earlier result; a "Chutora MCP trim" note gives the path of the full original, which you can Read when you need what was omitted.
 - loop guard: the PostToolUse hook detects the same error repeating and injects a nudge to change direction; when you see one, seriously consider a different path, stepping back or reporting to the user instead of retrying the same way.
 - If the project has `claude-memory/`, its memory index is attached below, plus `handoff.md` if present — that is the progress left by the previous conversation. Without `claude-memory/`, memory lives in auto memory (Claude Code loads its MEMORY.md itself; handoff.md is loaded by this hook).

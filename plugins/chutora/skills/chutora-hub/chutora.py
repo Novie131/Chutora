@@ -2,6 +2,7 @@
 """/chutora 的腳本：狀態總覽、安裝健檢、模式與語言切換。只用標準函式庫。
 
 用法：chutora.py [status] | doctor | mode [economy|balanced|quality] | lang [zh|en|auto]
+      | trim|dedup|mcp-trim [on|off] | ask [on|off]
 status 與 doctor 唯讀；mode／lang 只寫 ~/.claude/chutora/ 底下自己的設定檔。
 """
 import glob
@@ -172,6 +173,39 @@ def trim_state():
     return on, why, chars, th
 
 
+TOGGLES = {  # 子指令 → (設定檔名, 環境變數, 中文名, 英文名)
+    "trim": ("trim", "CHUTORA_TRIM", "噪音輸出瘦身", "Noisy-output trimming"),
+    "dedup": ("dedup", "CHUTORA_DEDUP", "讀檔去重", "Read dedup"),
+    "mcp-trim": ("mcp-trim", "CHUTORA_MCP_TRIM", "MCP 輸出瘦身", "MCP output trimming"),
+    "ask": ("ask", "CHUTORA_ASK", "反問提醒", "Clarify reminders"),
+}
+ASK_MAX = {"economy": 3, "balanced": 4, "quality": 5}
+
+
+def toggle_state(name):
+    fname, env, _, _ = TOGGLES[name]
+    if os.environ.get(env, "").strip() == "0":
+        return False, f"{env}=0"
+    if read_text(os.path.join(CONF, fname)).strip().lower() == "off":
+        return False, f"/chutora {name} off"
+    return True, ""
+
+
+def saved_kinds():
+    try:
+        with open(os.path.join(CONF, "trim-stats.json")) as f:
+            st = json.load(f)
+        k = st.get("kinds") or {}
+        total = int(st.get("total_chars", 0))
+        known = sum(int(v) for v in k.values())
+        k = {key: int(v) for key, v in k.items()}
+        if total > known:  # 0.13 以前只記合計，都是 Bash 瘦身
+            k["bash"] = k.get("bash", 0) + total - known
+        return k
+    except (OSError, ValueError, TypeError, AttributeError):
+        return {}
+
+
 def cmd(name):
     return f"/chutora:{name}" if namespaced() else f"/{name}"
 
@@ -210,9 +244,20 @@ def status():
                 f"- Noisy-output trimming: on (install/build/test output over {th[0]} chars or {th[1]} lines){saved}"))
     else:
         print(T(f"- 噪音輸出瘦身：關閉（{why}）{saved}", f"- Noisy-output trimming: off ({why}){saved}"))
+    k = saved_kinds()
+    for name, kind in (("dedup", "dedup"), ("mcp-trim", "mcp")):
+        on2, why2 = toggle_state(name)
+        zh_n, en_n = TOGGLES[name][2], TOGGLES[name][3]
+        extra = T(f"，累計約 {k.get(kind, 0) // 4:,} token（估算）", f"; about {k.get(kind, 0) // 4:,} tokens so far (estimate)") if k.get(kind) else ""
+        print(T(f"- {zh_n}：{'開啟' if on2 else '關閉（' + why2 + '）'}{extra}", f"- {en_n}: {'on' if on2 else 'off (' + why2 + ')'}{extra}"))
+    on3, why3 = toggle_state("ask")
+    n = ASK_MAX[mode]
+    print(T(f"- 反問：{'開啟' if on3 else '關閉（' + why3 + '）'}（大任務且模糊、或你說不確定時先問，最多 {n} 題；/chutora ask 可強制先問）",
+            f"- Clarify: {'on' if on3 else 'off (' + why3 + ')'} (asks first, up to {n} questions, on big vague tasks or when you're unsure; /chutora ask forces it)"))
     print()
     print(T("可以做的事（直接回覆編號或名稱）：", "What you can do (reply with a number or name):"))
     items = [
+        ("/chutora ask", "先把需求問清楚再動手（最多 3–5 題選擇題）", "clarify the task first (3–5 multiple-choice questions)"),
         (cmd("handoff"), "寫交接筆記，之後可以放心 /clear", "write a handoff note so you can /clear safely"),
         (cmd("usage-stats"), "看用量與估計金額報表", "usage and estimated cost report"),
         ("/chutora doctor", "安裝健檢，壞了告訴你怎麼修", "install check, with fixes"),
@@ -222,6 +267,8 @@ def status():
         (cmd("toolprune"), "找出沒用到的工具來省 token", "find unused tools to save tokens"),
         (cmd("route-setup"), "完整設定：狀態列、自動壓縮、記憶庫", "full setup: status line, auto-compact, memory"),
         ("/chutora trim on|off", "噪音輸出瘦身開關（原文存在 ~/.claude/chutora/raw/）", "turn noisy-output trimming on/off (originals kept in ~/.claude/chutora/raw/)"),
+        ("/chutora dedup on|off", "讀檔去重開關（同一段對話重讀沒變的檔案不再重送）", "turn read dedup on/off (unchanged re-reads aren't sent again)"),
+        ("/chutora mcp-trim on|off", "MCP 輸出瘦身開關（長陣列、長字串先瘦身）", "turn MCP output trimming on/off (long lists and strings trimmed)"),
     ]
     for i, (c, zh, en) in enumerate(items, 1):
         print(f"{i}. {c} — {T(zh, en)}")
@@ -252,7 +299,8 @@ def doctor():
             add(OK, "hooks", T("由 plugin 自動註冊", "registered by the plugin") + ("" if kind == "plugin" else T("（--plugin-dir 載入）", " (loaded with --plugin-dir)")))
     else:
         need = {"session-start.sh": "SessionStart", "context-check.py": "UserPromptSubmit", "post-tool.py": "PostToolUse",
-                "trim.py": "PostToolUse (Bash: trim)"}
+                "trim.py": "PostToolUse (Bash: trim)", "dedup.py": "PostToolUse (Read: dedup)",
+                "mcptrim.py": "PostToolUse (mcp__: MCP trim)", "ask.py": "UserPromptSubmit (ask)"}
         missing = [ev for f, ev in need.items() if f not in hooks_json]
         if missing:
             add(FIX, "hooks", T("settings.json 缺少：", "missing in settings.json: ") + ", ".join(missing),
@@ -395,6 +443,48 @@ def trim(arg):
     return 2
 
 
+def toggle(name, arg):
+    fname, env, zh_n, en_n = TOGGLES[name]
+    a = (arg or "").strip().lower()
+    if not a:
+        on, why = toggle_state(name)
+        state = T("開啟", "on") if on else T(f"關閉（{why}）", f"off ({why})")
+        print(T(f"{zh_n}：{state}。可用 /chutora {name} on|off 切換。", f"{en_n}: {state}. Switch with /chutora {name} on|off."))
+        return 0
+    if a in ("on", "開", "開啟"):
+        write_conf(fname, None)
+        print(T(f"已開啟{zh_n}（馬上生效）。", f"{en_n} is on (takes effect right away)."))
+        if os.environ.get(env, "").strip() == "0":
+            print(T(f"注意：環境變數 {env}=0 仍會讓它保持關閉。", f"Note: the {env}=0 environment variable still keeps it off."))
+        return 0
+    if a in ("off", "關", "關閉"):
+        write_conf(fname, "off")
+        print(T(f"已關閉{zh_n}（寫入 ~/.claude/chutora/{fname}）；改回：/chutora {name} on。",
+                f"{en_n} is off (saved to ~/.claude/chutora/{fname}); undo: /chutora {name} on."))
+        return 0
+    print(T(f"不認得的設定：{arg}。可用 on、off。", f"Unknown value: {arg}. Use on or off."))
+    return 2
+
+
+def ask(arg):
+    """沒有參數：印出反問步驟給主對話照做；on|off：開關自動反問提醒。"""
+    a = (arg or "").strip().lower()
+    if a in ("status", "狀態"):
+        return toggle("ask", "")
+    if a:
+        return toggle("ask", arg)
+    n = ASK_MAX[get_mode()]
+    print(T("反問（先把需求問清楚再動手）：", "Clarify first:"))
+    print(T(f"1. 用 AskUserQuestion 一次問最多 {n} 題，每題第一個選項是建議選項，並提供「照預設、別問了」。",
+            f"1. Use AskUserQuestion: at most {n} questions; put the recommended option first and offer \"use the defaults, stop asking\"."))
+    print(T("2. 只問會改變結果的：範圍（做／不做）、怎樣算完成、限制（不能動什麼）、邊界情況、取捨（快還是完整）。已經講清楚的不要再問。",
+            "2. Only ask what changes the result: scope (in / out), what counts as done, constraints (what must not change), edge cases, trade-offs (fast vs complete). Don't re-ask what is already clear."))
+    print(T("3. 答案寫成精簡任務說明 claude-memory/briefs/<日期>-<slug>.md（沒有 claude-memory 時放 auto memory 目錄的 briefs/），欄位：目標、範圍、驗收標準、限制、邊界情況、取捨。",
+            "3. Write the answers into a short brief, claude-memory/briefs/<date>-<slug>.md (or briefs/ in the auto memory folder): goal, scope, acceptance criteria, constraints, edge cases, trade-offs."))
+    print(T("4. 派工時把這份說明附給 worker；「怎樣算完成」就是驗收標準。", "4. Attach the brief when delegating; \"what counts as done\" is the acceptance criteria."))
+    return 0
+
+
 def main(argv):
     sub = argv[0].lower() if argv else "status"
     rest = argv[1] if len(argv) > 1 else ""
@@ -407,9 +497,15 @@ def main(argv):
         return mode(rest)
     if sub in ("trim", "瘦身"):
         return trim(rest)
+    if sub in ("dedup", "去重"):
+        return toggle("dedup", rest)
+    if sub in ("mcp-trim", "mcptrim", "mcp"):
+        return toggle("mcp-trim", rest)
+    if sub in ("ask", "反問", "先問我"):
+        return ask(rest)
     if sub in ("lang", "language", "語言"):
         return set_lang(rest)
-    print(T(f"不認得的指令：{sub}。可用：status、doctor、mode、trim、lang。", f"Unknown command: {sub}. Available: status, doctor, mode, trim, lang."))
+    print(T(f"不認得的指令：{sub}。可用：status、doctor、mode、trim、dedup、mcp-trim、ask、lang。", f"Unknown command: {sub}. Available: status, doctor, mode, trim, dedup, mcp-trim, ask, lang."))
     return 2
 
 

@@ -224,7 +224,26 @@ def save_raw(tool_use_id, cmd, resp):
     return path
 
 
-def add_stats(saved_chars):
+def save_raw_text(tool_use_id, header, body):
+    """原文另存到 ~/.claude/chutora/raw/<tool_use_id>.log（保留最近 KEEP_RAW 份），回傳路徑。"""
+    d = os.path.join(conf_dir(), "raw")
+    os.makedirs(d, exist_ok=True)
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", str(tool_use_id or "unknown"))[:80] or "unknown"
+    path = os.path.join(d, safe + ".log")
+    with open(path, "w", encoding="utf-8", errors="replace") as f:
+        f.write(header + "\n\n" + body + "\n")
+    logs = sorted((os.path.join(d, x) for x in os.listdir(d) if x.endswith(".log")),
+                  key=lambda q: os.path.getmtime(q))
+    for old in logs[:-KEEP_RAW]:
+        try:
+            os.remove(old)
+        except OSError:
+            pass
+    return path
+
+
+def add_stats(saved_chars, kind="bash"):
+    """累計擋在 context 外的字元數。total_chars 是所有來源的合計；kinds 分開記 bash／dedup／mcp。"""
     p = os.path.join(conf_dir(), "trim-stats.json")
     try:
         with open(p) as f:
@@ -236,9 +255,12 @@ def add_stats(saved_chars):
     days[day] = int(days.get(day, 0)) + int(saved_chars)
     for k in sorted(days)[:-60]:  # 只留最近 60 天
         del days[k]
-    st.update(days=days, total_chars=int(st.get("total_chars", 0)) + int(saved_chars),
+    kinds = st.get("kinds") or {}
+    kinds[kind] = int(kinds.get(kind, 0)) + int(saved_chars)
+    st.update(days=days, kinds=kinds, total_chars=int(st.get("total_chars", 0)) + int(saved_chars),
               count=int(st.get("count", 0)) + 1)
     tmp = p + ".tmp"
+    os.makedirs(os.path.dirname(p), exist_ok=True)
     with open(tmp, "w") as f:
         json.dump(st, f)
     os.replace(tmp, p)

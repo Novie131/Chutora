@@ -77,7 +77,7 @@ class WeeklyTest(unittest.TestCase):
         self.seed(with_sub=False)
         self.seed_trim()
         out = self.run_weekly(CHUTORA_LANG="zh").stdout
-        self.assertIn("噪音輸出瘦身讓約 20,000 token", out)
+        self.assertIn("輸出瘦身與讀檔去重讓約 20,000 token", out)
         self.assertIn("估算", out)
 
     def test_trim_appended_to_estimate(self):

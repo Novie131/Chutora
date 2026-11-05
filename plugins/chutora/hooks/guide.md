@@ -16,7 +16,8 @@
 | 對自己、已授權且隔離的 dev 環境做動態安全測試（開工先確認授權範圍） | `security-test` |
 | 哪些工具／MCP 長期沒用到、可以關掉省 token | `/toolprune` |
 | 讓這套 harness 針對某類任務越調越好（改前確認、可回滾） | `/harness-tune` |
-| 使用者想看目前狀態、不知道有哪些功能、要健檢安裝、切換模式或語言 | `/chutora`（`/chutora doctor`、`/chutora mode`、`/chutora lang`） |
+| 需求模糊的大任務（會動多個檔案、範圍不明、有多種做法），或使用者要你先問、說不確定 | 先反問（主對話用 AskUserQuestion，見下方「反問」） |
+| 使用者想看目前狀態、不知道有哪些功能、要健檢安裝、切換模式或語言 | `/chutora`（`/chutora doctor`、`/chutora mode`、`/chutora lang`、`/chutora ask`） |
 
 以 plugin 安裝時，上表名稱前面會加 `chutora:`（例如 `chutora:worker`、`/chutora:research`）。
 
@@ -36,5 +37,7 @@
 - 持續萃取：做出決定、完成子任務、查到關鍵事實時，就順手更新 handoff，不要等 context 提醒。
 - micro-skills：這個 repo 怎麼跑的固定指令事實（測試怎麼下、哪個指令才對、要吃哪個環境變數、產出檔放哪），確認後記進 `claude-memory/` MEMORY.md 的「指令事實」區，讓之後的 session 不用重新摸索同一件事。
 - 對話變長時，UserPromptSubmit hook 會帶入目前的 context 大小；那時用 handoff skill 寫交接筆記，並照提醒文字的指示回報（有設自動壓縮就只需告知，不用手動處理）。
+- 反問：只有主對話問，子 agent 不問。小事或已講清楚的不問。要問時用 AskUserQuestion，一次最多問模式規定的題數（省錢 3、平衡 4、品質 5），只問會改變結果的：範圍（做／不做）、怎樣算完成、限制（不能動什麼）、邊界情況、取捨（快還是完整）；每題第一個選項是建議選項，並提供「照預設、別問了」。答案寫成精簡任務說明 `claude-memory/briefs/<日期>-<slug>.md`（沒有 claude-memory 時放 auto memory 目錄的 `briefs/`），「怎樣算完成」標成驗收標準，派工時附給 worker。
+- 讀檔去重與 MCP 瘦身：看到「Chutora 去重」提示，代表同一段對話先前讀過、檔案沒變，直接參考那次的結果；看到「Chutora MCP 瘦身」提示，需要被略過的內容時用 Read 讀提示裡的原文路徑。
 - loop guard：PostToolUse hook 會偵測同一個錯誤反覆出現，並注入一句提醒換方向；看到這類提醒就認真考慮改路、退一步或回報使用者，別用同樣方式硬重試。
 - 專案有 `claude-memory/` 時，下方會附上它的記憶索引；有 `handoff.md` 時也會附上，那是上一個對話留下的進度。沒有 `claude-memory/` 時記憶在 auto memory（Claude Code 自己會帶入它的 MEMORY.md；handoff.md 則由本 hook 帶入）。

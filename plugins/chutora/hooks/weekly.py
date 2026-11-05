@@ -95,7 +95,7 @@ def estimate(us, root, today):
 
 
 def trim_week(today):
-    """過去 DAYS 天噪音輸出瘦身掉的字元數（trim.py 寫在 ~/.claude/chutora/trim-stats.json）。"""
+    """過去 DAYS 天擋在 context 外的字元數（trim.py、dedup.py、mcptrim.py 都寫在 ~/.claude/chutora/trim-stats.json）。"""
     try:
         with open(os.path.join(os.path.expanduser("~"), ".claude", "chutora", "trim-stats.json")) as f:
             days = json.load(f).get("days") or {}
@@ -135,8 +135,8 @@ def main():
     r = estimate(us, root, today) if us is not None else None
     trimmed = trim_week(today) // 4  # 估算：字元數÷4
     if trimmed:
-        trim_line = (f" Noisy-output trimming kept about {trimmed:,} tokens out of the context (estimate: characters ÷ 4)."
-                     if lang() == "en" else f"噪音輸出瘦身讓約 {trimmed:,} token 沒進到 context（估算：字元數÷4）。")
+        trim_line = (f" Output trimming and read dedup kept about {trimmed:,} tokens out of the context (estimate: characters ÷ 4)."
+                     if lang() == "en" else f"輸出瘦身與讀檔去重讓約 {trimmed:,} token 沒進到 context（估算：字元數÷4）。")
     else:
         trim_line = ""
     if not r:
