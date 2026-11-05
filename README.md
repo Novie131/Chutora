@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/Novie131/chutora/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Novie131/chutora/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="version 0.13.0" src="https://img.shields.io/badge/version-0.13.0-FF6A26">
+  <img alt="version 0.14.0" src="https://img.shields.io/badge/version-0.14.0-FF6A26">
   <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-1B2D52">
   <img alt="VS Code supported" src="https://img.shields.io/badge/VS%20Code-supported-1B2D52">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-2EA043"></a>
@@ -13,11 +13,12 @@
 <p align="center"><b>繁體中文</b> · <a href="README.en.md"><b>English</b></a></p>
 
 <p align="center">
-  <a href="#quick-start"><img src="assets/icons/rocket.svg" width="18" height="18" alt=""> 快速開始</a> ·
-  <a href="#features"><img src="assets/icons/compass.svg" width="18" height="18" alt=""> 功能總覽</a> ·
+  <a href="#demo"><img src="assets/icons/clapper.svg" width="18" height="18" alt=""> Demo</a> ·
+  <a href="#features"><img src="assets/icons/compass.svg" width="18" height="18" alt=""> 主要功能</a> ·
+  <a href="#quick-start"><img src="assets/icons/rocket.svg" width="18" height="18" alt=""> 如何使用</a> ·
   <a href="#how-it-works"><img src="assets/icons/branch.svg" width="18" height="18" alt=""> 運作方式</a> ·
-  <a href="#docs"><img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 更多文件</a> ·
-  <a href="#roadmap"><img src="assets/icons/flag.svg" width="18" height="18" alt=""> 路線圖</a>
+  <a href="#roadmap"><img src="assets/icons/flag.svg" width="18" height="18" alt=""> 路線圖</a> ·
+  <a href="#docs"><img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 更多文件</a>
 </p>
 
 # Chutora
@@ -32,15 +33,17 @@
 
 <a name="why"></a>
 
-## <img src="assets/icons/chute.svg" width="26" height="26" alt=""> 為什麼是 Chutora
+## <img src="assets/icons/chute.svg" width="26" height="26" alt=""> Chutora 在做什麼
 
 **目的**：用最少的 token 做最有效率的事。主對話的每個 token 都花在刀口上，長時間工作也不會越拉越貴、越來越亂。
 
 | 常見困境 | 單用 Claude Code | 加上 Chutora |
 |---|---|---|
 | <img src="assets/icons/money.svg" width="18" height="18" alt=""> 所有事都用最貴的模型 | 讀 log、看截圖、改幾十個檔都付 Opus 的價 | Opus 只負責想和判斷，動手交給 Sonnet，大量讀取交給 Haiku |
+| <img src="assets/icons/scissors.svg" width="18" height="18" alt=""> 一次安裝、一份 log 就塞爆 context | 幾千行進度訊息整份留在對話裡，之後每一輪都重讀 | 進到 context 前先瘦身；重讀沒變的檔案只回一行；MCP 的大坨資料也先瘦身，原文另存 |
 | <img src="assets/icons/scroll.svg" width="18" height="18" alt=""> 對話越拉越長 | 越後面越貴、越亂；一清空進度就沒了 | 超過 10 萬 token 先提醒寫交接筆記；壓縮、`/clear` 或隔天開新對話都自動接回 |
 | <img src="assets/icons/loop.svg" width="18" height="18" alt=""> AI 卡在同一個錯誤 | 反覆重試、一直燒 token | loop guard 提醒換方向；失敗依固定順序升級，不會無限重試 |
+| <img src="assets/icons/question.svg" width="18" height="18" alt=""> 會錯意、做錯再重做 | 一開工就照自己的理解做下去 | 需求模糊或你說不確定時，先用選擇題問清楚再動手 |
 | <img src="assets/icons/brain.svg" width="18" height="18" alt=""> 「之前好像講過」 | 每次都要重新解釋 | 記憶就是 Markdown，librarian 查回原文與出處，可以進 git、用 Obsidian 開 |
 | <img src="assets/icons/search.svg" width="18" height="18" alt=""> 結論可不可信 | 事實和推測混在一起 | evidence-analysis 把結論分成觀察、推論、未知，附出處 |
 | <img src="assets/icons/shield.svg" width="18" height="18" alt=""> 安全 | 要自己想到才會審 | security-review 靜態審查，security-test 只在授權的隔離環境動態測試 |
@@ -49,12 +52,109 @@
 
 **裝完就能用**：兩行指令，不用改你的 CLAUDE.md。進階設定一次只問一項，改設定前先備份；子 agent 回報完成前必須驗證，遇到岔路會停下來問你。
 
+---
+
 <a name="demo"></a>
 
-### <img src="assets/icons/clapper.svg" width="22" height="22" alt=""> 40 秒看懂 Chutora
+## <img src="assets/icons/clapper.svg" width="26" height="26" alt=""> 40 秒看懂 Chutora
 
 <p align="center"><a href="assets/demo.mp4"><img src="assets/demo.gif" alt="Chutora 示意動畫：主對話 Opus 把工作派給 Sonnet 與 Haiku，只收回結論" width="100%"></a></p>
 <p align="center"><sub>示意動畫，不是實機錄影 · <a href="assets/demo.mp4">▶ 觀看完整 41 秒影片（中英字幕）</a></sub></p>
+
+---
+
+<a name="features"></a>
+
+## <img src="assets/icons/compass.svg" width="26" height="26" alt=""> 主要功能
+
+前四類都在做同一件事：**讓主對話只收到真正需要的 token**。「觸發」欄的 **自動** 表示裝好就會運作；**派工** 表示照平常講話，主對話會自己判斷要不要交給它；**指令** 表示你要叫它（plugin 安裝時寫成 `/chutora:<名稱>`，install.sh 安裝時直接 `/<名稱>`）；**選裝** 表示要另外安裝或設定。
+
+### 1. 分層派工：貴的模型只用在刀口上
+
+| 功能 | 觸發 | 做什麼 |
+|---|---|---|
+| `worker`（Sonnet） | 派工 | 方向已定的實作：寫或改程式、修 bug、補測試。回報完成前必須先驗證 |
+| `worker-hard`（Sonnet，effort high） | 派工 | 只在 worker 失敗後使用，必須附上前次失敗報告 |
+| `bulk`（Haiku） | 派工 | 大量讀取只回結論：多張圖片或影格、長 log、抓網頁、輸出很多的指令、規則明確的批次修改 |
+| Haiku 版 `Explore` | 選裝 | 搜尋程式碼、找檔案。內建 Explore 會跟著主對話跑 Opus，換成這個改跑 Haiku |
+| 驗證回報與失敗升級 | 自動 | 子 agent 用固定格式回報狀態與驗證結果；失敗依序升級，不會無限重試；遇到岔路會停下來問你 |
+
+### 2. 擋在門外：瘦身與去重
+
+| 功能 | 觸發 | 做什麼 |
+|---|---|---|
+| <img src="assets/icons/scissors.svg" width="18" height="18" alt=""> 噪音輸出瘦身 | 自動 | 安裝、建置、測試這類又長又雜的指令輸出，進到 context 前先瘦身：去色碼、收斂進度列與重複行，保留開頭、結尾、錯誤與摘要。讀檔類指令、`git diff`、失敗的指令都不動。`/chutora trim off` 或 `CHUTORA_TRIM=0` 關閉 |
+| <img src="assets/icons/copies.svg" width="18" height="18" alt=""> 讀檔去重 | 自動 | 同一段對話裡再讀一次「沒變的同一個範圍」時，只回一行「跟第 N 次讀的一樣」，不再整份重送。主對話與每個子 agent 分開算；壓縮、`/clear`、`/rewind` 後舊內容不在對話裡，就照常重讀。Claude Code 內建的同類機制有出手時不重複處理。`/chutora dedup off` 或 `CHUTORA_DEDUP=0` 關閉 |
+| <img src="assets/icons/plug.svg" width="18" height="18" alt=""> MCP 輸出瘦身 | 自動 | Slack、資料庫、網頁這類 MCP 工具回傳一大坨資料時，長陣列只留前幾十筆並註明另有幾筆、連續相同的項目合併、過長字串截斷、空欄位拿掉。可設定排除清單。`/chutora mcp-trim off` 或 `CHUTORA_MCP_TRIM=0` 關閉 |
+
+被瘦身或去重的原文一定另存在 `~/.claude/chutora/raw/`（保留最近 50 份），Claude 需要時會用 Read 讀回來。三種模式的門檻不同：省錢最積極、品質最保守。
+
+### 3. 長對話管理：對話變長也不失控
+
+| 功能 | 觸發 | 做什麼 |
+|---|---|---|
+| context 長度提醒 | 自動 | 超過 10 萬 token 提醒一次，之後每多 4 萬再提醒（可用 `CONTEXT_REMIND_TOKENS` 調整） |
+| `handoff` | 指令 | 把目前任務、已完成、下一步、未決問題寫進 `handoff.md`，之後可以放心 `/clear`。說「交接一下」也會觸發 |
+| 交接筆記自動帶回 | 自動 | 新對話、`/clear`、自動壓縮之後，自動帶入分工慣例、記憶索引與 `handoff.md` |
+| context 狀態列 | 選裝 | 顯示 `模型 │ ctx 95k │ 提醒 100k │ 壓縮 120k` |
+| 自動壓縮門檻 | 選裝 | 在 `settings.json` 設 `autoCompactWindow` 當保險，`route-setup` 可以幫你安全寫入 |
+
+### 4. 反問：先問清楚再動手
+
+會錯意、做錯再重做，是最大的 token 浪費。參考 [github/spec-kit](https://github.com/github/spec-kit) 的 clarify 步驟，做成輕量版：
+
+| 功能 | 觸發 | 做什麼 |
+|---|---|---|
+| <img src="assets/icons/question.svg" width="18" height="18" alt=""> 反問 | 自動／指令 | 你說「先問我」、`/chutora ask`、或說「我不太清楚」「不確定」「你覺得呢」時，或大任務需求模糊時（會動多個檔案、範圍不明、有多種做法），主對話先用選擇題問你 3 到 5 題（省錢 3、平衡 4、品質 5），每題第一個是建議選項，也可以「照預設、別問了」。只問範圍、怎樣算完成、限制、邊界情況、取捨。小事和已經講清楚的不問；子 agent 不會問 |
+| 任務說明 | 自動 | 答案寫成 `claude-memory/briefs/<日期>-<slug>.md`（沒有 claude-memory 時放 auto memory 目錄），派工時附給 worker；「怎樣算完成」就是驗收標準 |
+
+`/chutora ask off` 或 `CHUTORA_ASK=0` 關閉「你說不確定時」的自動提醒；大任務自動反問寫在分工慣例裡，一直有效。
+
+### 5. 量測與白燒保護
+
+| 功能 | 觸發 | 做什麼 |
+|---|---|---|
+| loop guard | 自動 | 同一個錯誤一再重複時提醒換方向，只提醒不中斷；同時記錄各工具的使用次數 |
+| `toolprune` | 指令 | 讀工具使用記錄，列出長期沒用到、可以關掉的工具或 MCP。只建議不自動改，一步就能復原 |
+| 每週回顧 | 自動 | 每週第一個對話附一行估算：派工省下的模型價差，以及瘦身與去重擋在 context 外的 token；`CHUTORA_WEEKLY=0` 關閉 |
+| `usage-stats` | 指令 | 量主對話 context 長度、各 agent 的派工次數、token 用量與估計金額；加 `--html` 輸出有每日圖表的報表 |
+
+### 6. 記憶與知識庫：跨對話累積
+
+| 功能 | 觸發 | 做什麼 |
+|---|---|---|
+| `claude-memory/` 記憶庫 | 選裝 | 一般 Markdown 檔：`MEMORY.md` 索引、`topics/` agent 累積的知識、`kb/` 你的筆記、`web/` 外部資料、`briefs/` 反問的任務說明。可以進 git、用 Obsidian 開 |
+| `librarian`（Haiku） | 派工 | 問「之前記過什麼」時查記憶與知識庫。只讀不寫，回傳原文片段與出處 |
+| `research` | 派工／指令 | 查官方文件、API 用法、版本差異等可能已變動的資訊，回答附來源，官方資料存進 `web/` |
+| `harvester`（Sonnet） | 只在你明確要求時 | 把過去的對話紀錄挖成知識庫筆記。成本較高，偶爾跑一次 |
+| micro-skills | 內建範本 | `MEMORY.md` 範本與分工慣例裡的寫法：把專案的固定指令與事實寫成短小的條件式記憶，用到才讀，少走回頭路 |
+
+### 7. 分析品質與資安
+
+| 功能 | 觸發 | 做什麼 |
+|---|---|---|
+| `evidence-analysis` | 派工／指令 | 調查、找根因、審查結論時使用。每個結論標成觀察、推論或未知並附出處，先給概覽再深入，最後留一份可追查的 finding ledger |
+| `security-review`（Sonnet） | 派工 | 靜態審查：對照 OWASP 類別，找不安全寫法、金鑰或 token 外洩。只讀不改，回報附證據、嚴重度與修補建議。只用於你自己或已授權的程式碼 |
+| `security-test`（Sonnet） | 派工 | 動態測試：實際打你已授權且隔離的 dev／測試環境，驗證漏洞。開工前一定先確認授權範圍，不碰 production、不外送資料 |
+
+### 8. 自我強化：越用越順手
+
+| 功能 | 觸發 | 做什麼 |
+|---|---|---|
+| `harness-tune` | 指令 | 某類任務一再做不順時使用：先讀過去的教訓，提出一到三個小調整，你確認後一次只改一項，改前備份、可回滾 |
+| `harness-lessons.md` | 自動（由 harness-tune 寫入） | 記錄每次調整的結果（有效、無效、已還原），下一次調整從上一次的結論出發 |
+
+### 9. 入口、介面與設定
+
+| 功能 | 觸發 | 做什麼 |
+|---|---|---|
+| `/chutora` | 指令 | 單一入口：狀態總覽（版本、模式、context、loop guard、各開關與累計省下的量）加上功能選單，回覆編號就能執行 |
+| `/chutora doctor` | 指令 | 唯讀安裝健檢：python3、hooks、狀態列、記憶庫、自動壓縮、Haiku Explore、舊版殘留，要修的項目附修法 |
+| 三種模式 | 指令 | `/chutora mode economy`／`balanced`／`quality`：改變 session 開始時帶入的派工慣例、瘦身門檻與反問題數，不改各 agent 的模型 |
+| 中英雙語 | 自動 | 提醒訊息、狀態列、`/chutora` 依系統語言切換；`/chutora lang zh`／`en`／`auto` 可固定 |
+| `agent-board` | 選裝 | 輸入框上方的常駐看板，即時列出每個子 agent 的類型、模型、狀態、經過時間、token 與估計金額。用 `/agent-board` 開關 |
+| `reply-detail` | 選裝 | 回覆預設精簡三段（現況／你要做的／需要你決定或提供）；用看板的「⇄ 回覆：精簡／詳細」切換，或輸入「詳細說明」單次改寫成詳細版 |
+| `route-setup` | 指令 | 一次性完整設定：記憶庫、Haiku 版 Explore、自動壓縮門檻、狀態列。一次只問一項，改設定前先備份 |
 
 ---
 
@@ -80,7 +180,7 @@
 
 **3. 照平常講話**
 
-主對話會自己判斷要不要派工：說「照剛才講的做」就交給 worker，「看這份 log 為什麼失敗」就交給 bulk，「我之前記過 X 嗎」就交給 librarian。對話超過 10 萬 token 會提醒你先寫交接筆記，之後不管是 `/clear` 還是隔天開新對話，進度都會自動接回。
+主對話會自己判斷要不要派工：說「照剛才講的做」就交給 worker，「看這份 log 為什麼失敗」就交給 bulk，「我之前記過 X 嗎」就交給 librarian。需求不清楚時，它會先用選擇題問你幾題；你也可以直接說「先問我」或輸入 `/chutora ask`。對話超過 10 萬 token 會提醒你先寫交接筆記，之後不管是 `/clear` 還是隔天開新對話，進度都會自動接回。
 
 **4. 卡住怎麼辦**
 
@@ -89,86 +189,6 @@
 - 想換個乾淨的對話重來：說「交接一下」寫好 `handoff.md`，再 `/clear`。
 
 **想要完整功能**：執行 `/chutora:route-setup`，它會一項一項帶你設定狀態列、自動壓縮門檻、Haiku 版 Explore、`claude-memory/` 記憶庫，每項都說明影響和怎麼還原，改設定前會備份。提醒類功能需要 `python3`，沒有的話會安靜停用。
-
----
-
-<a name="features"></a>
-
-## <img src="assets/icons/compass.svg" width="26" height="26" alt=""> 功能總覽
-
-依用途分成八類。「觸發」欄的 **自動** 表示裝好就會運作，不用下指令；**派工** 表示照平常講話，主對話會自己判斷要不要交給它；**指令** 表示你要叫它（plugin 安裝時寫成 `/chutora:<名稱>`，install.sh 安裝時直接 `/<名稱>`）；**選裝** 表示要另外安裝或設定。
-
-### 1. 分層派工：貴的模型只用在刀口上
-
-| 功能 | 觸發 | 做什麼 |
-|---|---|---|
-| `worker`（Sonnet） | 派工 | 方向已定的實作：寫或改程式、修 bug、補測試。回報完成前必須先驗證 |
-| `worker-hard`（Sonnet，effort high） | 派工 | 只在 worker 失敗後使用，必須附上前次失敗報告 |
-| `bulk`（Haiku） | 派工 | 大量讀取只回結論：多張圖片或影格、長 log、抓網頁、輸出很多的指令、規則明確的批次修改 |
-| Haiku 版 `Explore` | 選裝 | 搜尋程式碼、找檔案。內建 Explore 會跟著主對話跑 Opus，換成這個改跑 Haiku |
-| 驗證回報與失敗升級 | 自動 | 子 agent 用固定格式回報狀態與驗證結果；失敗依序升級，不會無限重試；遇到岔路會停下來問你 |
-
-### 2. 長對話管理：對話變長也不失控
-
-| 功能 | 觸發 | 做什麼 |
-|---|---|---|
-| context 長度提醒 | 自動 | 超過 10 萬 token 提醒一次，之後每多 4 萬再提醒（可用 `CONTEXT_REMIND_TOKENS` 調整） |
-| `handoff` | 指令 | 把目前任務、已完成、下一步、未決問題寫進 `handoff.md`，之後可以放心 `/clear`。說「交接一下」也會觸發 |
-| 交接筆記自動帶回 | 自動 | 新對話、`/clear`、自動壓縮之後，自動帶入分工慣例、記憶索引與 `handoff.md` |
-| context 狀態列 | 選裝 | 顯示 `模型 │ ctx 95k │ 提醒 100k │ 壓縮 120k` |
-| 自動壓縮門檻 | 選裝 | 在 `settings.json` 設 `autoCompactWindow` 當保險，`route-setup` 可以幫你安全寫入 |
-
-### 3. 記憶與知識庫：跨對話累積
-
-| 功能 | 觸發 | 做什麼 |
-|---|---|---|
-| `claude-memory/` 記憶庫 | 選裝 | 一般 Markdown 檔：`MEMORY.md` 索引、`topics/` agent 累積的知識、`kb/` 你的筆記、`web/` 外部資料。可以進 git、用 Obsidian 開 |
-| `librarian`（Haiku） | 派工 | 問「之前記過什麼」時查記憶與知識庫。只讀不寫，回傳原文片段與出處 |
-| `research` | 派工／指令 | 查官方文件、API 用法、版本差異等可能已變動的資訊，回答附來源，官方資料存進 `web/` |
-| `harvester`（Sonnet） | 只在你明確要求時 | 把過去的對話紀錄挖成知識庫筆記。成本較高，偶爾跑一次 |
-| micro-skills | 內建範本 | `MEMORY.md` 範本與分工慣例裡的寫法：把專案的固定指令與事實寫成短小的條件式記憶，用到才讀，少走回頭路 |
-
-### 4. 分析品質：分清事實與推測
-
-| 功能 | 觸發 | 做什麼 |
-|---|---|---|
-| `evidence-analysis` | 派工／指令 | 調查、找根因、審查結論時使用。每個結論標成觀察、推論或未知並附出處，先給概覽再深入，最後留一份可追查的 finding ledger |
-
-### 5. 資安：只用於你自己或已授權的程式碼
-
-| 功能 | 觸發 | 做什麼 |
-|---|---|---|
-| `security-review`（Sonnet） | 派工 | 靜態審查：對照 OWASP 類別，找不安全寫法、金鑰或 token 外洩。只讀不改，回報附證據、嚴重度與修補建議 |
-| `security-test`（Sonnet） | 派工 | 動態測試：實際打你已授權且隔離的 dev／測試環境，驗證漏洞。開工前一定先確認授權範圍，不碰 production、不外送資料 |
-
-### 6. 省 token 與量測：知道錢花在哪
-
-| 功能 | 觸發 | 做什麼 |
-|---|---|---|
-| loop guard | 自動 | 同一個錯誤一再重複時提醒換方向，只提醒不中斷；同時記錄各工具的使用次數 |
-| 噪音輸出瘦身 | 自動 | 安裝、建置、測試這類又長又雜的指令輸出，進到 context 前先瘦身：去色碼、收斂進度列與重複行，保留開頭、結尾、錯誤與摘要。原文一定另存在 `~/.claude/chutora/raw/`，Claude 需要時會讀；讀檔類指令、`git diff`、失敗的指令都不動。`/chutora trim off` 或 `CHUTORA_TRIM=0` 關閉 |
-| `toolprune` | 指令 | 讀工具使用記錄，列出長期沒用到、可以關掉的工具或 MCP。只建議不自動改，一步就能復原 |
-| 每週回顧 | 自動 | 每週第一個對話附一行估算：子 agent 的工作若改由主對話模型處理，依 API 牌價要多花多少；`CHUTORA_WEEKLY=0` 關閉 |
-| `usage-stats` | 指令 | 量主對話 context 長度、各 agent 的派工次數、token 用量與估計金額；加 `--html` 輸出有每日圖表的報表 |
-
-### 7. 自我強化：越用越順手
-
-| 功能 | 觸發 | 做什麼 |
-|---|---|---|
-| `harness-tune` | 指令 | 某類任務一再做不順時使用：先讀過去的教訓，提出一到三個小調整，你確認後一次只改一項，改前備份、可回滾 |
-| `harness-lessons.md` | 自動（由 harness-tune 寫入） | 記錄每次調整的結果（有效、無效、已還原），下一次調整從上一次的結論出發 |
-
-### 8. 入口、介面與設定
-
-| 功能 | 觸發 | 做什麼 |
-|---|---|---|
-| `/chutora` | 指令 | 單一入口：狀態總覽（版本、模式、context、loop guard）加上功能選單，回覆編號就能執行 |
-| `/chutora doctor` | 指令 | 唯讀安裝健檢：python3、hooks、狀態列、記憶庫、自動壓縮、Haiku Explore、舊版殘留，要修的項目附修法 |
-| 三種模式 | 指令 | `/chutora mode economy`／`balanced`／`quality`：改變 session 開始時帶入的派工慣例（派工積極度、升級時機、驗證範圍），不改各 agent 的模型 |
-| 中英雙語 | 自動 | 提醒訊息、狀態列、`/chutora` 依系統語言切換；`/chutora lang zh`／`en`／`auto` 可固定 |
-| `agent-board` | 選裝 | 輸入框上方的常駐看板，即時列出每個子 agent 的類型、模型、狀態、經過時間、token 與估計金額。用 `/agent-board` 開關 |
-| `reply-detail` | 選裝 | 回覆預設精簡三段（現況／你要做的／需要你決定或提供）；用看板的「⇄ 回覆：精簡／詳細」切換，或輸入「詳細說明」單次改寫成詳細版 |
-| `route-setup` | 指令 | 一次性完整設定：記憶庫、Haiku 版 Explore、自動壓縮門檻、狀態列。一次只問一項，改設定前先備份 |
 
 ---
 
@@ -237,6 +257,29 @@ ANTHROPIC_API_KEY=... python3 bench/run.py --runs 3 --model opus
 
 ---
 
+<a name="roadmap"></a>
+
+## <img src="assets/icons/flag.svg" width="26" height="26" alt=""> 路線圖
+
+| 狀態 | 項目 | 說明 |
+|---|---|---|
+| <img src="assets/icons/shield.svg" width="18" height="18" alt=""> 已完成（0.12） | 好用優化 | `/chutora` 單一入口、`/chutora doctor` 安裝健檢、中英雙語提醒、三種模式、每週回顧、文件分成三分鐘上手與進階說明 |
+| <img src="assets/icons/shield.svg" width="18" height="18" alt=""> 已完成（0.13） | 噪音輸出瘦身 | 又長又雜的指令輸出進到主對話前先瘦身，只留錯誤、摘要與關鍵行；可以關閉，原文另存可讀 |
+| <img src="assets/icons/shield.svg" width="18" height="18" alt=""> 已完成（0.13） | token benchmark 工具 | `bench/run.py` 用固定任務實測有／沒有 Chutora 的 token、花費與完成率；**數字尚未公布**，見 [Benchmark](#benchmark) |
+| <img src="assets/icons/shield.svg" width="18" height="18" alt=""> 已完成（0.14） | 讀檔去重、MCP 輸出瘦身、反問 | 同一段對話重讀沒變的檔案只回一行；MCP 的大坨資料先瘦身；需求模糊或你說不確定時先用選擇題問清楚，答案寫成任務說明 |
+| <img src="assets/icons/next.svg" width="18" height="18" alt=""> 下一步 | 駕駛艙 | 狀態列即時顯示 Claude 正在做什麼；agent-board 升級成完整面板：動作時間線、白話翻譯、碰過的檔案、待辦進度、各模型的工作量 |
+| <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 程式碼地圖與影響範圍 | 產生精簡的符號索引存進記憶，改函式前先列出會受影響的地方；檔案改了會提醒索引過期 |
+| <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 危險操作守門 | 刪檔、force push、動 production 這類操作一律先確認 |
+| <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 路由從結果學習 | 記下每次派工的結果，整理成委派表的修正建議，你確認才改 |
+| <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 卡關救援 | AI 反覆失敗、越修越亂時一鍵救援：收集證據、停損、給你兩三條脫困路線、把教訓記下來 |
+| <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 專案健檢 | 在 `/chutora doctor` 的安裝健檢之外，再一次檢查測試缺口、過期記憶、沒用到的工具、安全快掃 |
+
+所有新功能都照同一個原則：**輕量、手動、可逆**，不為了自動化多燒 token。
+
+**吸收過的開源方法論**：rea（證據導向分析）、strix（安全審查與測試）、TokenEconomizer（省 token）、[harness2](https://github.com/google-research/harness2)（自我強化）；規劃中的項目參考 [ruflo](https://github.com/ruvnet/ruflo) 與 [codegraph](https://github.com/colbymchenry/codegraph)。Chutora 只取方法論、自己實作，不含它們的程式碼。
+
+---
+
 <a name="docs"></a>
 
 ## <img src="assets/icons/clipboard.svg" width="26" height="26" alt=""> 更多文件
@@ -251,32 +294,11 @@ ANTHROPIC_API_KEY=... python3 bench/run.py --runs 3 --model opus
 
 ---
 
-<a name="roadmap"></a>
-
-## <img src="assets/icons/flag.svg" width="26" height="26" alt=""> 路線圖
-
-| 狀態 | 項目 | 說明 |
-|---|---|---|
-| <img src="assets/icons/shield.svg" width="18" height="18" alt=""> 已完成（0.12） | 好用優化 | `/chutora` 單一入口、`/chutora doctor` 安裝健檢、中英雙語提醒、三種模式、每週回顧、文件分成三分鐘上手與進階說明 |
-| <img src="assets/icons/shield.svg" width="18" height="18" alt=""> 已完成（0.13） | 噪音輸出瘦身 | 又長又雜的指令輸出進到主對話前先瘦身，只留錯誤、摘要與關鍵行；可以關閉，原文另存可讀 |
-| <img src="assets/icons/shield.svg" width="18" height="18" alt=""> 已完成（0.13） | token benchmark 工具 | `bench/run.py` 用固定任務實測有／沒有 Chutora 的 token、花費與完成率；**數字尚未公布**，見 [Benchmark](#benchmark) |
-| <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 程式碼地圖與影響範圍 | 產生精簡的符號索引存進記憶，改函式前先列出會受影響的地方；檔案改了會提醒索引過期 |
-| <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 危險操作守門 | 刪檔、force push、動 production 這類操作一律先確認 |
-| <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 路由從結果學習 | 記下每次派工的結果，整理成委派表的修正建議，你確認才改 |
-| <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 卡關救援 | AI 反覆失敗、越修越亂時一鍵救援：收集證據、停損、給你兩三條脫困路線、把教訓記下來 |
-| <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 專案健檢 | 在 `/chutora doctor` 的安裝健檢之外，再一次檢查測試缺口、過期記憶、沒用到的工具、安全快掃 |
-
-所有新功能都照同一個原則：**輕量、手動、可逆**，不為了自動化多燒 token。
-
-**吸收過的開源方法論**：rea（證據導向分析）、strix（安全審查與測試）、TokenEconomizer（省 token）、[harness2](https://github.com/google-research/harness2)（自我強化）；規劃中的項目參考 [ruflo](https://github.com/ruvnet/ruflo) 與 [codegraph](https://github.com/colbymchenry/codegraph)。Chutora 只取方法論、自己實作，不含它們的程式碼。
-
----
-
 <a name="status"></a>
 
 ## <img src="assets/icons/pin.svg" width="26" height="26" alt=""> 狀態
 
-**v0.13.0 — 早期版本。** 0.10.0 以前叫 smart-agent-route、0.7.0 以前叫 tiered-agents，升級請先移除舊版（見 [docs/部署安裝.md](docs/部署安裝.md#從-smart-agent-route0100-以前升級)）。 context 提醒 hook、handoff、bulk、Explore 覆蓋版移植自作者的個人設定：hook 已在真實對話中觸發、Explore 與 bulk 已確認跑在 Haiku，但都還在驗證期。worker-hard 升級鏈、research skill 與 plugin 形式的 hook 尚未實際使用。agent-board 與 reply-detail 已在 VS Code 擴充 2.1.301 實測過看板；常駐模式、看板裡的按鈕與回覆格式注入還在驗證。0.12 新增的 `/chutora`、doctor、三種模式、中英雙語與每週回顧已有單元測試，還沒在真實對話中長期驗證。
+**v0.14.0 — 早期版本。** 0.10.0 以前叫 smart-agent-route、0.7.0 以前叫 tiered-agents，升級請先移除舊版（見 [docs/部署安裝.md](docs/部署安裝.md#從-smart-agent-route0100-以前升級)）。 context 提醒 hook、handoff、bulk、Explore 覆蓋版移植自作者的個人設定：hook 已在真實對話中觸發、Explore 與 bulk 已確認跑在 Haiku，但都還在驗證期。worker-hard 升級鏈、research skill 與 plugin 形式的 hook 尚未實際使用。agent-board 與 reply-detail 已在 VS Code 擴充 2.1.301 實測過看板；常駐模式、看板裡的按鈕與回覆格式注入還在驗證。0.12 新增的 `/chutora`、doctor、三種模式、中英雙語與每週回顧已有單元測試，還沒在真實對話中長期驗證。0.13 的噪音輸出瘦身與 0.14 的讀檔去重、MCP 輸出瘦身、反問都有單元測試，但替換工具輸出的格式是依 Claude Code 型別定義與官方文件推斷，還沒在真實對話中確認。
 
 已知會需要調整的地方：
 

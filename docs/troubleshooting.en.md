@@ -54,6 +54,18 @@ The last line of the trim note names the original's path; ask Claude to Read tha
 
 Type `/chutora`: the status shows whether it is on and how many tokens it has trimmed (estimate). With an install.sh install, `/chutora doctor` checks that settings.json has the `trim.py` PostToolUse hook; if not, re-run `bash install.sh` and merge the hooks snippet it prints.
 
+### Claude says the content is the same as before, but it needs to look again
+
+That's read dedup. It only steps in when the earlier result is still in the conversation and the file hasn't changed; if Claude needs to look again (for example it skimmed past part of it), ask it to read a different range, or turn it off with `/chutora dedup off`.
+
+### Clarify asks too much or too little
+
+The number of questions follows the mode: economy 3, balanced 4, quality 5 (`/chutora mode`). Too many: say "stop asking, use the defaults", or `/chutora ask off`. Too few: say "ask me first" or type `/chutora ask`.
+
+### An MCP tool's trimmed output is missing something
+
+The last line of the output has the original's path, so ask Claude to Read it; if it keeps happening, add that tool to `~/.claude/chutora/mcp-trim-exclude` (one tool name or prefix per line), or `/chutora mcp-trim off`.
+
 ### Still stuck
 
 Open an issue with the output of `/chutora doctor` and your Claude Code version (`claude --version`).

@@ -38,5 +38,14 @@ hooks 只讀寫本機檔案。只有你要查外部資料時（research）才會
 **怎麼看被瘦身前的原文？**
 瘦身後的輸出最後一行會寫原文路徑（`~/.claude/chutora/raw/<id>.log`），直接請 Claude「讀原文」，或自己打開那個檔案。想完全關掉：`/chutora trim off`。
 
+**讀檔去重會不會讓 Claude 看不到檔案？**
+不會讓它看不到「還在對話裡」的內容：只有先前那次讀取的結果還在目前這條對話鏈上、檔案也完全沒變時才去重；壓縮、`/clear`、`/rewind` 之後就照常重讀。萬一 Claude 說找不到先前的內容，請它讀不同範圍，或 `/chutora dedup off`。
+
+**反問會不會什麼事都問？**
+不會。小事和已經講清楚的不問，一次最多 3 到 5 題，而且一定有「照預設、別問了」。只想要它少問：說「別問了，照預設」，或 `/chutora ask off` 關掉「你說不確定時」的提醒。
+
+**MCP 輸出瘦身會不會漏掉我要的欄位？**
+被略過的筆數、截斷的字串都會在輸出裡註明，原文一定存在 `~/.claude/chutora/raw/`。某個工具一定要完整輸出，就把它加進排除清單（`CHUTORA_MCP_TRIM_EXCLUDE` 或 `~/.claude/chutora/mcp-trim-exclude`）。
+
 **Benchmark 的數字在哪？**
 還沒公布。`bench/run.py` 已經可以跑，但在實際跑完、核對過之前不放任何數字，見 README 的 [Benchmark](../README.md#benchmark)。

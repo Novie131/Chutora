@@ -56,7 +56,7 @@ README 只留三分鐘上手；這份是完整說明。
 
 ### 三種模式
 
-模式只改一件事：session 開始時帶進主對話的派工慣例。各 agent 用的模型和 effort 寫在 agent 檔案裡，plugin 沒辦法依模式改，所以切換模式不會讓 worker 換成別的模型。實際效果取決於 Claude 照慣例做的程度。
+模式改的是 session 開始時帶進主對話的派工慣例，加上噪音輸出瘦身與 MCP 瘦身的門檻、反問一次最多幾題（省錢 3、平衡 4、品質 5）。各 agent 用的模型和 effort 寫在 agent 檔案裡，plugin 沒辦法依模式改，所以切換模式不會讓 worker 換成別的模型。實際效果取決於 Claude 照慣例做的程度。
 
 | 模式 | 實際改變 |
 |---|---|
@@ -97,6 +97,41 @@ macOS 從 Dock 或 VS Code 啟動時，常常沒有設定 `LANG`。看到英文�
 - **原文一定留著**：存到 `~/.claude/chutora/raw/<tool_use_id>.log`（保留最近 50 份），瘦身後的輸出最後一行會寫明路徑，Claude 需要被略過的內容時會用 Read 讀回來。
 - **開關**：`/chutora trim off`（寫入 `~/.claude/chutora/trim`）或環境變數 `CHUTORA_TRIM=0`；`/chutora trim on` 改回。
 - **省了多少**：累計瘦身掉的字元數記在 `~/.claude/chutora/trim-stats.json`，`/chutora` 與每週回顧會換算成 token 顯示。換算用「字元數÷4」，是估算。
+
+
+### 讀檔去重
+
+Claude 常在同一段對話裡反覆讀同一個沒改過的檔案，每讀一次就再付一次 token。`hooks/dedup.py`（PostToolUse，Read）在下面這些條件**全部**成立時，把結果換成一行「跟第 N 次讀的一樣、檔案沒變，請參考那次的結果」：
+
+- 同一個 context：主對話與每個子 agent（hook 輸入的 `agent_id`）分開記，絕不跨 context。
+- 同一個檔案、同一個範圍（offset／limit、起始行、行數），而且內容雜湊完全相同。
+- 先前那次讀取的結果還在**目前這條對話鏈**上：hook 會讀 transcript，從最新一筆沿著 `parentUuid` 往回找那次的 `tool_use_id`。壓縮、`/clear`、`/rewind` 之後舊結果不在鏈上，就照常重讀；transcript 讀不到也一律不去重。
+- 不是圖片、PDF、notebook，也不是被截斷的讀取；檔案至少 1500 字元。
+
+Claude Code 自 2.1.86 起內建類似機制（重複讀取未變更的檔案時回傳 `file_unchanged`），但它由遠端旗標控制，社群回報 2.1.286 之後很多 session 不再觸發（[anthropics/claude-code#100265](https://github.com/anthropics/claude-code/issues/100265)）。內建機制有出手時，這個 hook 收到的不是完整內容，就什麼都不做。
+
+開關：`/chutora dedup off`（寫入 `~/.claude/chutora/dedup`）或 `CHUTORA_DEDUP=0`。省下的量記在 `trim-stats.json` 的 `dedup` 欄，換算 token 是估算。
+
+### MCP 輸出瘦身
+
+`hooks/mcptrim.py`（PostToolUse，`mcp__.*`）處理 MCP 工具回傳的大坨資料，用 `updatedMCPToolOutput` 替換：
+
+- **何時處理**：整份輸出超過門檻才動，門檻與保留量依模式：省錢 3000 字元／陣列留 20 筆／字串留 800 字元，平衡 4000／30／1500，品質 8000／60／3000。省不到兩成就不動。
+- **JSON**：長陣列保留前 N 筆並註明另有幾筆、連續相同的項目合併成一行、過長的字串截斷、`null`、`""`、`[]`、`{}` 這類空欄位拿掉。
+- **純文字**：沿用噪音輸出瘦身的行規則（保留開頭、結尾、錯誤與摘要行）。
+- **形狀照抄**：原本是字串就回字串，是 content 陣列就回 content 陣列；圖片等非文字區塊不動。
+- **原文**：存到 `~/.claude/chutora/raw/<tool_use_id>.log`，輸出最後一行寫明路徑。
+- **排除清單**：環境變數 `CHUTORA_MCP_TRIM_EXCLUDE`（逗號分隔）或 `~/.claude/chutora/mcp-trim-exclude`（一行一個），寫工具全名或前綴，例如 `mcp__github__`。
+- **開關**：`/chutora mcp-trim off` 或 `CHUTORA_MCP_TRIM=0`。
+
+### 反問
+
+參考 [github/spec-kit](https://github.com/github/spec-kit) 的 clarify 步驟（先找出講不清楚的地方問你，再把答案寫回規格），Chutora 做的是不需要寫整份規格的輕量版：
+
+- **什麼時候問**：你說「先問我」或輸入 `/chutora ask`；你說「我不太清楚」「不確定」「你覺得呢」這類話（`hooks/ask.py` 會在提示旁帶入一句提醒）；或大任務需求模糊（會動多個檔案、範圍不明、有多種做法），由分工慣例讓主對話自己判斷。小事、已經講清楚的不問。只有主對話問，子 agent 不問。
+- **怎麼問**：用 Claude Code 內建的 AskUserQuestion，一次最多省錢 3 題、平衡 4 題、品質 5 題；每題第一個選項是建議選項，也一定有「照預設、別問了」。只問會改變結果的：範圍（做／不做）、怎樣算完成、限制（不能動什麼）、邊界情況、取捨（快還是完整）。
+- **答案去哪**：寫成 `claude-memory/briefs/<日期>-<slug>.md`（沒有 claude-memory 時放 auto memory 目錄的 `briefs/`），欄位是目標、範圍、驗收標準、限制、邊界情況、取捨；派工時附給 worker。「怎樣算完成」就是驗收標準，之後的落地驗收會直接用它。
+- **開關**：`/chutora ask off` 或 `CHUTORA_ASK=0` 只關掉「你說不確定時」的提醒；`/chutora ask` 隨時可以強制先問。
 
 ---
 
@@ -278,7 +313,7 @@ chutora/
 │   ├── .claude-plugin/plugin.json
 │   ├── agents/                       ← worker / worker-hard / bulk / librarian / harvester / security-review / security-test
 │   ├── skills/                       ← handoff / research / usage-stats / route-setup / evidence-analysis / security-review / security-test / toolprune / harness-tune / chutora-hub
-│   ├── hooks/                        ← SessionStart 帶入、context 長度提醒、loop guard、modes/（三種模式）、weekly.py（每週回顧）、trim.py（噪音輸出瘦身）
+│   ├── hooks/                        ← SessionStart 帶入、context 長度提醒、loop guard、modes/（三種模式）、weekly.py（每週回顧）、trim.py（噪音輸出瘦身）、dedup.py（讀檔去重）、mcptrim.py（MCP 輸出瘦身）、ask.py（反問提醒）
 │   （範本在 skills/route-setup/templates/：MEMORY.md、知識庫說明、Explore、Haiku 層範本）
 ├── plugins/agent-board/              ← 子 agent 看板 mod（選裝）
 ├── plugins/reply-detail/             ← 回覆格式 mod（選裝）

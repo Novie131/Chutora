@@ -56,7 +56,7 @@ When the conversation gets long (past 100k tokens by default) you get a reminder
 
 ### Three modes
 
-A mode changes exactly one thing: the delegation conventions injected into the main conversation at session start. Each agent's model and effort live in its agent file, and a plugin can't change them per mode, so switching modes never moves worker to a different model. The actual effect depends on how closely Claude follows the conventions.
+A mode changes the delegation conventions injected into the main conversation at session start, plus the thresholds for noisy-output and MCP trimming and how many clarify questions are asked at once (economy 3, balanced 4, quality 5). Each agent's model and effort live in its agent file, and a plugin can't change them per mode, so switching modes never moves worker to a different model. The actual effect depends on how closely Claude follows the conventions.
 
 | Mode | What actually changes |
 |---|---|
@@ -95,6 +95,41 @@ Commands such as `npm install`, `pytest` and `cargo build` often print hundreds 
 - **The original is always kept**: saved to `~/.claude/chutora/raw/<tool_use_id>.log` (the 50 most recent are kept). The last line of the trimmed output names the path, so Claude can Read it when it needs something that was omitted.
 - **Switch**: `/chutora trim off` (saved to `~/.claude/chutora/trim`) or the `CHUTORA_TRIM=0` environment variable; `/chutora trim on` turns it back on.
 - **How much it saved**: trimmed characters accumulate in `~/.claude/chutora/trim-stats.json`; `/chutora` and the weekly recap show them as tokens using "characters ÷ 4", which is an estimate.
+
+
+### Read dedup
+
+Claude often re-reads the same unchanged file within one conversation, paying for it again each time. `hooks/dedup.py` (PostToolUse, Read) replaces the result with one line ("same as read #N, the file is unchanged, use that earlier result") only when **all** of these hold:
+
+- Same context: the main conversation and each subagent (the hook input's `agent_id`) are tracked separately, never across contexts.
+- Same file and same range (offset/limit, start line, line count), with an identical content hash.
+- The earlier result is still on **the current conversation chain**: the hook reads the transcript and walks back from the newest entry along `parentUuid` looking for that `tool_use_id`. After a compact, `/clear` or `/rewind` the earlier result is off the chain, so the file is read normally; if the transcript can't be read, nothing is deduped.
+- Not an image, PDF or notebook, not a truncated read, and at least 1,500 characters.
+
+Since 2.1.86 Claude Code has had a similar built-in mechanism (an unchanged re-read returns `file_unchanged`), but it is behind a remote flag, and community reports say many sessions stopped seeing it after 2.1.286 ([anthropics/claude-code#100265](https://github.com/anthropics/claude-code/issues/100265)). When the built-in one fires, this hook receives no full content and does nothing.
+
+Switch: `/chutora dedup off` (saved to `~/.claude/chutora/dedup`) or `CHUTORA_DEDUP=0`. Savings are recorded under `dedup` in `trim-stats.json`; the token figure is an estimate.
+
+### MCP output trimming
+
+`hooks/mcptrim.py` (PostToolUse, `mcp__.*`) handles huge payloads from MCP tools and replaces them through `updatedMCPToolOutput`:
+
+- **When**: only when the whole output is over the threshold; thresholds and how much is kept depend on the mode: economy 3,000 chars / 20 list items / 800-char strings, balanced 4,000 / 30 / 1,500, quality 8,000 / 60 / 3,000. Left alone if it saves less than a fifth.
+- **JSON**: long lists keep the first N items with a count of the rest, consecutive identical items are merged into one line, overlong strings are cut, and empty fields (`null`, `""`, `[]`, `{}`) are dropped.
+- **Plain text**: the same line rules as noisy-output trimming (start, end, errors and summaries kept).
+- **Shape preserved**: a string stays a string, a content array stays a content array; images and other non-text blocks are untouched.
+- **Original**: saved to `~/.claude/chutora/raw/<tool_use_id>.log`, with the path on the last line of the output.
+- **Exclude list**: the `CHUTORA_MCP_TRIM_EXCLUDE` environment variable (comma-separated) or `~/.claude/chutora/mcp-trim-exclude` (one per line), with full tool names or prefixes such as `mcp__github__`.
+- **Switch**: `/chutora mcp-trim off` or `CHUTORA_MCP_TRIM=0`.
+
+### Clarify
+
+Inspired by the clarify step in [github/spec-kit](https://github.com/github/spec-kit) (find what is underspecified, ask, fold the answers back into the spec), Chutora does a lightweight version that needs no full spec:
+
+- **When**: you say "ask me first" or type `/chutora ask`; you say you're not sure ("not sure", "what do you think" — `hooks/ask.py` adds a reminder next to your prompt); or a big task is vague (several files, unclear scope, several approaches), which the delegation conventions leave to the main conversation's judgment. Small or already-clear tasks aren't questioned. Only the main conversation asks; subagents never do.
+- **How**: Claude Code's built-in AskUserQuestion, at most 3 questions in economy, 4 in balanced, 5 in quality; the recommended option comes first and "use the defaults, stop asking" is always there. It only asks what changes the result: scope (in / out), what counts as done, constraints (what must not change), edge cases, trade-offs (fast vs complete).
+- **Where the answers go**: `claude-memory/briefs/<date>-<slug>.md` (or `briefs/` in the auto memory folder) with goal, scope, acceptance criteria, constraints, edge cases and trade-offs, attached when delegating to worker. "What counts as done" is the acceptance criteria, ready for the planned completion checks.
+- **Switch**: `/chutora ask off` or `CHUTORA_ASK=0` only turns off the reminder when you say you're unsure; `/chutora ask` always forces it.
 
 ---
 
@@ -276,7 +311,7 @@ chutora/
 │   ├── .claude-plugin/plugin.json
 │   ├── agents/                       ← worker / worker-hard / bulk / librarian / harvester / security-review / security-test
 │   ├── skills/                       ← handoff / research / usage-stats / route-setup / evidence-analysis / security-review / security-test / toolprune / harness-tune / chutora-hub
-│   ├── hooks/                        ← SessionStart injection, context-length reminder, loop guard, modes/ (three modes), weekly.py (weekly recap), trim.py (noisy-output trimming)
+│   ├── hooks/                        ← SessionStart injection, context-length reminder, loop guard, modes/ (three modes), weekly.py (weekly recap), trim.py (noisy-output trimming), dedup.py (read dedup), mcptrim.py (MCP output trimming), ask.py (clarify reminder)
 │   (templates are in skills/route-setup/templates/: MEMORY.md, knowledge-base guide, Explore, Haiku-layer example)
 ├── plugins/agent-board/              ← subagent board mod (optional)
 ├── plugins/reply-detail/             ← reply format mod (optional)

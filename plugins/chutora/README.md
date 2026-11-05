@@ -40,6 +40,7 @@
 裝完先輸入 `/chutora` 看狀態與功能選單；覺得沒反應就跑 `/chutora doctor`，它會逐項檢查並告訴你怎麼修。
 
 安裝、建置、測試這類又長又雜的指令輸出會先瘦身再進到對話（原文存在 `~/.claude/chutora/raw/`），不需要可以 `/chutora trim off` 關掉。
+同一段對話重讀沒變的檔案只回一行（`/chutora dedup off` 關閉），MCP 工具回傳的大坨資料也會先瘦身（`/chutora mcp-trim off` 關閉）。需求模糊或你說「先問我」「不確定」時，主對話會先用選擇題問你幾題再動手（`/chutora ask`）。
 
 
 ### 1. 安裝 plugin

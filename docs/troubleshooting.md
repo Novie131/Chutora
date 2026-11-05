@@ -54,6 +54,18 @@ plugin 沒辦法自己設定主狀態列。plugin 安裝的用 `/chutora:route-s
 
 輸入 `/chutora`，狀態裡會顯示開關與累計瘦身的 token（估算）。用 install.sh 安裝的，`/chutora doctor` 會檢查 settings.json 裡有沒有 `trim.py` 這個 PostToolUse hook；沒有就重跑 `bash install.sh`，把印出的 hooks 片段合併進去。
 
+### Claude 說內容跟先前一樣，但它其實需要重看
+
+這是讀檔去重。它只在先前那次結果還在對話裡、檔案也沒變時才出手；如果 Claude 需要重看（例如前面的內容被它自己略過了），請它讀不同範圍，或 `/chutora dedup off` 關掉。
+
+### 反問太多或太少
+
+題數依模式：省錢 3、平衡 4、品質 5（`/chutora mode`）。太多：說「別問了，照預設」，或 `/chutora ask off`。太少：直接說「先問我」或輸入 `/chutora ask`。
+
+### MCP 工具的輸出被瘦身後少了需要的內容
+
+輸出最後一行有原文路徑，請 Claude 用 Read 讀；常遇到的話，把那個工具加進 `~/.claude/chutora/mcp-trim-exclude`（一行一個工具名或前綴），或 `/chutora mcp-trim off`。
+
 ### 還是不行
 
 開一個 issue，附上 `/chutora doctor` 的輸出和 Claude Code 版本（`claude --version`）。

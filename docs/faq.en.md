@@ -38,5 +38,14 @@ It is deliberately conservative: it only touches successful install/build/test o
 **How do I see the original before trimming?**
 The last line of the trimmed output names the original's path (`~/.claude/chutora/raw/<id>.log`). Ask Claude to "read the original", or open the file yourself. To turn trimming off entirely: `/chutora trim off`.
 
+**Can read dedup hide a file from Claude?**
+Not content that is still in the conversation: it only dedups when the earlier result is still on the current conversation chain and the file is exactly unchanged; after a compact, `/clear` or `/rewind` files are read normally. If Claude says it can't find the earlier content, ask it to read a different range, or run `/chutora dedup off`.
+
+**Will clarify ask about everything?**
+No. Small or already-clear tasks aren't questioned, it asks at most 3 to 5 questions, and "use the defaults, stop asking" is always an option. To have it ask less: say "stop asking, use the defaults", or `/chutora ask off` to turn off the reminder when you say you're unsure.
+
+**Can MCP trimming drop a field I need?**
+Omitted items and cut strings are noted in the output, and the original is always saved under `~/.claude/chutora/raw/`. If a tool must always come through in full, add it to the exclude list (`CHUTORA_MCP_TRIM_EXCLUDE` or `~/.claude/chutora/mcp-trim-exclude`).
+
 **Where are the benchmark numbers?**
 Not published yet. `bench/run.py` works, but no numbers go up until a real run has been done and checked; see [Benchmark](../README.en.md#benchmark) in the README.
