@@ -116,6 +116,13 @@ def classify(cmd):
     seg = first_segment(cmd)
     if not seg:
         return "skip"
+    # 串接的指令（例如 rm -rf node_modules && npm install）：只要有一段是會產生大量噪音的指令，
+    # 就以它為準；輸出主要來自那一段。
+    for part in re.split(r"\s*(?:&&|;|\|\||\n)\s*", cmd.strip()):
+        part = re.sub(r"^(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)+", "", part.strip())
+        part = re.sub(r"^(?:sudo|time|nice|nohup|command|exec|caffeinate)\s+", "", part)
+        if part and any(rx.search(part) for rx in NOISY):
+            return "noisy"
     words = seg.split()
     prog = os.path.basename(words[0])
     if prog in READ_LIKE:

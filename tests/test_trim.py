@@ -84,6 +84,15 @@ class TrimTest(unittest.TestCase):
         self.assertIn("Chutora 瘦身", new["stdout"])
         self.assertFalse(new["interrupted"])  # 其他欄位照抄
 
+    def test_chained_command_uses_noisy_segment(self):
+        # 實測發現：rm -rf node_modules && npm install 原本只看第一段（rm），被當成不認得的指令而沒有瘦身
+        log = npm_install_log(200)
+        new = self.new_output(self.run_hook("rm -rf node_modules package-lock.json && npm install --loglevel=http", log))
+        self.assertIn("Chutora 瘦身", new["stdout"])
+        self.assertIn("added 412 packages", new["stdout"])
+        # 讀檔類放在前面仍然維持原本規則（第一段是 cat 且沒有噪音指令 → 不動）
+        self.assertIsNone(self.run_hook("cd app && cat big.log", log))
+
     def test_pytest_failure_lines_kept(self):
         log = pytest_log()
         new = self.new_output(self.run_hook("cd app && python -m pytest -q", log))
