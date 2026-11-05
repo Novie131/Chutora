@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="Chutora — Pull the cord when Claude gets stuck." width="100%">
+  <img src="assets/banner.svg" alt="Chutora — Fly light. Go further." width="100%">
 </p>
 
 <p align="center">
@@ -24,9 +24,9 @@
 
 <sub>Pronounced <b>choo-TOR-a</b> · from <i>chute</i>, as in parachute</sub>
 
-**Make Claude Code work like a small team: Opus is the lead who thinks, Sonnet and Haiku do the hands-on work. When the conversation gets long it writes a handoff note first, and when things get stuck there is a fixed way out.**
+**Fly light. Go further: do the most effective work with the fewest tokens.** Opus is the lead who thinks, Sonnet and Haiku do the hands-on work and send back only conclusions; when the conversation gets long it writes a handoff note first, then picks up from the note after a clear.
 
-> **Agent = Model + Harness.** Chutora doesn't swap the model; it changes what surrounds it: who does the work, what gets remembered, and how to get unstuck.
+> **Agent = Model + Harness.** Chutora doesn't swap the model; it changes what surrounds it: who does the work, what gets into the context, and what gets remembered.
 
 The Traditional Chinese docs are the primary version; this English version is a translation and may lag behind.
 
@@ -34,7 +34,7 @@ The Traditional Chinese docs are the primary version; this English version is a 
 
 ## <img src="assets/icons/chute.svg" width="26" height="26" alt=""> Why Chutora
 
-**Goal**: get more done on the same budget, without long sessions getting more expensive and messier as they grow — and with a cord you can pull when you really get stuck.
+**Goal**: do the most effective work with the fewest tokens. Every token in the main conversation earns its place, and long sessions don't get more expensive and messier as they grow.
 
 | Common pain | Claude Code alone | With Chutora |
 |---|---|---|
@@ -87,7 +87,6 @@ The main conversation decides whether to delegate: "do what we just discussed" g
 - When the same error keeps repeating, loop guard nudges Claude to change direction; you can also just say "try a different approach" or "stop and summarize what we've tried".
 - To go back to an earlier state: Claude Code's built-in `/rewind` (or Esc twice) restores files the main conversation edited directly; files changed by subagents or Bash commands are outside its reach, so use git for those.
 - To start over with a clean conversation: say "hand off" to write `handoff.md`, then `/clear`.
-- A one-step "stuck rescue" is in the works; see the [Roadmap](#roadmap).
 
 **For the full feature set**: run `/chutora:route-setup`. It walks you through the status line, the auto-compact threshold, the Haiku-based Explore and a `claude-memory/` store one item at a time, explains the impact and how to undo each, and backs up settings before changing them. The reminder features need `python3`; without it they quietly turn themselves off.
 
@@ -235,10 +234,12 @@ How the main conversation delegates does not depend on your CLAUDE.md: the Sessi
 | Status | Item | What it does |
 |---|---|---|
 | <img src="assets/icons/shield.svg" width="18" height="18" alt=""> Done (0.12) | Easier to use | `/chutora` entry point, `/chutora doctor` install check, Chinese/English messages, three modes, weekly recap, docs split into a three-minute start and an advanced guide |
-| <img src="assets/icons/next.svg" width="18" height="18" alt=""> Next | **Stuck rescue `/chutora:rescue`** (signature feature) | When the AI keeps failing and every fix makes it worse: gather evidence, stop the bleeding, offer two or three ways out, and record the lesson so it doesn't get stuck there again |
+| <img src="assets/icons/next.svg" width="18" height="18" alt=""> Next | **Noisy-output trimming** | Long, noisy command results such as test logs and install output are trimmed before they reach the main conversation, keeping errors, summaries and key lines; can be turned off, and the original stays viewable |
+| <img src="assets/icons/next.svg" width="18" height="18" alt=""> Next | **Token benchmark** | Fixed tasks measured with and without Chutora — tokens, cost and completion rate — with results published in the README |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> Planned | Code map and blast radius | A compact symbol index saved to memory; before changing a function, list what it affects; warns when the index is stale |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> Planned | Dangerous-action guard | Always confirm before deleting files, force-pushing or touching production |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> Planned | Routing that learns from outcomes | Record how each delegation turned out and suggest delegation-table fixes, applied only after you confirm |
+| <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> Planned | Stuck rescue | When the AI keeps failing and every fix makes it worse: gather evidence, stop the bleeding, offer two or three ways out, and record the lesson |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> Planned | Project checkup | Beyond the `/chutora doctor` install check: test gaps, stale memory, unused tools and a quick security sweep in one go |
 
 Every new feature follows the same principle: **lightweight, manual, reversible** — no extra token burn for the sake of automation.

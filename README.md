@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="Chutora — 卡關時，拉一下就得救。Pull the cord when Claude gets stuck." width="100%">
+  <img src="assets/banner.svg" alt="Chutora — 輕一點，飛更遠。Fly light. Go further." width="100%">
 </p>
 
 <p align="center">
@@ -24,9 +24,9 @@
 
 <sub>唸作 <b>choo-TOR-a</b>（啾托拉）· 取自 chute（降落傘）</sub>
 
-**讓 Claude Code 像一個小團隊一樣分工：Opus 當主管負責想，Sonnet 和 Haiku 負責動手；對話變長時先寫交接筆記，卡住時有固定的脫困路線。**
+**輕一點，飛更遠：用最少的 token 做最有效率的事。** Opus 當主管負責想，Sonnet 和 Haiku 負責動手，只把結論交回主對話；對話變長時先寫交接筆記，清空後照筆記接著做。
 
-> **Agent = 模型 + Harness。** Chutora 不換模型，改的是模型外圍那一圈：誰來做、記得什麼、卡住時怎麼脫身。
+> **Agent = 模型 + Harness。** Chutora 不換模型，改的是模型外圍那一圈：誰來做、什麼能進到 context、記得什麼。
 
 > A Claude Code plugin for tiered model delegation — Opus plans, Sonnet executes, Haiku retrieves and digests bulk output — plus handoff notes, source-cited memory, loop guards and a self-tuning harness. English documentation: [README.en.md](README.en.md).
 
@@ -34,7 +34,7 @@
 
 ## <img src="assets/icons/chute.svg" width="26" height="26" alt=""> 為什麼是 Chutora
 
-**目的**：用同樣的預算做更多事，長時間工作也不會越拉越貴、越來越亂；真的卡住時，有一條拉得到的繩子。
+**目的**：用最少的 token 做最有效率的事。主對話的每個 token 都花在刀口上，長時間工作也不會越拉越貴、越來越亂。
 
 | 常見困境 | 單用 Claude Code | 加上 Chutora |
 |---|---|---|
@@ -87,7 +87,6 @@
 - 同一個錯誤一直重複時，loop guard 會提醒 Claude 換方向；你也可以直接說「換個做法」或「先停下來整理目前試過什麼」。
 - 想退回之前的狀態：Claude Code 內建的 `/rewind`（或按兩下 Esc）能還原主對話直接改的檔案；子 agent 和 Bash 指令改的檔案不在它的範圍內，這部分請用 git 還原。
 - 想換個乾淨的對話重來：說「交接一下」寫好 `handoff.md`，再 `/clear`。
-- 一鍵的「卡關救援」正在做，見[路線圖](#roadmap)。
 
 **想要完整功能**：執行 `/chutora:route-setup`，它會一項一項帶你設定狀態列、自動壓縮門檻、Haiku 版 Explore、`claude-memory/` 記憶庫，每項都說明影響和怎麼還原，改設定前會備份。提醒類功能需要 `python3`，沒有的話會安靜停用。
 
@@ -235,10 +234,12 @@ flowchart LR
 | 狀態 | 項目 | 說明 |
 |---|---|---|
 | <img src="assets/icons/shield.svg" width="18" height="18" alt=""> 已完成（0.12） | 好用優化 | `/chutora` 單一入口、`/chutora doctor` 安裝健檢、中英雙語提醒、三種模式、每週回顧、文件分成三分鐘上手與進階說明 |
-| <img src="assets/icons/next.svg" width="18" height="18" alt=""> 下一步 | **卡關救援 `/chutora:rescue`**（招牌功能） | AI 反覆失敗、越修越亂時一鍵救援：收集證據、停損、給你兩三條脫困路線選、把教訓記下來，下次不再卡在同一處 |
+| <img src="assets/icons/next.svg" width="18" height="18" alt=""> 下一步 | **噪音輸出瘦身** | 測試 log、安裝輸出這類又長又雜的指令結果，進到主對話前先瘦身，只留錯誤、摘要與關鍵行；可以關閉，也能看原文 |
+| <img src="assets/icons/next.svg" width="18" height="18" alt=""> 下一步 | **token benchmark** | 用固定任務實測「有／沒有 Chutora」的 token、花費與完成率，結果公開在 README |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 程式碼地圖與影響範圍 | 產生精簡的符號索引存進記憶，改函式前先列出會受影響的地方；檔案改了會提醒索引過期 |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 危險操作守門 | 刪檔、force push、動 production 這類操作一律先確認 |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 路由從結果學習 | 記下每次派工的結果，整理成委派表的修正建議，你確認才改 |
+| <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 卡關救援 | AI 反覆失敗、越修越亂時一鍵救援：收集證據、停損、給你兩三條脫困路線、把教訓記下來 |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 專案健檢 | 在 `/chutora doctor` 的安裝健檢之外，再一次檢查測試缺口、過期記憶、沒用到的工具、安全快掃 |
 
 所有新功能都照同一個原則：**輕量、手動、可逆**，不為了自動化多燒 token。
