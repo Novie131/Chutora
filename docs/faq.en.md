@@ -49,3 +49,6 @@ Omitted items and cut strings are noted in the output, and the original is alway
 
 **Where are the benchmark numbers?**
 Not published yet. `bench/run.py` works, but no numbers go up until a real run has been done and checked; see [Benchmark](../README.en.md#benchmark) in the README.
+
+**Does the Flight Deck slow Claude down?**
+The status-line path writes one small JSON file per tool call and reads the transcript incrementally; the panel only observes tool calls without changing results, redraws at most every 250 ms and keeps at most 40 timeline entries. Either side fails quietly and never blocks a tool.

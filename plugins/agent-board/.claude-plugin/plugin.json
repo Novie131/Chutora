@@ -1,7 +1,7 @@
 {
   "name": "agent-board",
-  "version": "0.3.0",
-  "description": "在 Claude Code 聊天面板即時顯示子 agent 狀態的看板（試作版）。",
+  "version": "0.4.0",
+  "description": "駕駛艙（Flight Deck）：在 Claude Code 面板即時顯示 Claude 正在做什麼：動作時間線、待辦進度、各模型工作量、碰過的檔案與子 agent 狀態。",
   "author": {
     "name": "Novie131"
   },

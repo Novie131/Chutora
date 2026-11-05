@@ -24,6 +24,10 @@
 
 plugin 沒辦法自己設定主狀態列。plugin 安裝的用 `/chutora:route-setup`；install.sh 安裝的用 `bash install.sh --with-statusline`。
 
+### 狀態列沒顯示目前動作
+
+先確認狀態列本身有出現（上一節）。plugin 安裝的狀態列檔案放在 `~/.claude/chutora/statusline/`，新版的 `deck.py` 會在下一次開新對話時自動同步過去；install.sh 安裝的要把它印出的 hooks 片段（含 PreToolUse、PostToolUseFailure、SubagentStart、SubagentStop 的 `activity.py`）重新合併進 `settings.json`。`/chutora doctor` 會檢查這一項。`CHUTORA_ACTIVITY=0` 會關掉它。
+
 ### 每個 agent 都出現兩份
 
 舊版沒移除：`smart-agent-route`（0.10.0 以前）或 `tiered-agents`（0.7.0 以前）。`/chutora doctor` 會列出殘留位置，照 [部署安裝](部署安裝.md) 的升級章節移除。

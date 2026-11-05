@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/Novie131/chutora/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Novie131/chutora/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="version 0.14.0" src="https://img.shields.io/badge/version-0.14.0-FF6A26">
+  <img alt="version 0.15.0" src="https://img.shields.io/badge/version-0.15.0-FF6A26">
   <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-1B2D52">
   <img alt="VS Code supported" src="https://img.shields.io/badge/VS%20Code-supported-1B2D52">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-2EA043"></a>
@@ -152,7 +152,8 @@
 | `/chutora doctor` | 指令 | 唯讀安裝健檢：python3、hooks、狀態列、記憶庫、自動壓縮、Haiku Explore、舊版殘留，要修的項目附修法 |
 | 三種模式 | 指令 | `/chutora mode economy`／`balanced`／`quality`：改變 session 開始時帶入的派工慣例、瘦身門檻與反問題數，不改各 agent 的模型 |
 | 中英雙語 | 自動 | 提醒訊息、狀態列、`/chutora` 依系統語言切換；`/chutora lang zh`／`en`／`auto` 可固定 |
-| `agent-board` | 選裝 | 輸入框上方的常駐看板，即時列出每個子 agent 的類型、模型、狀態、經過時間、token 與估計金額。用 `/agent-board` 開關 |
+| 駕駛艙狀態列 | 自動（設好狀態列後） | Claude 工作時狀態列即時顯示目前動作：`▶ worker·Sonnet 跑測試 npm test · 12s │ 本次 42k tok │ 瘦身省≈8k │ ctx 95k/120k`；閒置時維持原本的精簡版。只用官方狀態列與標準 hooks，`CHUTORA_ACTIVITY=0` 關閉 |
+| 駕駛艙面板（`agent-board`） | 選裝 | 輸入框上方或側邊的常駐面板：「現在」大卡、待辦分格進度、三色工作量長條（交出去的比例、瘦身擋下的量、主對話 context）、動作時間線（白話＋原始指令、子 agent 縮排在派工下）、碰過的檔案（附增刪行數）、子 agent 列表。桌面版／VS Code／手機用圖像版，終端機用文字版。用 `/agent-board` 開關 |
 | `reply-detail` | 選裝 | 回覆預設精簡三段（現況／你要做的／需要你決定或提供）；用看板的「⇄ 回覆：精簡／詳細」切換，或輸入「詳細說明」單次改寫成詳細版 |
 | `route-setup` | 指令 | 一次性完整設定：記憶庫、Haiku 版 Explore、自動壓縮門檻、狀態列。一次只問一項，改設定前先備份 |
 
@@ -267,7 +268,7 @@ ANTHROPIC_API_KEY=... python3 bench/run.py --runs 3 --model opus
 | <img src="assets/icons/shield.svg" width="18" height="18" alt=""> 已完成（0.13） | 噪音輸出瘦身 | 又長又雜的指令輸出進到主對話前先瘦身，只留錯誤、摘要與關鍵行；可以關閉，原文另存可讀 |
 | <img src="assets/icons/shield.svg" width="18" height="18" alt=""> 已完成（0.13） | token benchmark 工具 | `bench/run.py` 用固定任務實測有／沒有 Chutora 的 token、花費與完成率；**數字尚未公布**，見 [Benchmark](#benchmark) |
 | <img src="assets/icons/shield.svg" width="18" height="18" alt=""> 已完成（0.14） | 讀檔去重、MCP 輸出瘦身、反問 | 同一段對話重讀沒變的檔案只回一行；MCP 的大坨資料先瘦身；需求模糊或你說不確定時先用選擇題問清楚，答案寫成任務說明 |
-| <img src="assets/icons/next.svg" width="18" height="18" alt=""> 下一步 | 駕駛艙 | 狀態列即時顯示 Claude 正在做什麼；agent-board 升級成完整面板：動作時間線、白話翻譯、碰過的檔案、待辦進度、各模型的工作量 |
+| <img src="assets/icons/shield.svg" width="18" height="18" alt=""> 已完成（0.15） | 駕駛艙 | 狀態列即時顯示 Claude 正在做什麼（穩定版，只用官方機制）；agent-board 升級成完整面板：現在、待辦進度、工作量、時間線、檔案 |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 程式碼地圖與影響範圍 | 產生精簡的符號索引存進記憶，改函式前先列出會受影響的地方；檔案改了會提醒索引過期 |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 危險操作守門 | 刪檔、force push、動 production 這類操作一律先確認 |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 路由從結果學習 | 記下每次派工的結果，整理成委派表的修正建議，你確認才改 |
@@ -298,7 +299,7 @@ ANTHROPIC_API_KEY=... python3 bench/run.py --runs 3 --model opus
 
 ## <img src="assets/icons/pin.svg" width="26" height="26" alt=""> 狀態
 
-**v0.14.0 — 早期版本。** 0.10.0 以前叫 smart-agent-route、0.7.0 以前叫 tiered-agents，升級請先移除舊版（見 [docs/部署安裝.md](docs/部署安裝.md#從-smart-agent-route0100-以前升級)）。 context 提醒 hook、handoff、bulk、Explore 覆蓋版移植自作者的個人設定：hook 已在真實對話中觸發、Explore 與 bulk 已確認跑在 Haiku，但都還在驗證期。worker-hard 升級鏈、research skill 與 plugin 形式的 hook 尚未實際使用。agent-board 與 reply-detail 已在 VS Code 擴充 2.1.301 實測過看板；常駐模式、看板裡的按鈕與回覆格式注入還在驗證。0.12 新增的 `/chutora`、doctor、三種模式、中英雙語與每週回顧已有單元測試，還沒在真實對話中長期驗證。0.13 的噪音輸出瘦身與 0.14 的讀檔去重、MCP 輸出瘦身、反問都有單元測試，但替換工具輸出的格式是依 Claude Code 型別定義與官方文件推斷，還沒在真實對話中確認。
+**v0.15.0 — 早期版本。** 0.10.0 以前叫 smart-agent-route、0.7.0 以前叫 tiered-agents，升級請先移除舊版（見 [docs/部署安裝.md](docs/部署安裝.md#從-smart-agent-route0100-以前升級)）。 context 提醒 hook、handoff、bulk、Explore 覆蓋版移植自作者的個人設定：hook 已在真實對話中觸發、Explore 與 bulk 已確認跑在 Haiku，但都還在驗證期。worker-hard 升級鏈、research skill 與 plugin 形式的 hook 尚未實際使用。agent-board 與 reply-detail 已在 VS Code 擴充 2.1.301 實測過看板；常駐模式、看板裡的按鈕與回覆格式注入還在驗證。0.12 新增的 `/chutora`、doctor、三種模式、中英雙語與每週回顧已有單元測試，還沒在真實對話中長期驗證。0.13 的噪音輸出瘦身與 0.14 的讀檔去重、MCP 輸出瘦身、反問都有單元測試，但替換工具輸出的格式是依 Claude Code 型別定義與官方文件推斷，還沒在真實對話中確認。
 
 已知會需要調整的地方：
 

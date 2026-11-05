@@ -177,7 +177,7 @@ After subtracting a buffer of about 33k, auto-compact triggers at roughly 120k, 
 
 ### Status line (optional)
 
-Shows `model │ ctx 95k │ reminder 100k │ compact 120k`, with the compact point read from `autoCompactWindow` (not shown if unset). A plugin cannot configure the main status line: plugin users should use `/chutora:route-setup`, which places the file in a fixed location; install.sh users can run `bash install.sh --with-statusline` or paste this into settings.json by hand:
+When idle it shows `model │ ctx 95k │ reminder 100k │ compact 120k`; while Claude works it shows the current action instead (the Flight Deck stable path): `▶ worker·Sonnet Run tests npm test · 12s │ session 42k tok │ trimmed≈8k │ ctx 95k/120k`. "session" is the tokens newly processed this session (input + cache writes + output, excluding cache reads, main plus subagents, summed exactly from the transcript); "trimmed≈" is the characters kept out by trimming, dedup and MCP trimming ÷4, an estimate. The current action is recorded by `activity.py` under `~/.claude/chutora/activity/` (`CHUTORA_ACTIVITY=0` turns it off); when space is short, later fields are dropped by importance (`CHUTORA_STATUS_WIDTH` sets the width). The compact point is read from `autoCompactWindow` (not shown if unset). A plugin cannot configure the main status line: plugin users should use `/chutora:route-setup`, which places the file in a fixed location; install.sh users can run `bash install.sh --with-statusline` or paste this into settings.json by hand:
 
 ```json
 "statusLine": { "type": "command", "command": "python3 ~/.claude/hooks/chutora/statusline.py" }
@@ -189,7 +189,7 @@ Two optional mods (Claude Code interface extensions; they need 2.1.299 or later 
 
 | mod | What it does |
 |---|---|
-| `agent-board` | A persistent panel listing each subagent's type, model, status, elapsed time, tokens, and estimated cost (API list prices), with totals at the top. It collapses to a one-line summary and toggles with `/agent-board`; a reply-mode switch ("⇄ 回覆：精簡／詳細", concise/detailed) sits at the bottom |
+| `agent-board` (Flight Deck panel) | A big "Now" card, segmented to-do progress, a three-colour workload bar with three stat cards (share handed to Sonnet/Haiku, tokens kept out by trimming, main context), an action timeline (plain words or raw commands, subagents indented, repeated actions merged, up to 40 entries), files touched (edited with +/− lines, read files expandable), and the subagent list (type, model, status, elapsed time, tokens, estimated cost). Graphic via Svg on desktop, VS Code and mobile; text and colour blocks in the terminal. Collapses to a one-line summary, toggles with `/agent-board`, and has plain/raw and "⇄ reply: concise/detailed" switches at the bottom. Tool calls are observed, never changed |
 | `reply-detail` | Injects a reply format into the system prompt: by default a short three-part reply (current state / what you need to do / what you need to decide or provide), for the main conversation only. Switch the board's reply mode to detailed and every reply stays detailed until you switch back; for a one-off, type "詳細說明" to get a detailed rewrite of the previous reply |
 
 Install: from the plugin marketplace, `/plugin install agent-board@chutora` and `/plugin install reply-detail@chutora`; with install.sh, add `--with-agent-board` and `--with-reply-detail` (VS Code cannot pass `--plugin-dir`, so the script adds the folders to `env.CLAUDE_CODE_PLUGIN_DIRS` in `settings.json`). Afterwards, run Developer: Reload Window in VS Code.

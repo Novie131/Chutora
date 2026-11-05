@@ -179,7 +179,7 @@ Claude Code 自 2.1.86 起內建類似機制（重複讀取未變更的檔案時
 
 ### 狀態列（選用）
 
-顯示 `模型 │ ctx 95k │ 提醒 100k │ 壓縮 120k`，壓縮點讀自 `autoCompactWindow`（沒設就不顯示）。plugin 不能設定主狀態列：plugin 安裝的使用者請用 `/chutora:route-setup`，它會把檔案放到固定位置；install.sh 安裝的用 `bash install.sh --with-statusline`，或手動貼進 settings.json：
+閒置時顯示 `模型 │ ctx 95k │ 提醒 100k │ 壓縮 120k`；Claude 工作時改顯示目前動作（駕駛艙穩定版）：`▶ worker·Sonnet 跑測試 npm test · 12s │ 本次 42k tok │ 瘦身省≈8k │ ctx 95k/120k`。「本次」是這個 session 新處理的 token（input＋cache 寫入＋output，不含 cache 讀取，主對話加子 agent，從 transcript 精確加總）；「瘦身省≈」是瘦身、去重、MCP 瘦身擋下的字元 ÷4，屬於估算。目前動作由 `activity.py` 記在 `~/.claude/chutora/activity/`，`CHUTORA_ACTIVITY=0` 關閉；寬度不夠時依重要性丟掉後面的欄位（`CHUTORA_STATUS_WIDTH` 可指定寬度）。壓縮點讀自 `autoCompactWindow`（沒設就不顯示）。plugin 不能設定主狀態列：plugin 安裝的使用者請用 `/chutora:route-setup`，它會把檔案放到固定位置；install.sh 安裝的用 `bash install.sh --with-statusline`，或手動貼進 settings.json：
 
 ```json
 "statusLine": { "type": "command", "command": "python3 ~/.claude/hooks/chutora/statusline.py" }
@@ -191,7 +191,7 @@ Claude Code 自 2.1.86 起內建類似機制（重複讀取未變更的檔案時
 
 | mod | 做什麼 |
 |---|---|
-| `agent-board` | 常駐面板列出每個子 agent 的類型、模型、狀態、經過時間、token 與估計金額（API 牌價），上方顯示合計。可以縮小成一行摘要，用 `/agent-board` 開關；底部有「⇄ 回覆：精簡／詳細」切換鍵 |
+| `agent-board`（駕駛艙面板） | 「現在」大卡、待辦分格進度、三色工作量長條與三張小卡（交給 Sonnet／Haiku 的比例、瘦身擋下的量、主對話 context）、動作時間線（白話與原始指令可切換、子 agent 縮排、連續相同動作合併、最多 40 筆）、碰過的檔案（改過的附增刪行數，讀過的可展開），以及子 agent 列表（類型、模型、狀態、經過時間、token、估計金額）。桌面版／VS Code／手機用 Svg 畫圖像版，終端機用文字與色塊。可以縮小成一行摘要，用 `/agent-board` 開關；底部有白話／原始指令與「⇄ 回覆：精簡／詳細」切換鍵。工具呼叫只觀察、不改動 |
 | `reply-detail` | 在 system prompt 注入回覆格式：預設精簡三段（現況／你要做的／需要你決定或提供），只對主對話生效。看板的切換鍵切到「詳細」後，之後每則回覆都是詳細版，直到切回精簡；只要單次詳細版時，直接輸入「詳細說明」就會把上一則改寫成詳細版 |
 
 安裝：用 plugin 市集的話是 `/plugin install agent-board@chutora`、`/plugin install reply-detail@chutora`；用 install.sh 的話加 `--with-agent-board`、`--with-reply-detail`（VS Code 不能帶 `--plugin-dir`，腳本會把目錄加進 `settings.json` 的 `env.CLAUDE_CODE_PLUGIN_DIRS`）。裝完在 VS Code 執行 Developer: Reload Window。

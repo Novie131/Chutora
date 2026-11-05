@@ -49,3 +49,6 @@ hooks 只讀寫本機檔案。只有你要查外部資料時（research）才會
 
 **Benchmark 的數字在哪？**
 還沒公布。`bench/run.py` 已經可以跑，但在實際跑完、核對過之前不放任何數字，見 README 的 [Benchmark](../README.md#benchmark)。
+
+**駕駛艙會不會拖慢 Claude？**
+狀態列版每次工具呼叫只寫一個小 JSON 檔，transcript 用增量讀取；面板版只觀察工具呼叫、不改結果，重繪最多每 250ms 一次，時間線最多留 40 筆。任何一邊出錯都會安靜放行，不會擋住工具。

@@ -24,6 +24,10 @@ Run `/chutora lang en` (or `zh`). To follow the system locale again: `/chutora l
 
 A plugin can't set the main status line by itself. Plugin installs: run `/chutora:route-setup`; install.sh installs: `bash install.sh --with-statusline`.
 
+### The status line does not show the current action
+
+First check the status line itself appears (previous section). For plugin installs the status-line files live in `~/.claude/chutora/statusline/`, and the new `deck.py` is synced there the next time a session starts; install.sh users need to merge the hooks snippet it prints again (it now includes `activity.py` for PreToolUse, PostToolUseFailure, SubagentStart and SubagentStop) into `settings.json`. `/chutora doctor` checks this. `CHUTORA_ACTIVITY=0` turns it off.
+
 ### Every agent shows up twice
 
 An old version is still installed: `smart-agent-route` (0.10.0 and earlier) or `tiered-agents` (0.7.0 and earlier). `/chutora doctor` lists the leftovers; remove them as described in the upgrade section of the [deployment notes](%E9%83%A8%E7%BD%B2%E5%AE%89%E8%A3%9D.md) (Chinese).
