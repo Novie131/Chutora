@@ -21,6 +21,78 @@
 
 ---
 
+## 功能總覽
+
+依用途分成八類。「觸發」欄的 **自動** 表示裝好就會運作，不用下指令；**派工** 表示照平常講話，主對話會自己判斷要不要交給它；**指令** 表示你要叫它（plugin 安裝時寫成 `/smart-agent-route:<名稱>`，install.sh 安裝時直接 `/<名稱>`）；**選裝** 表示要另外安裝或設定。
+
+### 1. 分層派工：貴的模型只用在刀口上
+
+| 功能 | 觸發 | 做什麼 |
+|---|---|---|
+| `worker`（Sonnet） | 派工 | 方向已定的實作：寫或改程式、修 bug、補測試。回報完成前必須先驗證 |
+| `worker-hard`（Sonnet，effort high） | 派工 | 只在 worker 失敗後使用，必須附上前次失敗報告 |
+| `bulk`（Haiku） | 派工 | 大量讀取只回結論：多張圖片或影格、長 log、抓網頁、輸出很多的指令、規則明確的批次修改 |
+| Haiku 版 `Explore` | 選裝 | 搜尋程式碼、找檔案。內建 Explore 會跟著主對話跑 Opus，換成這個改跑 Haiku |
+| 驗證回報與失敗升級 | 自動 | 子 agent 用固定格式回報狀態與驗證結果；失敗依序升級，不會無限重試；遇到岔路會停下來問你 |
+
+### 2. 長對話管理：對話變長也不失控
+
+| 功能 | 觸發 | 做什麼 |
+|---|---|---|
+| context 長度提醒 | 自動 | 超過 10 萬 token 提醒一次，之後每多 4 萬再提醒（可用 `CONTEXT_REMIND_TOKENS` 調整） |
+| `handoff` | 指令 | 把目前任務、已完成、下一步、未決問題寫進 `handoff.md`，之後可以放心 `/clear`。說「交接一下」也會觸發 |
+| 交接筆記自動帶回 | 自動 | 新對話、`/clear`、自動壓縮之後，自動帶入分工慣例、記憶索引與 `handoff.md` |
+| context 狀態列 | 選裝 | 顯示 `模型 │ ctx 95k │ 提醒 100k │ 壓縮 120k` |
+| 自動壓縮門檻 | 選裝 | 在 `settings.json` 設 `autoCompactWindow` 當保險，`route-setup` 可以幫你安全寫入 |
+
+### 3. 記憶與知識庫：跨對話累積
+
+| 功能 | 觸發 | 做什麼 |
+|---|---|---|
+| `claude-memory/` 記憶庫 | 選裝 | 一般 Markdown 檔：`MEMORY.md` 索引、`topics/` agent 累積的知識、`kb/` 你的筆記、`web/` 外部資料。可以進 git、用 Obsidian 開 |
+| `librarian`（Haiku） | 派工 | 問「之前記過什麼」時查記憶與知識庫。只讀不寫，回傳原文片段與出處 |
+| `research` | 派工／指令 | 查官方文件、API 用法、版本差異等可能已變動的資訊，回答附來源，官方資料存進 `web/` |
+| `harvester`（Sonnet） | 只在你明確要求時 | 把過去的對話紀錄挖成知識庫筆記。成本較高，偶爾跑一次 |
+| micro-skills | 內建範本 | `MEMORY.md` 範本與分工慣例裡的寫法：把專案的固定指令與事實寫成短小的條件式記憶，用到才讀，少走回頭路 |
+
+### 4. 分析品質：分清事實與推測
+
+| 功能 | 觸發 | 做什麼 |
+|---|---|---|
+| `evidence-analysis` | 派工／指令 | 調查、找根因、審查結論時使用。每個結論標成觀察、推論或未知並附出處，先給概覽再深入，最後留一份可追查的 finding ledger |
+
+### 5. 資安：只用於你自己或已授權的程式碼
+
+| 功能 | 觸發 | 做什麼 |
+|---|---|---|
+| `security-review`（Sonnet） | 派工 | 靜態審查：對照 OWASP 類別，找不安全寫法、金鑰或 token 外洩。只讀不改，回報附證據、嚴重度與修補建議 |
+| `security-test`（Sonnet） | 派工 | 動態測試：實際打你已授權且隔離的 dev／測試環境，驗證漏洞。開工前一定先確認授權範圍，不碰 production、不外送資料 |
+
+### 6. 省 token 與量測：知道錢花在哪
+
+| 功能 | 觸發 | 做什麼 |
+|---|---|---|
+| loop guard | 自動 | 同一個錯誤一再重複時提醒換方向，只提醒不中斷；同時記錄各工具的使用次數 |
+| `toolprune` | 指令 | 讀工具使用記錄，列出長期沒用到、可以關掉的工具或 MCP。只建議不自動改，一步就能復原 |
+| `usage-stats` | 指令 | 量主對話 context 長度、各 agent 的派工次數、token 用量與估計金額；加 `--html` 輸出有每日圖表的報表 |
+
+### 7. 自我強化：越用越順手
+
+| 功能 | 觸發 | 做什麼 |
+|---|---|---|
+| `harness-tune` | 指令 | 某類任務一再做不順時使用：先讀過去的教訓，提出一到三個小調整，你確認後一次只改一項，改前備份、可回滾 |
+| `harness-lessons.md` | 自動（由 harness-tune 寫入） | 記錄每次調整的結果（有效、無效、已還原），下一次調整從上一次的結論出發 |
+
+### 8. 介面（選裝 plugin）與設定
+
+| 功能 | 觸發 | 做什麼 |
+|---|---|---|
+| `agent-board` | 選裝 | 輸入框上方的常駐看板，即時列出每個子 agent 的類型、模型、狀態、經過時間、token 與估計金額。用 `/agent-board` 開關 |
+| `reply-detail` | 選裝 | 回覆預設精簡三段（現況／你要做的／需要你決定或提供）；用看板的「⇄ 回覆：精簡／詳細」切換，或輸入「詳細說明」單次改寫成詳細版 |
+| `route-setup` | 指令 | 一次性完整設定：記憶庫、Haiku 版 Explore、自動壓縮門檻、狀態列。一次只問一項，改設定前先備份 |
+
+---
+
 ## 這解決什麼問題
 
 用 Claude Code 一陣子，常會遇到兩件事：
@@ -281,8 +353,8 @@ smart-agent-route/
 ├── plugins/smart-agent-route/            ← plugin 本體
 │   ├── .claude-plugin/plugin.json
 │   ├── agents/                       ← worker / worker-hard / bulk / librarian / harvester / security-review / security-test
-│   ├── skills/                       ← handoff / research / usage-stats / route-setup
-│   ├── hooks/                        ← SessionStart 帶入、context 長度提醒
+│   ├── skills/                       ← handoff / research / usage-stats / route-setup / evidence-analysis / security-review / security-test / toolprune / harness-tune
+│   ├── hooks/                        ← SessionStart 帶入、context 長度提醒、loop guard
 │   （範本在 skills/route-setup/templates/：MEMORY.md、知識庫說明、Explore、Haiku 層範本）
 ├── plugins/agent-board/              ← 子 agent 看板 mod（選裝）
 ├── plugins/reply-detail/             ← 回覆格式 mod（選裝）

@@ -21,6 +21,78 @@ The Traditional Chinese docs are the primary version; this English version is a 
 
 ---
 
+## Features at a glance
+
+Grouped into eight categories. In the "Trigger" column, **auto** means it works once installed, no command needed; **delegated** means you just talk normally and the main conversation decides whether to hand the work to it; **command** means you invoke it (`/smart-agent-route:<name>` when installed as a plugin, `/<name>` when installed with install.sh); **optional** means it needs a separate install or setting.
+
+### 1. Tiered delegation: spend the expensive model only where it counts
+
+| Feature | Trigger | What it does |
+|---|---|---|
+| `worker` (Sonnet) | delegated | Implementation once the direction is settled: writing or changing code, fixing bugs, adding tests. Must verify before reporting done |
+| `worker-hard` (Sonnet, effort high) | delegated | Used only after worker fails, with the previous failure report attached |
+| `bulk` (Haiku) | delegated | Heavy reading where only the conclusion matters: many images or frames, long logs, fetching web pages, commands with lots of output, rule-based batch edits |
+| Haiku `Explore` | optional | Code and file search. The built-in Explore runs on Opus when the main conversation does; this one runs on Haiku |
+| Verified reports and failure escalation | auto | Subagents report status and verification in a fixed format; failures escalate in a fixed order with no endless retries; at a fork they stop and ask you |
+
+### 2. Long-conversation management: stays under control as it grows
+
+| Feature | Trigger | What it does |
+|---|---|---|
+| Context-length reminder | auto | Reminds once past 100k tokens, then every additional 40k (adjust with `CONTEXT_REMIND_TOKENS`) |
+| `handoff` | command | Writes the current task, what's done, next steps and open questions to `handoff.md`, so you can safely `/clear`. Saying "hand off" also triggers it |
+| Handoff auto-restore | auto | After a new session, `/clear` or auto-compact, brings back the delegation conventions, memory index and `handoff.md` |
+| Context status line | optional | Shows `model │ ctx 95k │ reminder 100k │ compact 120k` |
+| Auto-compact threshold | optional | Set `autoCompactWindow` in `settings.json` as a safety net; `route-setup` can write it safely for you |
+
+### 3. Memory and knowledge base: accumulates across conversations
+
+| Feature | Trigger | What it does |
+|---|---|---|
+| `claude-memory/` | optional | Plain Markdown: `MEMORY.md` index, `topics/` knowledge agents accumulate, `kb/` your notes, `web/` external sources. Works with git and opens in Obsidian |
+| `librarian` (Haiku) | delegated | Searches memory and the knowledge base when you ask "did we note this before?". Read-only; returns verbatim excerpts with sources |
+| `research` | delegated / command | Looks up official docs, API usage, version differences and other facts that may have changed; answers cite sources and official material is saved to `web/` |
+| `harvester` (Sonnet) | only when you explicitly ask | Mines past conversation transcripts into knowledge-base notes. Costly; run occasionally |
+| micro-skills | built-in template | A convention in the `MEMORY.md` template and delegation guide: record a project's fixed commands and facts as short, condition-triggered memories, read only when needed |
+
+### 4. Analysis quality: separate facts from guesses
+
+| Feature | Trigger | What it does |
+|---|---|---|
+| `evidence-analysis` | delegated / command | For investigations, root-causing and reviewing conclusions. Labels every conclusion as observation, inference or unknown with sources, goes from overview to detail, and leaves a traceable finding ledger |
+
+### 5. Security: only for your own or authorized code
+
+| Feature | Trigger | What it does |
+|---|---|---|
+| `security-review` (Sonnet) | delegated | Static review against OWASP categories: unsafe patterns, leaked keys or tokens. Read-only; reports with evidence, severity and fixes |
+| `security-test` (Sonnet) | delegated | Dynamic testing against your own authorized, isolated dev/test environment to verify vulnerabilities. Always confirms scope first; never touches production or sends data out |
+
+### 6. Token savings and measurement: know where the money goes
+
+| Feature | Trigger | What it does |
+|---|---|---|
+| Loop guard | auto | Reminds you to change direction when the same error keeps repeating (reminds, never blocks); also records per-tool usage counts |
+| `toolprune` | command | Reads the tool-usage record and lists tools or MCP servers that have gone unused and could be turned off. Suggests only, never changes settings; one step to undo |
+| `usage-stats` | command | Measures main-conversation context length, per-agent delegation counts, token usage and estimated cost; `--html` outputs a report with daily charts |
+
+### 7. Self-improvement: gets smoother with use
+
+| Feature | Trigger | What it does |
+|---|---|---|
+| `harness-tune` | command | For a kind of task that keeps going badly: reads past lessons, proposes one to three small adjustments, and after you confirm changes one thing at a time, with a backup and rollback |
+| `harness-lessons.md` | auto (written by harness-tune) | Records each adjustment's result (worked, didn't, rolled back) so the next tune starts from the last conclusion |
+
+### 8. Interface (optional plugins) and setup
+
+| Feature | Trigger | What it does |
+|---|---|---|
+| `agent-board` | optional | A persistent board above the input box listing each subagent's type, model, status, elapsed time, tokens and estimated cost. Toggle with `/agent-board` |
+| `reply-detail` | optional | Replies default to three short parts (status / what you need to do / what needs your decision or input); switch with the board's reply-mode switch ("⇄ 回覆：精簡／詳細"), or type 「詳細說明」 for a one-off detailed rewrite |
+| `route-setup` | command | One-time full setup: memory folder, Haiku Explore, auto-compact threshold, status line. Asks one item at a time and backs up settings before changing them |
+
+---
+
 ## What problem this solves
 
 After using Claude Code for a while, two things tend to happen:
@@ -282,7 +354,7 @@ smart-agent-route/
 │   ├── .claude-plugin/plugin.json
 │   ├── agents/                       ← worker / worker-hard / bulk / librarian / harvester / security-review / security-test
 │   ├── skills/                       ← handoff / research / usage-stats / route-setup / evidence-analysis / security-review / security-test / toolprune / harness-tune
-│   ├── hooks/                        ← SessionStart injection, context-length reminder
+│   ├── hooks/                        ← SessionStart injection, context-length reminder, loop guard
 │   (templates are in skills/route-setup/templates/: MEMORY.md, knowledge-base guide, Explore, Haiku-layer example)
 ├── plugins/agent-board/              ← subagent board mod (optional)
 ├── plugins/reply-detail/             ← reply format mod (optional)
