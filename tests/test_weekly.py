@@ -66,6 +66,32 @@ class WeeklyTest(unittest.TestCase):
         self.assertEqual(self.run_weekly(CHUTORA_WEEKLY="0").stdout, "")
         self.assertFalse((self.data / ".weekly-shown").exists())
 
+    def seed_trim(self, days_ago=1, chars=80000):
+        import datetime
+        d = self.home / ".claude" / "chutora"
+        d.mkdir(parents=True, exist_ok=True)
+        day = (datetime.date.today() - datetime.timedelta(days=days_ago)).isoformat()
+        (d / "trim-stats.json").write_text(json.dumps({"days": {day: chars}, "total_chars": chars, "count": 3}))
+
+    def test_trim_only_line(self):
+        self.seed(with_sub=False)
+        self.seed_trim()
+        out = self.run_weekly(CHUTORA_LANG="zh").stdout
+        self.assertIn("噪音輸出瘦身讓約 20,000 token", out)
+        self.assertIn("估算", out)
+
+    def test_trim_appended_to_estimate(self):
+        self.seed()
+        self.seed_trim()
+        out = self.run_weekly(CHUTORA_LANG="en").stdout
+        self.assertIn("Model price difference only", out)
+        self.assertIn("about 20,000 tokens out of the context", out)
+
+    def test_old_trim_ignored(self):
+        self.seed(with_sub=False)
+        self.seed_trim(days_ago=30)
+        self.assertEqual(self.run_weekly().stdout, "")
+
     def test_no_subagents_silent(self):
         self.seed(with_sub=False)
         self.assertEqual(self.run_weekly().stdout, "")

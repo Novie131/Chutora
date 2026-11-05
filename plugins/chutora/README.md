@@ -39,6 +39,8 @@
 
 裝完先輸入 `/chutora` 看狀態與功能選單；覺得沒反應就跑 `/chutora doctor`，它會逐項檢查並告訴你怎麼修。
 
+安裝、建置、測試這類又長又雜的指令輸出會先瘦身再進到對話（原文存在 `~/.claude/chutora/raw/`），不需要可以 `/chutora trim off` 關掉。
+
 
 ### 1. 安裝 plugin
 

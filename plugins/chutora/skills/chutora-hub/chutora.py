@@ -155,6 +155,23 @@ def loop_status(session_id):
     return (len(counts), max(counts) if counts else 0)
 
 
+def trim_state():
+    """回傳 (是否開啟, 原因, 累計瘦身字元數, 門檻說明)。"""
+    on, why = True, ""
+    if os.environ.get("CHUTORA_TRIM", "").strip() == "0":
+        on, why = False, "CHUTORA_TRIM=0"
+    elif read_text(os.path.join(CONF, "trim")).strip().lower() == "off":
+        on, why = False, "/chutora trim off"
+    chars = 0
+    try:
+        with open(os.path.join(CONF, "trim-stats.json")) as f:
+            chars = int(json.load(f).get("total_chars", 0))
+    except (OSError, ValueError, TypeError):
+        pass
+    th = {"economy": (3000, 80), "balanced": (4000, 120), "quality": (8000, 250)}[get_mode()]
+    return on, why, chars, th
+
+
 def cmd(name):
     return f"/chutora:{name}" if namespaced() else f"/{name}"
 
@@ -186,6 +203,13 @@ def status():
                 f"- Loop guard: {ls[0]} error(s) keep repeating in this conversation (up to {ls[1]} times); you may be stuck"))
     else:
         print(T("- loop guard：這個對話沒有偵測到重複錯誤", "- Loop guard: no repeating errors in this conversation"))
+    on, why, chars, th = trim_state()
+    saved = T(f"，累計瘦身約 {chars // 4:,} token（估算：字元數÷4）", f"; trimmed about {chars // 4:,} tokens so far (estimate: characters ÷ 4)") if chars else ""
+    if on:
+        print(T(f"- 噪音輸出瘦身：開啟（超過 {th[0]} 字元或 {th[1]} 行的安裝／建置／測試輸出才處理）{saved}",
+                f"- Noisy-output trimming: on (install/build/test output over {th[0]} chars or {th[1]} lines){saved}"))
+    else:
+        print(T(f"- 噪音輸出瘦身：關閉（{why}）{saved}", f"- Noisy-output trimming: off ({why}){saved}"))
     print()
     print(T("可以做的事（直接回覆編號或名稱）：", "What you can do (reply with a number or name):"))
     items = [
@@ -197,7 +221,7 @@ def status():
         (cmd("harness-tune"), "讓某類任務越做越順", "make a recurring kind of task go smoother"),
         (cmd("toolprune"), "找出沒用到的工具來省 token", "find unused tools to save tokens"),
         (cmd("route-setup"), "完整設定：狀態列、自動壓縮、記憶庫", "full setup: status line, auto-compact, memory"),
-        (T("卡關救援", "stuck rescue"), "（即將推出）", "(coming soon)"),
+        ("/chutora trim on|off", "噪音輸出瘦身開關（原文存在 ~/.claude/chutora/raw/）", "turn noisy-output trimming on/off (originals kept in ~/.claude/chutora/raw/)"),
     ]
     for i, (c, zh, en) in enumerate(items, 1):
         print(f"{i}. {c} — {T(zh, en)}")
@@ -227,7 +251,8 @@ def doctor():
         else:
             add(OK, "hooks", T("由 plugin 自動註冊", "registered by the plugin") + ("" if kind == "plugin" else T("（--plugin-dir 載入）", " (loaded with --plugin-dir)")))
     else:
-        need = {"session-start.sh": "SessionStart", "context-check.py": "UserPromptSubmit", "post-tool.py": "PostToolUse"}
+        need = {"session-start.sh": "SessionStart", "context-check.py": "UserPromptSubmit", "post-tool.py": "PostToolUse",
+                "trim.py": "PostToolUse (Bash: trim)"}
         missing = [ev for f, ev in need.items() if f not in hooks_json]
         if missing:
             add(FIX, "hooks", T("settings.json 缺少：", "missing in settings.json: ") + ", ".join(missing),
@@ -347,6 +372,29 @@ def set_lang(arg):
     return 0
 
 
+def trim(arg):
+    a = (arg or "").strip().lower()
+    if not a:
+        on, why, chars, th = trim_state()
+        state = T("開啟", "on") if on else T(f"關閉（{why}）", f"off ({why})")
+        print(T(f"噪音輸出瘦身：{state}。累計瘦身約 {chars // 4:,} token（估算）。可用 /chutora trim on|off 切換。",
+                f"Noisy-output trimming: {state}. About {chars // 4:,} tokens trimmed so far (estimate). Switch with /chutora trim on|off."))
+        return 0
+    if a in ("on", "開", "開啟"):
+        write_conf("trim", None)
+        print(T("已開啟噪音輸出瘦身（下一次指令就生效）。", "Noisy-output trimming is on (takes effect on the next command)."))
+        if os.environ.get("CHUTORA_TRIM", "").strip() == "0":
+            print(T("注意：環境變數 CHUTORA_TRIM=0 仍會讓它保持關閉。", "Note: the CHUTORA_TRIM=0 environment variable still keeps it off."))
+        return 0
+    if a in ("off", "關", "關閉"):
+        write_conf("trim", "off")
+        print(T("已關閉噪音輸出瘦身（寫入 ~/.claude/chutora/trim）。之後指令輸出都會完整進到對話；改回：/chutora trim on。",
+                "Noisy-output trimming is off (saved to ~/.claude/chutora/trim). Command output now reaches the conversation in full; undo: /chutora trim on."))
+        return 0
+    print(T(f"不認得的設定：{arg}。可用 on、off。", f"Unknown value: {arg}. Use on or off."))
+    return 2
+
+
 def main(argv):
     sub = argv[0].lower() if argv else "status"
     rest = argv[1] if len(argv) > 1 else ""
@@ -357,9 +405,11 @@ def main(argv):
         return doctor()
     if sub in ("mode", "模式"):
         return mode(rest)
+    if sub in ("trim", "瘦身"):
+        return trim(rest)
     if sub in ("lang", "language", "語言"):
         return set_lang(rest)
-    print(T(f"不認得的指令：{sub}。可用：status、doctor、mode、lang。", f"Unknown command: {sub}. Available: status, doctor, mode, lang."))
+    print(T(f"不認得的指令：{sub}。可用：status、doctor、mode、trim、lang。", f"Unknown command: {sub}. Available: status, doctor, mode, trim, lang."))
     return 2
 
 

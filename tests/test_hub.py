@@ -41,13 +41,13 @@ class HubTest(unittest.TestCase):
         self.assertIn("Chutora 狀態", out)
         self.assertIn("模式：平衡", out)
         self.assertIn("/chutora doctor", out)
-        self.assertIn("卡關救援", out)
-        self.assertIn("即將推出", out)
+        self.assertIn("/chutora trim on|off", out)
+        self.assertIn("噪音輸出瘦身：開啟", out)
 
     def test_status_menu_en(self):
         out = self.run_hub(lang="en").stdout
         self.assertIn("Chutora status", out)
-        self.assertIn("coming soon", out)
+        self.assertIn("Noisy-output trimming: on", out)
 
     def test_status_reads_context_and_loop_guard(self):
         enc = re.sub(r"[^A-Za-z0-9]", "-", str(self.proj))
@@ -103,6 +103,25 @@ class HubTest(unittest.TestCase):
 
     def test_unknown_command(self):
         self.assertEqual(self.run_hub("fly").returncode, 2)
+
+
+    def test_trim_switch_and_stats(self):
+        r = self.run_hub("trim", "off")
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual(self.conf("trim"), "off")
+        self.assertIn("噪音輸出瘦身：關閉", self.run_hub().stdout)
+        r = self.run_hub("trim", "on")
+        self.assertEqual(r.returncode, 0)
+        self.assertIsNone(self.conf("trim"))
+        (self.home / ".claude" / "chutora" / "trim-stats.json").write_text(json.dumps({"total_chars": 40000}))
+        out = self.run_hub("trim").stdout
+        self.assertIn("10,000 token", out)
+        self.assertIn("關閉", self.run_hub(CHUTORA_TRIM="0").stdout)
+        self.assertEqual(self.run_hub("trim", "maybe").returncode, 2)
+
+    def test_mode_changes_trim_threshold(self):
+        self.run_hub("mode", "economy")
+        self.assertIn("3000 字元", self.run_hub().stdout)
 
 
 if __name__ == "__main__":

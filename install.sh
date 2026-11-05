@@ -180,7 +180,10 @@ hook 不會自動啟用:本腳本不改你的 settings.json。要啟用請把下
   ],
   "PostToolUse": [
     { "hooks": [{ "type": "command",
-        "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/post-tool.py" }] }
+        "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/post-tool.py" }] },
+    { "matcher": "Bash",
+      "hooks": [{ "type": "command",
+        "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/trim.py" }] }
   ]
 MSG
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SessionStart 用：每個 ISO 週第一次對話輸出一行「上週派工省下多少」的估算；其他時候什麼都不印。
+"""SessionStart 用：每個 ISO 週第一次對話輸出一行「上週派工省下多少」的估算（並附上噪音輸出瘦身的估算）；其他時候什麼都不印。
 
 估算方法（只算模型價差）：過去 7 天子 agent 的每次 API 呼叫，假設改由主對話最常用的模型處理，
 依 usage_stats.py 的 API 牌價表算出的金額，減去實際金額。不含 context 隔離省下的重讀成本，
@@ -94,6 +94,24 @@ def estimate(us, root, today):
     return main, tokens, saved
 
 
+def trim_week(today):
+    """過去 DAYS 天噪音輸出瘦身掉的字元數（trim.py 寫在 ~/.claude/chutora/trim-stats.json）。"""
+    try:
+        with open(os.path.join(os.path.expanduser("~"), ".claude", "chutora", "trim-stats.json")) as f:
+            days = json.load(f).get("days") or {}
+    except (OSError, ValueError, AttributeError):
+        return 0
+    start = today - datetime.timedelta(days=DAYS)
+    total = 0
+    for k, v in days.items():
+        try:
+            if start < datetime.date.fromisoformat(k) <= today:
+                total += int(v)
+        except (ValueError, TypeError):
+            continue
+    return total
+
+
 def main():
     if os.environ.get("CHUTORA_WEEKLY", "1").strip() == "0":
         return
@@ -113,11 +131,17 @@ def main():
     except OSError:
         return
     us = load_usage_stats()
-    if us is None:
-        return
     root = os.path.expanduser(os.environ.get("CHUTORA_PROJECTS_ROOT") or "~/.claude/projects")
-    r = estimate(us, root, today)
+    r = estimate(us, root, today) if us is not None else None
+    trimmed = trim_week(today) // 4  # 估算：字元數÷4
+    if trimmed:
+        trim_line = (f" Noisy-output trimming kept about {trimmed:,} tokens out of the context (estimate: characters ÷ 4)."
+                     if lang() == "en" else f"噪音輸出瘦身讓約 {trimmed:,} token 沒進到 context（估算：字元數÷4）。")
+    else:
+        trim_line = ""
     if not r:
+        if trim_line:
+            print(("Chutora weekly:" if lang() == "en" else "Chutora 每週回顧：") + trim_line)
         return
     main_model, tokens, saved = r
     short = main_model.replace("claude-", "")
@@ -125,11 +149,11 @@ def main():
         print(f"Chutora weekly (estimate): over the past {DAYS} days subagents handled about "
               f"{tokens / 1e6:.1f}M tokens, roughly ${saved:,.2f} less at API list prices than running them on "
               f"{short}. Model price difference only; context isolation savings not included, and subscriptions "
-              f"aren't billed per token. Turn off with CHUTORA_WEEKLY=0.")
+              f"aren't billed per token.{trim_line} Turn off with CHUTORA_WEEKLY=0.")
     else:
         print(f"Chutora 每週回顧（估算）：過去 {DAYS} 天子 agent 處理了約 {tokens / 1e4:,.0f} 萬 token，"
               f"比全部交給 {short} 處理，依 API 牌價約省 ${saved:,.2f}。只算模型價差，不含 context 隔離省下的部分；"
-              f"訂閱方案不按 token 計費。設 CHUTORA_WEEKLY=0 可關閉。")
+              f"訂閱方案不按 token 計費。{trim_line}設 CHUTORA_WEEKLY=0 可關閉。")
 
 
 if __name__ == "__main__":
