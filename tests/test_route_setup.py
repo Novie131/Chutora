@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SKILL = ROOT / "plugins" / "smart-agent-route" / "skills" / "route-setup"
+SKILL = ROOT / "plugins" / "chutora" / "skills" / "route-setup"
 APPLY = SKILL / "apply_settings.py"
 
 

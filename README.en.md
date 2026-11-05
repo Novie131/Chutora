@@ -1,29 +1,67 @@
-# Smart Agent Route
+<p align="center">
+  <img src="assets/banner.svg" alt="Chutora — Pull the cord when Claude gets stuck." width="100%">
+</p>
+
+<p align="center">
+  <a href="https://github.com/Novie131/chutora/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Novie131/chutora/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="version 0.11.0" src="https://img.shields.io/badge/version-0.11.0-FF6A26">
+  <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-1B2D52">
+  <img alt="VS Code supported" src="https://img.shields.io/badge/VS%20Code-supported-1B2D52">
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-2EA043"></a>
+</p>
 
 <p align="center"><a href="README.md"><b>繁體中文</b></a> · <b>English</b></p>
 
-**Make Claude Code work like a small team: Opus is the lead who thinks, Sonnet and Haiku do the hands-on work. When the conversation gets long, it writes a handoff note first, then picks up from the note after the conversation is cleared.**
+<p align="center">
+  <a href="#quick-start"><img src="assets/icons/rocket.svg" width="18" height="18" alt=""> Quick start</a> ·
+  <a href="#features"><img src="assets/icons/compass.svg" width="18" height="18" alt=""> Features</a> ·
+  <a href="#how-it-works"><img src="assets/icons/branch.svg" width="18" height="18" alt=""> How it works</a> ·
+  <a href="#roadmap"><img src="assets/icons/flag.svg" width="18" height="18" alt=""> Roadmap</a>
+</p>
+
+# Chutora
+
+<sub>Pronounced <b>choo-TOR-a</b> · from <i>chute</i>, as in parachute</sub>
+
+**Make Claude Code work like a small team: Opus is the lead who thinks, Sonnet and Haiku do the hands-on work. When the conversation gets long it writes a handoff note first, and when things get stuck there is a fixed way out.**
+
+> **Agent = Model + Harness.** Chutora doesn't swap the model; it changes what surrounds it: who does the work, what gets remembered, and how to get unstuck.
 
 The Traditional Chinese docs are the primary version; this English version is a translation and may lag behind.
 
-**Goal**: get more done on the same budget, without long working sessions getting more expensive and messier as the conversation grows.
+<a name="why"></a>
 
-**Why use it**
+## <img src="assets/icons/chute.svg" width="26" height="26" alt=""> Why Chutora
 
-- **The expensive model only where it counts**: Opus only thinks and decides; writing code goes to Sonnet, and reading logs, looking at screenshots, and searching go to Haiku.
-- **Long conversations stay under control**: past 100k tokens of context you get a reminder and a handoff note is written first; after a compact, a `/clear`, or a new conversation the next day, your progress comes back automatically.
-- **Works right after install**: two commands, no changes to your CLAUDE.md. Advanced setup asks one item at a time and backs up your settings before changing them.
-- **Verifies its work, stops at forks**: subagents must verify before reporting done; when a decision is needed, they list the options for you instead of choosing on their own. Failures follow a fixed escalation order, with no endless retries.
-- **Memory that accumulates across conversations**: memory is plain Markdown files you can put in git or open in Obsidian; external information is saved with its source.
-- **Measurable**: `usage-stats` measures main-conversation context length, how many tokens each agent used, and an estimated cost at API list prices, and can write an HTML report with daily charts.
-- **See what subagents are doing** (optional): the `agent-board` panel stays above the prompt and shows each subagent's type, model, status, elapsed time, tokens, and estimated cost as it runs.
-- **Replies you can read at a glance** (optional): `reply-detail` makes replies lead with the current state, what you need to do, and what you need to decide; switch the board's reply mode ("⇄ 回覆：精簡／詳細") to detailed when you want full replies.
+**Goal**: get more done on the same budget, without long sessions getting more expensive and messier as they grow — and with a cord you can pull when you really get stuck.
+
+| Common pain | Claude Code alone | With Chutora |
+|---|---|---|
+| <img src="assets/icons/money.svg" width="18" height="18" alt=""> Everything runs on the most expensive model | Reading logs, viewing screenshots and editing dozens of files all cost Opus prices | Opus only thinks and decides; hands-on work goes to Sonnet, heavy reading to Haiku |
+| <img src="assets/icons/scroll.svg" width="18" height="18" alt=""> Conversations keep growing | Later turns cost more and get messier; clearing loses your progress | Past 100k tokens you're reminded to write a handoff note; after a compact, `/clear` or a new session the next day, it comes back automatically |
+| <img src="assets/icons/loop.svg" width="18" height="18" alt=""> The AI is stuck on the same error | Endless retries, burning tokens | Loop guard nudges a change of direction; failures escalate in a fixed order with no endless retries |
+| <img src="assets/icons/brain.svg" width="18" height="18" alt=""> "I think we noted this before" | You explain it all again | Memory is plain Markdown; librarian returns verbatim excerpts with sources; works with git and Obsidian |
+| <img src="assets/icons/search.svg" width="18" height="18" alt=""> Can I trust this conclusion? | Facts and guesses are mixed together | evidence-analysis labels each conclusion as observation, inference or unknown, with sources |
+| <img src="assets/icons/shield.svg" width="18" height="18" alt=""> Security | Only reviewed when you remember to | security-review for static review; security-test only against authorized, isolated environments |
+| <img src="assets/icons/chart.svg" width="18" height="18" alt=""> Getting better with use | You repeat the same instructions every time | harness-tune bakes lessons into the harness and records them in harness-lessons |
+| <img src="assets/icons/eyes.svg" width="18" height="18" alt=""> Where the money goes | Invisible | usage-stats reports and the live agent-board |
+
+**Works right after install**: two commands, no changes to your CLAUDE.md. Advanced setup asks one item at a time and backs up settings first; subagents must verify before reporting done and stop to ask you at forks.
+
+<a name="demo"></a>
+
+### <img src="assets/icons/clapper.svg" width="22" height="22" alt=""> Chutora in 40 seconds
+
+<p align="center"><a href="assets/demo.mp4"><img src="assets/demo.gif" alt="Chutora illustrative animation: the Opus main conversation delegates to Sonnet and Haiku and gets back only conclusions" width="100%"></a></p>
+<p align="center"><sub>Illustrative animation, not a screen recording · <a href="assets/demo.mp4">▶ Watch the full 41-second video (Chinese and English captions)</a></sub></p>
 
 ---
 
-## Features at a glance
+<a name="features"></a>
 
-Grouped into eight categories. In the "Trigger" column, **auto** means it works once installed, no command needed; **delegated** means you just talk normally and the main conversation decides whether to hand the work to it; **command** means you invoke it (`/smart-agent-route:<name>` when installed as a plugin, `/<name>` when installed with install.sh); **optional** means it needs a separate install or setting.
+## <img src="assets/icons/compass.svg" width="26" height="26" alt=""> Features at a glance
+
+Grouped into eight categories. In the "Trigger" column, **auto** means it works once installed, no command needed; **delegated** means you just talk normally and the main conversation decides whether to hand the work to it; **command** means you invoke it (`/chutora:<name>` when installed as a plugin, `/<name>` when installed with install.sh); **optional** means it needs a separate install or setting.
 
 ### 1. Tiered delegation: spend the expensive model only where it counts
 
@@ -93,7 +131,9 @@ Grouped into eight categories. In the "Trigger" column, **auto** means it works 
 
 ---
 
-## What problem this solves
+<a name="problem"></a>
+
+## <img src="assets/icons/puzzle.svg" width="26" height="26" alt=""> What problem this solves
 
 After using Claude Code for a while, two things tend to happen:
 
@@ -106,27 +146,31 @@ This plugin works like a lead running a team: the lead (Opus) listens, thinks it
 
 ---
 
-## Quick start
+<a name="quick-start"></a>
+
+## <img src="assets/icons/rocket.svg" width="26" height="26" alt=""> Quick start
 
 Inside Claude Code, run:
 
 ```
-/plugin install smart-agent-route --marketplace Novie131/smart-agent-route
+/plugin install chutora --marketplace Novie131/chutora
 /reload-plugins
 ```
 
-(Claude Code 2.1.275 and earlier: first run `/plugin marketplace add Novie131/smart-agent-route`, then `/plugin install smart-agent-route@smart-agent-route`.)
+(Claude Code 2.1.275 and earlier: first run `/plugin marketplace add Novie131/chutora`, then `/plugin install chutora@chutora`.)
 
 It works right after install. Two things are recommended next:
 
 1. **Set the main conversation to Opus**: `/model opus`. The plugin never changes this automatically.
-2. **Turn on the full feature set**: run `/smart-agent-route:route-setup` to set up the context status line, the auto-compact threshold, the Haiku-based Explore, and a `claude-memory/` store. It asks one item at a time, explains what each does, its impact, and how to undo it, and you can skip any of them. It backs up `settings.json` before writing and never overwrites values that already exist. If you skip it, the session start hook reminds you (at most 3 times).
+2. **Turn on the full feature set**: run `/chutora:route-setup` to set up the context status line, the auto-compact threshold, the Haiku-based Explore, and a `claude-memory/` store. It asks one item at a time, explains what each does, its impact, and how to undo it, and you can skip any of them. It backs up `settings.json` before writing and never overwrites values that already exist. If you skip it, the session start hook reminds you (at most 3 times).
 
-The context-length reminder needs `python3`; without it, the reminder hook quietly disables itself. To install without the marketplace, see [Other ways to install](#other-ways-to-install).
+The context-length reminder needs `python3`; without it, the reminder hook quietly disables itself. To install without the marketplace, see [Other ways to install](#install).
 
 ---
 
-## Using it
+<a name="usage"></a>
+
+## <img src="assets/icons/bubble.svg" width="26" height="26" alt=""> Using it
 
 Just talk normally; the main conversation decides whether to delegate:
 
@@ -139,7 +183,7 @@ Just talk normally; the main conversation decides whether to delegate:
 | "How do I configure the new version of this API" | The research skill looks it up and cites sources; official material is saved to `claude-memory/web/` |
 | "Hand off" | The handoff skill writes `handoff.md`, after which you can `/clear` |
 
-To force a specific agent, use `@agent-smart-agent-route:worker`.
+To force a specific agent, use `@agent-chutora:worker`.
 
 When the conversation gets long (past 100k tokens by default) you get a reminder, and Claude first writes the current progress into `handoff.md`. After that, whether it is an auto-compact, a `/clear`, or a new conversation the next day, the handoff note comes back automatically, so you do not have to explain everything again.
 
@@ -155,21 +199,26 @@ When the conversation gets long (past 100k tokens by default) you get a reminder
 
 ---
 
-## How it works
+<a name="how-it-works"></a>
 
-```
-You ──► main conversation (Opus)  ← the front door: understands, decides who gets the work
-          │
-          ├──► worker (Sonnet)       ← direction is settled, just do it
-          │      └► worker-hard       ← escalation after worker fails
-          ├──► bulk (Haiku)          ← lots to read, only conclusions needed: images, long logs, web pages
-          ├──► librarian (Haiku)     ← searches the knowledge base. Read-only
-          ├──► harvester (Sonnet)    ← mines past conversations into the knowledge base. Manual trigger
-          ├──► security-review (Sonnet) ← static security review of your own code. Read-only
-          └──► security-test (Sonnet)   ← authorized dynamic testing of your own dev environment
+## <img src="assets/icons/branch.svg" width="26" height="26" alt=""> How it works
 
-skill: handoff (handoff notes), research (look up external info with sources), usage-stats (measure context and subagent usage), route-setup (one-time full setup), evidence-analysis (evidence-based analysis), toolprune (tool pruning), harness-tune (self-improvement)
-hook : session start injects the delegation guide and memory; a reminder fires when the context gets long; after each tool call it watches for repeated errors and nudges you to change course (loop guard)
+```mermaid
+flowchart LR
+  U([You]) --> O{{"Main conversation · Opus<br/>understands, decides, delegates"}}
+  O --> W["worker · Sonnet<br/>implements, verifies before reporting"]
+  W -. escalate on failure .-> WH["worker-hard · Sonnet"]
+  O --> B["bulk · Haiku<br/>heavy reading, returns conclusions"]
+  O --> L["librarian · Haiku<br/>searches memory, read-only"]
+  O --> HV["harvester · Sonnet<br/>mines past sessions, manual"]
+  O --> SR["security-review · Sonnet<br/>static review, read-only"]
+  O --> ST["security-test · Sonnet<br/>authorized dynamic testing"]
+  L --- M[("claude-memory<br/>MEMORY.md · handoff.md · kb/ · web/")]
+  HK[["hooks<br/>conventions & memory · context reminder · loop guard"]] -.-> O
+  classDef lead fill:#FF6A26,stroke:#C2410C,color:#fff
+  classDef mem fill:#1B2D52,stroke:#0E1A31,color:#fff
+  class O lead
+  class M,HK mem
 ```
 
 | Component | Model | What it does |
@@ -199,7 +248,7 @@ The savings come from four places, in order of impact:
 1. **Context isolation** (the biggest, and it compounds). Running 30 tool calls in the main conversation means paying for those 30 results until the conversation ends; in a subagent, the main conversation receives only a summary. Delegate whole chunks of work, not single steps, because each subagent launch pays the system prompt and memory injection again.
 2. **Model tiering.** Useful but linear: the saving is roughly the price difference.
 3. **`effort` levels.** worker uses `medium`, escalating to worker-hard (`high`) only on failure; librarian uses `low`.
-4. **Do not keep the main conversation open too long.** Isolation only covers tool calls, not the conversation itself growing longer, so the plugin also watches length and reminds you to write a handoff note past a threshold (see [Advanced settings](#advanced-settings)). Starting a new conversation or `/clear` when a topic ends is still the cheapest.
+4. **Do not keep the main conversation open too long.** Isolation only covers tool calls, not the conversation itself growing longer, so the plugin also watches length and reminds you to write a handoff note past a threshold (see [Advanced settings](#advanced)). Starting a new conversation or `/clear` when a topic ends is still the cheapest.
 
 ### When things fail
 
@@ -209,7 +258,9 @@ Failure escalation order: re-delegate to the same agent with added background, t
 
 ---
 
-## Advanced settings
+<a name="advanced"></a>
+
+## <img src="assets/icons/wrench.svg" width="26" height="26" alt=""> Advanced settings
 
 ### Context reminders and auto-compact
 
@@ -218,7 +269,7 @@ Failure escalation order: re-delegate to the same agent with added background, t
 - If `autoCompactWindow` is set, the reminder just tells you auto-compact will happen at about N k and the handoff will be restored; otherwise it gives you a copyable command: `/clear` at a stopping point, `/compact` with a focus mid-task, or `/rewind` with a partial summary if the later part is debugging noise.
 - The SessionStart hook injects `handoff.md` after every compact, `/clear` and startup: from `claude-memory/` if the project has it, otherwise from the auto memory directory next to the transcript (Claude Code only injects the MEMORY.md index of auto memory, never handoff.md).
 
-Recommended: set auto-compact as a safety net in `~/.claude/settings.json` (a plugin cannot set it for you; `/smart-agent-route:route-setup` writes it safely):
+Recommended: set auto-compact as a safety net in `~/.claude/settings.json` (a plugin cannot set it for you; `/chutora:route-setup` writes it safely):
 
 ```
 "autoCompactWindow": 153000
@@ -228,10 +279,10 @@ After subtracting a buffer of about 33k, auto-compact triggers at roughly 120k, 
 
 ### Status line (optional)
 
-Shows `model │ ctx 95k │ reminder 100k │ compact 120k`, with the compact point read from `autoCompactWindow` (not shown if unset). A plugin cannot configure the main status line: plugin users should use `/smart-agent-route:route-setup`, which places the file in a fixed location; install.sh users can run `bash install.sh --with-statusline` or paste this into settings.json by hand:
+Shows `model │ ctx 95k │ reminder 100k │ compact 120k`, with the compact point read from `autoCompactWindow` (not shown if unset). A plugin cannot configure the main status line: plugin users should use `/chutora:route-setup`, which places the file in a fixed location; install.sh users can run `bash install.sh --with-statusline` or paste this into settings.json by hand:
 
 ```json
-"statusLine": { "type": "command", "command": "python3 ~/.claude/hooks/smart-agent-route/statusline.py" }
+"statusLine": { "type": "command", "command": "python3 ~/.claude/hooks/chutora/statusline.py" }
 ```
 
 ### Subagent board and reply-mode switch (optional)
@@ -243,7 +294,7 @@ Two optional mods (Claude Code interface extensions; they need 2.1.299 or later 
 | `agent-board` | A persistent panel listing each subagent's type, model, status, elapsed time, tokens, and estimated cost (API list prices), with totals at the top. It collapses to a one-line summary and toggles with `/agent-board`; a reply-mode switch ("⇄ 回覆：精簡／詳細", concise/detailed) sits at the bottom |
 | `reply-detail` | Injects a reply format into the system prompt: by default a short three-part reply (current state / what you need to do / what you need to decide or provide), for the main conversation only. Switch the board's reply mode to detailed and every reply stays detailed until you switch back; for a one-off, type "詳細說明" to get a detailed rewrite of the previous reply |
 
-Install: from the plugin marketplace, `/plugin install agent-board@smart-agent-route` and `/plugin install reply-detail@smart-agent-route`; with install.sh, add `--with-agent-board` and `--with-reply-detail` (VS Code cannot pass `--plugin-dir`, so the script adds the folders to `env.CLAUDE_CODE_PLUGIN_DIRS` in `settings.json`). Afterwards, run Developer: Reload Window in VS Code.
+Install: from the plugin marketplace, `/plugin install agent-board@chutora` and `/plugin install reply-detail@chutora`; with install.sh, add `--with-agent-board` and `--with-reply-detail` (VS Code cannot pass `--plugin-dir`, so the script adds the folders to `env.CLAUDE_CODE_PLUGIN_DIRS` in `settings.json`). Afterwards, run Developer: Reload Window in VS Code.
 
 agent-board settings (plugin userConfig, all on by default): `autoOpen` opens the panel when a subagent starts, `persistent` opens it when the session starts and keeps it open, `detailButton` shows the reply-mode switch at the bottom (the name is kept from earlier versions). In detailed mode the board attaches a "write this turn in detail" request to every message you send; a reload resets it to concise.
 
@@ -255,7 +306,9 @@ To see what every turn pays up front (system prompt, tool definitions, MCP, skil
 
 ---
 
-## Memory
+<a name="memory"></a>
+
+## <img src="assets/icons/brain.svg" width="26" height="26" alt=""> Memory
 
 ```
 <your folder>/claude-memory/
@@ -296,7 +349,9 @@ Run it once after first install to seed the knowledge base; after that worker re
 
 ---
 
-## Design trade-offs
+<a name="tradeoffs"></a>
+
+## <img src="assets/icons/scale.svg" width="26" height="26" alt=""> Design trade-offs
 
 ### This is RAG, just without vectors
 
@@ -318,9 +373,11 @@ Otherwise leave it with worker. Retrieval (librarian) is the exception, because 
 
 ---
 
-## Other ways to install
+<a name="install"></a>
 
-If you prefer not to use the marketplace, the repo ships `install.sh`, or you can run `claude --plugin-dir ./plugins/smart-agent-route` directly.
+## <img src="assets/icons/box.svg" width="26" height="26" alt=""> Other ways to install
+
+If you prefer not to use the marketplace, the repo ships `install.sh`, or you can run `claude --plugin-dir ./plugins/chutora` directly.
 
 ```
 bash install.sh                    # copy install (agents, skills, hooks go into ~/.claude/, no namespace prefix; re-run to update)
@@ -335,22 +392,24 @@ bash install.sh --with-reply-detail  # also load the reply format mod (same mech
 
 Notes:
 
-- Names have no namespace in this mode: the agent is `worker` and the skill is `/handoff` (plugin install uses `smart-agent-route:worker`).
-- Installed items are recorded in `~/.claude/.smart-agent-route-installed`. Existing files with identical content are added to the manifest; files with different content (yours) are not overwritten, and you get a warning.
+- Names have no namespace in this mode: the agent is `worker` and the skill is `/handoff` (plugin install uses `chutora:worker`).
+- Installed items are recorded in `~/.claude/.chutora-installed`. Existing files with identical content are added to the manifest; files with different content (yours) are not overwritten, and you get a warning.
 - `--with-statusline` can be combined with the default copy mode or `--link`, but not with `--agents-only` or `--uninstall`. It touches only the `statusLine` key in `settings.json`: it creates the file if missing, never overwrites an existing `statusLine` (it only prints a suggested snippet), and otherwise backs the file up as `settings.json.bak-<timestamp>` before writing. It does nothing if the JSON is broken or python3 is missing.
 - `--with-agent-board` and `--with-reply-detail` have the same restrictions as `--with-statusline` and can be used together. They touch only `env.CLAUDE_CODE_PLUGIN_DIRS`: existing paths are kept and the file is backed up before writing; `--uninstall` removes only the paths they added.
 - install.sh does not edit your `settings.json` hooks. It prints a snippet at the end that you merge into `"hooks"` yourself. After that, run `/route-setup` for the full feature set.
 
-For more detail, see the [deployment notes](docs/%E9%83%A8%E7%BD%B2%E5%AE%89%E8%A3%9D.md) (Traditional Chinese only) and [plugins/smart-agent-route/INSTALL.en.md](plugins/smart-agent-route/INSTALL.en.md).
+For more detail, see the [deployment notes](docs/%E9%83%A8%E7%BD%B2%E5%AE%89%E8%A3%9D.md) (Traditional Chinese only) and [plugins/chutora/INSTALL.en.md](plugins/chutora/INSTALL.en.md).
 
 ---
 
-## Layout
+<a name="layout"></a>
+
+## <img src="assets/icons/folder.svg" width="26" height="26" alt=""> Layout
 
 ```
-smart-agent-route/
+chutora/
 ├── .claude-plugin/marketplace.json   ← marketplace catalog
-├── plugins/smart-agent-route/            ← the plugin itself
+├── plugins/chutora/            ← the plugin itself
 │   ├── .claude-plugin/plugin.json
 │   ├── agents/                       ← worker / worker-hard / bulk / librarian / harvester / security-review / security-test
 │   ├── skills/                       ← handoff / research / usage-stats / route-setup / evidence-analysis / security-review / security-test / toolprune / harness-tune
@@ -367,16 +426,36 @@ smart-agent-route/
 
 ---
 
-## Status
+<a name="roadmap"></a>
 
-**v0.10.0, early version.** Versions up to 0.7.0 were named tiered-agents; to upgrade, remove the old version first (see the section on upgrading from tiered-agents (0.7.0 and earlier) in the [deployment notes](docs/%E9%83%A8%E7%BD%B2%E5%AE%89%E8%A3%9D.md)). The context reminder hook, handoff, bulk, and the Explore override were ported from the author's personal setup: the hook has fired in real conversations and Explore and bulk are confirmed to run on Haiku, but all are still being validated. The worker-hard escalation chain, the research skill, and the plugin form of the hooks have not been used in practice yet. agent-board and reply-detail have been tested in the VS Code extension 2.1.301 for the board; persistent mode, the button in the board, and the reply-format injection are still being validated.
+## <img src="assets/icons/flag.svg" width="26" height="26" alt=""> Roadmap
+
+| Status | Item | What it does |
+|---|---|---|
+| <img src="assets/icons/next.svg" width="18" height="18" alt=""> Next | **Stuck rescue `/chutora:rescue`** (signature feature) | When the AI keeps failing and every fix makes it worse: gather evidence, stop the bleeding, offer two or three ways out, and record the lesson so it doesn't get stuck there again |
+| <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> Planned | Code map and blast radius | A compact symbol index saved to memory; before changing a function, list what it affects; warns when the index is stale |
+| <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> Planned | Dangerous-action guard | Always confirm before deleting files, force-pushing or touching production |
+| <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> Planned | Routing that learns from outcomes | Record how each delegation turned out and suggest delegation-table fixes, applied only after you confirm |
+| <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> Planned | Checkup | One command for test gaps, stale memory, unused tools and a quick security sweep |
+
+Every new feature follows the same principle: **lightweight, manual, reversible** — no extra token burn for the sake of automation.
+
+**Open-source methodologies absorbed**: rea (evidence-based analysis), strix (security review and testing), TokenEconomizer (token savings), [harness2](https://github.com/google-research/harness2) (self-improvement); planned items draw on [ruflo](https://github.com/ruvnet/ruflo) and [codegraph](https://github.com/colbymchenry/codegraph). Chutora takes only the methods and implements them itself; it contains none of their code.
+
+---
+
+<a name="status"></a>
+
+## <img src="assets/icons/pin.svg" width="26" height="26" alt=""> Status
+
+**v0.11.0, early version.** Versions up to 0.10.0 were named smart-agent-route, and up to 0.7.0 tiered-agents; to upgrade, remove the old version first (see the section on upgrading from tiered-agents (0.7.0 and earlier) in the [deployment notes](docs/%E9%83%A8%E7%BD%B2%E5%AE%89%E8%A3%9D.md)). The context reminder hook, handoff, bulk, and the Explore override were ported from the author's personal setup: the hook has fired in real conversations and Explore and bulk are confirmed to run on Haiku, but all are still being validated. The worker-hard escalation chain, the research skill, and the plugin form of the hooks have not been used in practice yet. agent-board and reply-detail have been tested in the VS Code extension 2.1.301 for the board; persistent mode, the button in the board, and the reply-format injection are still being validated.
 
 Known rough edges:
 
-- Delegation relies on `description` matching and is not guaranteed. To be sure, use `@agent-smart-agent-route:worker`.
+- Delegation relies on `description` matching and is not guaranteed. To be sure, use `@agent-chutora:worker`.
 - Hook behavior in Cowork is unverified.
 - `MEMORY.md` decays and needs periodic tidying (over 150 lines is the signal).
-- The Haiku execution layer is empty by default; see the enabling conditions in `plugins/smart-agent-route/skills/route-setup/templates/runner.md.example`.
+- The Haiku execution layer is empty by default; see the enabling conditions in `plugins/chutora/skills/route-setup/templates/runner.md.example`.
 - `harvester` only reads local sessions.
 - The mod API is marked early access; Claude Code updates may require adjustments.
 
@@ -384,6 +463,8 @@ Issues are welcome.
 
 ---
 
-## License
+<a name="license"></a>
+
+## <img src="assets/icons/doc.svg" width="26" height="26" alt=""> License
 
 MIT

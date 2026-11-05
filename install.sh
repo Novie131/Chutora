@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# smart-agent-route 安裝腳本 — Claude Code CLI 與 VS Code 擴充共用
+# chutora 安裝腳本 — Claude Code CLI 與 VS Code 擴充共用
 #
 #   bash install.sh                 複製安裝(agent、skill、hook 複製到 ~/.claude/,名稱不帶前綴;重跑即更新)
 #   bash install.sh --agents-only   只複製 agent(hook 與 skill 不會生效)
@@ -14,31 +14,33 @@
 #                                   env.CLAUDE_CODE_PLUGIN_DIRS(VS Code 不能帶 --plugin-dir,靠這個變數載入)
 #                                   可與預設複製模式或 --link 併用;不能與 --agents-only、--uninstall 併用。
 #                                   --link:路徑指向 repo 內的 plugins/agent-board;複製模式:先複製到
-#                                   ~/.claude/smart-agent-route/agent-board/(記入安裝清單)再指向那裡。
+#                                   ~/.claude/chutora/agent-board/(記入安裝清單)再指向那裡。
 #                                   只碰 env.CLAUDE_CODE_PLUGIN_DIRS 這一個變數(已含則不重複);備份與壞 JSON 的處理同 --with-statusline。
 #                                   --uninstall 會把本腳本加的路徑從該變數移除。用 plugin 市集裝的人不需要這個旗標。
 #   bash install.sh --with-reply-detail  另外把 plugins/reply-detail(回覆格式規則 mod)的目錄加進
 #                                   env.CLAUDE_CODE_PLUGIN_DIRS;行為、限制、--link／複製模式與 --uninstall 的處理全部同 --with-agent-board
-#                                   (複製模式的目的地是 ~/.claude/smart-agent-route/reply-detail/)。兩個旗標可同時使用。
+#                                   (複製模式的目的地是 ~/.claude/chutora/reply-detail/)。兩個旗標可同時使用。
 #
-# 複製安裝的項目記在 ~/.claude/.smart-agent-route-installed(每行一個相對 ~/.claude 的路徑)。
-# 有 smart-agent-route.plugin 就從它安裝;沒有(例如直接 clone repo)就用 plugins/smart-agent-route/。
+# 複製安裝的項目記在 ~/.claude/.chutora-installed(每行一個相對 ~/.claude 的路徑)。
+# 有 chutora.plugin 就從它安裝;沒有(例如直接 clone repo)就用 plugins/chutora/。
 #
 # CLI 與 VS Code 共用 ~/.claude/,所以裝一次兩邊都生效。
 
 set -euo pipefail
 
-PLUGIN_NAME="smart-agent-route"
+PLUGIN_NAME="chutora"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ARCHIVE="${SCRIPT_DIR}/${PLUGIN_NAME}.plugin"
 SRC_DIR="${SCRIPT_DIR}/plugins/${PLUGIN_NAME}"
 
 PLUGIN_DEST="${HOME}/.claude/skills/${PLUGIN_NAME}"
 LEGACY_DEST="${HOME}/.claude/skills/tiered-agents"   # 0.7.0 以前的名稱
+LEGACY_SAR_MANIFEST="${HOME}/.claude/.smart-agent-route-installed"   # 0.10.0 以前的名稱(smart-agent-route)
+LEGACY_SAR_HOOKS="${HOME}/.claude/hooks/smart-agent-route"
 AGENTS_DEST="${HOME}/.claude/agents"
 SKILLS_DEST="${HOME}/.claude/skills"
 HOOKS_LINK="${HOME}/.claude/hooks/${PLUGIN_NAME}"
-MANIFEST="${HOME}/.claude/.smart-agent-route-installed"
+MANIFEST="${HOME}/.claude/.chutora-installed"
 
 MODE="copy"
 WITH_EXPLORE=0
@@ -75,10 +77,10 @@ fi
 
 SETTINGS="${HOME}/.claude/settings.json"
 BOARD_SRC="${SCRIPT_DIR}/plugins/agent-board"
-BOARD_REL="smart-agent-route/agent-board"          # 複製模式的目的地(相對 ~/.claude,記入安裝清單)
+BOARD_REL="chutora/agent-board"          # 複製模式的目的地(相對 ~/.claude,記入安裝清單)
 BOARD_COPY="${HOME}/.claude/${BOARD_REL}"
 DETAIL_SRC="${SCRIPT_DIR}/plugins/reply-detail"
-DETAIL_REL="smart-agent-route/reply-detail"
+DETAIL_REL="chutora/reply-detail"
 DETAIL_COPY="${HOME}/.claude/${DETAIL_REL}"
 
 # ---------- 移除 ----------
@@ -170,17 +172,17 @@ hook 不會自動啟用:本腳本不改你的 settings.json。要啟用請把下
 
   "SessionStart": [
     { "matcher": "startup|clear|compact",
-      "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/smart-agent-route/session-start.sh" }] }
+      "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/chutora/session-start.sh" }] }
   ],
   "UserPromptSubmit": [
     { "hooks": [{ "type": "command",
-        "command": "sh ~/.claude/hooks/smart-agent-route/run-python.sh ~/.claude/hooks/smart-agent-route/context-check.py" }] }
+        "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/context-check.py" }] }
   ]
 MSG
 }
 
 # ---------- 狀態列(--with-statusline) ----------
-STATUSLINE_CMD="python3 ~/.claude/hooks/smart-agent-route/statusline.py"
+STATUSLINE_CMD="python3 ~/.claude/hooks/chutora/statusline.py"
 
 print_statusline_snippet() {
   cat <<MSG
@@ -261,7 +263,7 @@ setup_mod() {  # $1 = 名稱(agent-board 或 reply-detail), $2 = 要加進去的
     esac
   fi
   say "  VS Code:執行 Developer: Reload Window;終端機:重開 claude,載入才會生效。"
-  say "  用 plugin 市集安裝的人改用 /plugin install ${name}@smart-agent-route,不需要 --with-${name}。"
+  say "  用 plugin 市集安裝的人改用 /plugin install ${name}@chutora,不需要 --with-${name}。"
 }
 
 # ---------- 清掉舊版錯誤的安裝位置 ----------
@@ -272,6 +274,11 @@ fi
 if [[ -d "$LEGACY_DEST" ]]; then
   warn "偵測到舊版 tiered-agents($LEGACY_DEST),兩者並存時 agent 會重複出現。"
   warn "請移除舊版:rm -rf ~/.claude/skills/tiered-agents"
+fi
+if [[ -f "$LEGACY_SAR_MANIFEST" || -e "$LEGACY_SAR_HOOKS" ]]; then
+  warn "偵測到舊版 smart-agent-route(0.10.0 以前,現已改名 chutora)。"
+  warn "settings.json 裡指向 ~/.claude/hooks/smart-agent-route/ 的 hooks 與 statusLine 請改成 ~/.claude/hooks/chutora/,"
+  warn "確認新版可用後再移除舊檔:rm -rf ~/.claude/hooks/smart-agent-route ~/.claude/smart-agent-route ~/.claude/.smart-agent-route-installed"
 fi
 
 # ---------- 符號連結 ----------
@@ -381,7 +388,7 @@ if [[ "$MODE" != "agents" ]]; then
 fi
 if [[ "$MODE" == "agents" ]]; then
   say ""
-  say "註:agent 名稱不帶命名空間(worker 而非 smart-agent-route:worker)。"
+  say "註:agent 名稱不帶命名空間(worker 而非 chutora:worker)。"
   warn "此模式只裝 agent:hook(context 提醒、session 開始帶入記憶)與 skill(handoff、research、usage-stats)不會生效。"
 fi
 

@@ -4,7 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 MARKETPLACE = ROOT / ".claude-plugin" / "marketplace.json"
-PLUGIN = ROOT / "plugins" / "smart-agent-route" / ".claude-plugin" / "plugin.json"
+PLUGIN = ROOT / "plugins" / "chutora" / ".claude-plugin" / "plugin.json"
 
 
 def load(path):

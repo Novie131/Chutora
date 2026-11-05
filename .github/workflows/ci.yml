@@ -18,7 +18,7 @@ jobs:
       - name: Shell syntax check
         run: |
           bash -n install.sh
-          for f in plugins/smart-agent-route/hooks/*.sh; do sh -n "$f"; done
+          for f in plugins/chutora/hooks/*.sh; do sh -n "$f"; done
       - name: Unit tests
         run: python3 -m unittest discover -s tests -v
       - name: Install Claude Code
@@ -26,4 +26,4 @@ jobs:
       - name: Validate marketplace
         run: claude plugin validate --strict .
       - name: Validate plugin
-        run: claude plugin validate --strict plugins/smart-agent-route
+        run: claude plugin validate --strict plugins/chutora

@@ -1,29 +1,67 @@
-# Smart Agent Route
+<p align="center">
+  <img src="assets/banner.svg" alt="Chutora — 卡關時，拉一下就得救。Pull the cord when Claude gets stuck." width="100%">
+</p>
+
+<p align="center">
+  <a href="https://github.com/Novie131/chutora/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Novie131/chutora/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="version 0.11.0" src="https://img.shields.io/badge/version-0.11.0-FF6A26">
+  <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-1B2D52">
+  <img alt="VS Code supported" src="https://img.shields.io/badge/VS%20Code-supported-1B2D52">
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-2EA043"></a>
+</p>
 
 <p align="center"><b>繁體中文</b> · <a href="README.en.md"><b>English</b></a></p>
 
-**讓 Claude Code 像一個小團隊一樣分工：Opus 當主管負責想，Sonnet 和 Haiku 負責動手；對話變長時先寫交接筆記，清空後照筆記接著做。**
+<p align="center">
+  <a href="#quick-start"><img src="assets/icons/rocket.svg" width="18" height="18" alt=""> 快速開始</a> ·
+  <a href="#features"><img src="assets/icons/compass.svg" width="18" height="18" alt=""> 功能總覽</a> ·
+  <a href="#how-it-works"><img src="assets/icons/branch.svg" width="18" height="18" alt=""> 運作方式</a> ·
+  <a href="#roadmap"><img src="assets/icons/flag.svg" width="18" height="18" alt=""> 路線圖</a>
+</p>
 
-> A Claude Code plugin for tiered model delegation — Opus plans, Sonnet executes, Haiku retrieves and digests bulk output — plus context-length reminders with handoff notes so the main conversation stays short, and persistent, source-cited memory that accumulates across conversations. English documentation: [README.en.md](README.en.md).
+# Chutora
 
-**目的**：用同樣的預算做更多事，而且長時間工作也不會因為對話越拉越長而變貴、變亂。
+<sub>唸作 <b>choo-TOR-a</b>（啾托拉）· 取自 chute（降落傘）</sub>
 
-**為什麼用它**
+**讓 Claude Code 像一個小團隊一樣分工：Opus 當主管負責想，Sonnet 和 Haiku 負責動手；對話變長時先寫交接筆記，卡住時有固定的脫困路線。**
 
-- **貴的模型只用在刀口上**：Opus 只負責想與判斷，寫程式交給 Sonnet，讀 log、看截圖、查資料交給 Haiku。
-- **長對話不再失控**：context 超過 10 萬 token 就提醒，先寫交接筆記；壓縮、`/clear` 或隔天開新對話，進度都會自動接回來。
-- **裝完就能用**：兩行指令，不用改你的 CLAUDE.md。進階設定一次只問一項，改設定前先備份。
-- **做完會驗證，岔路會停下來問**：子 agent 回報完成前必須驗證；遇到需要決策的地方，列出選項讓你選，不會自作主張。失敗有固定的升級順序，不會無限重試。
-- **記憶跨對話累積**：記憶就是一般的 Markdown 檔，可以進 git、用 Obsidian 開；查外部資料時附上來源。
-- **效果量得到**：`usage-stats` 可以量出主對話 context 長度、每個 agent 用了多少 token、依 API 牌價估算的金額，也能輸出一份有每日圖表的 HTML 報表。
-- **看得到子 agent 在做什麼**（選裝）：`agent-board` 看板常駐在輸入框上方，即時列出每個子 agent 的類型、模型、狀態、經過時間、token 與估計金額。
-- **回覆一眼看懂**（選裝）：`reply-detail` 讓回覆預設只講現況、你要做的、需要你決定的事；要細節時用看板的「⇄ 回覆：精簡／詳細」切換鍵，切到詳細後每則都寫詳細版。
+> **Agent = 模型 + Harness。** Chutora 不換模型，改的是模型外圍那一圈：誰來做、記得什麼、卡住時怎麼脫身。
+
+> A Claude Code plugin for tiered model delegation — Opus plans, Sonnet executes, Haiku retrieves and digests bulk output — plus handoff notes, source-cited memory, loop guards and a self-tuning harness. English documentation: [README.en.md](README.en.md).
+
+<a name="why"></a>
+
+## <img src="assets/icons/chute.svg" width="26" height="26" alt=""> 為什麼是 Chutora
+
+**目的**：用同樣的預算做更多事，長時間工作也不會越拉越貴、越來越亂；真的卡住時，有一條拉得到的繩子。
+
+| 常見困境 | 單用 Claude Code | 加上 Chutora |
+|---|---|---|
+| <img src="assets/icons/money.svg" width="18" height="18" alt=""> 所有事都用最貴的模型 | 讀 log、看截圖、改幾十個檔都付 Opus 的價 | Opus 只負責想和判斷，動手交給 Sonnet，大量讀取交給 Haiku |
+| <img src="assets/icons/scroll.svg" width="18" height="18" alt=""> 對話越拉越長 | 越後面越貴、越亂；一清空進度就沒了 | 超過 10 萬 token 先提醒寫交接筆記；壓縮、`/clear` 或隔天開新對話都自動接回 |
+| <img src="assets/icons/loop.svg" width="18" height="18" alt=""> AI 卡在同一個錯誤 | 反覆重試、一直燒 token | loop guard 提醒換方向；失敗依固定順序升級，不會無限重試 |
+| <img src="assets/icons/brain.svg" width="18" height="18" alt=""> 「之前好像講過」 | 每次都要重新解釋 | 記憶就是 Markdown，librarian 查回原文與出處，可以進 git、用 Obsidian 開 |
+| <img src="assets/icons/search.svg" width="18" height="18" alt=""> 結論可不可信 | 事實和推測混在一起 | evidence-analysis 把結論分成觀察、推論、未知，附出處 |
+| <img src="assets/icons/shield.svg" width="18" height="18" alt=""> 安全 | 要自己想到才會審 | security-review 靜態審查，security-test 只在授權的隔離環境動態測試 |
+| <img src="assets/icons/chart.svg" width="18" height="18" alt=""> 越用越順手 | 同樣的話每次都要多講一遍 | harness-tune 把教訓固化進 harness，記在 harness-lessons |
+| <img src="assets/icons/eyes.svg" width="18" height="18" alt=""> 錢花在哪 | 看不到 | usage-stats 量測報表，agent-board 即時看板 |
+
+**裝完就能用**：兩行指令，不用改你的 CLAUDE.md。進階設定一次只問一項，改設定前先備份；子 agent 回報完成前必須驗證，遇到岔路會停下來問你。
+
+<a name="demo"></a>
+
+### <img src="assets/icons/clapper.svg" width="22" height="22" alt=""> 40 秒看懂 Chutora
+
+<p align="center"><a href="assets/demo.mp4"><img src="assets/demo.gif" alt="Chutora 示意動畫：主對話 Opus 把工作派給 Sonnet 與 Haiku，只收回結論" width="100%"></a></p>
+<p align="center"><sub>示意動畫，不是實機錄影 · <a href="assets/demo.mp4">▶ 觀看完整 41 秒影片（中英字幕）</a></sub></p>
 
 ---
 
-## 功能總覽
+<a name="features"></a>
 
-依用途分成八類。「觸發」欄的 **自動** 表示裝好就會運作，不用下指令；**派工** 表示照平常講話，主對話會自己判斷要不要交給它；**指令** 表示你要叫它（plugin 安裝時寫成 `/smart-agent-route:<名稱>`，install.sh 安裝時直接 `/<名稱>`）；**選裝** 表示要另外安裝或設定。
+## <img src="assets/icons/compass.svg" width="26" height="26" alt=""> 功能總覽
+
+依用途分成八類。「觸發」欄的 **自動** 表示裝好就會運作，不用下指令；**派工** 表示照平常講話，主對話會自己判斷要不要交給它；**指令** 表示你要叫它（plugin 安裝時寫成 `/chutora:<名稱>`，install.sh 安裝時直接 `/<名稱>`）；**選裝** 表示要另外安裝或設定。
 
 ### 1. 分層派工：貴的模型只用在刀口上
 
@@ -93,7 +131,9 @@
 
 ---
 
-## 這解決什麼問題
+<a name="problem"></a>
+
+## <img src="assets/icons/puzzle.svg" width="26" height="26" alt=""> 這解決什麼問題
 
 用 Claude Code 一陣子，常會遇到兩件事：
 
@@ -106,27 +146,31 @@
 
 ---
 
-## 快速開始
+<a name="quick-start"></a>
+
+## <img src="assets/icons/rocket.svg" width="26" height="26" alt=""> 快速開始
 
 在 Claude Code 裡輸入：
 
 ```
-/plugin install smart-agent-route --marketplace Novie131/smart-agent-route
+/plugin install chutora --marketplace Novie131/chutora
 /reload-plugins
 ```
 
-（Claude Code 2.1.275 以前：先 `/plugin marketplace add Novie131/smart-agent-route`，再 `/plugin install smart-agent-route@smart-agent-route`。）
+（Claude Code 2.1.275 以前：先 `/plugin marketplace add Novie131/chutora`，再 `/plugin install chutora@chutora`。）
 
 裝完就能用。接著建議做兩件事：
 
 1. **主對話設成 Opus**：`/model opus`。plugin 不會自動改。
-2. **開啟完整功能**：執行 `/smart-agent-route:route-setup`，可以設定 context 狀態列、自動壓縮門檻、Haiku 版 Explore、`claude-memory/` 記憶庫。它一次只問一項，每項都說明做什麼、影響、怎麼還原，可以隨時略過；寫 `settings.json` 前會備份，已有的值不覆蓋。沒做的話，session 開始時會提醒你（最多 3 次）。
+2. **開啟完整功能**：執行 `/chutora:route-setup`，可以設定 context 狀態列、自動壓縮門檻、Haiku 版 Explore、`claude-memory/` 記憶庫。它一次只問一項，每項都說明做什麼、影響、怎麼還原，可以隨時略過；寫 `settings.json` 前會備份，已有的值不覆蓋。沒做的話，session 開始時會提醒你（最多 3 次）。
 
-context 長度提醒需要 `python3`，沒有的話會安靜停用。不想用 marketplace，見[其他安裝方式](#其他安裝方式)。
+context 長度提醒需要 `python3`，沒有的話會安靜停用。不想用 marketplace，見[其他安裝方式](#install)。
 
 ---
 
-## 裝完之後怎麼用
+<a name="usage"></a>
+
+## <img src="assets/icons/bubble.svg" width="26" height="26" alt=""> 裝完之後怎麼用
 
 照平常講話就好，主對話會自己判斷要不要派工：
 
@@ -139,7 +183,7 @@ context 長度提醒需要 `python3`，沒有的話會安靜停用。不想用 m
 | 「這個 API 新版怎麼設定」 | research skill 查外部資料，回答附來源，官方資料存進 `claude-memory/web/` |
 | 「交接一下」 | handoff skill 寫 `handoff.md`，之後可以 `/clear` |
 
-想強制指定某個 agent，用 `@agent-smart-agent-route:worker`。
+想強制指定某個 agent，用 `@agent-chutora:worker`。
 
 對話變長時（預設超過 10 萬 token）你會看到提醒，Claude 會先把目前進度寫進 `handoff.md`。之後不管是自動壓縮、`/clear` 還是隔天開新對話，交接筆記都會自動帶回來，不用重新解釋一次。
 
@@ -155,21 +199,26 @@ context 長度提醒需要 `python3`，沒有的話會安靜停用。不想用 m
 
 ---
 
-## 運作方式
+<a name="how-it-works"></a>
 
-```
-你 ──► 主對話(Opus)          ← 大門。理解、判斷、決定派給誰
-          │
-          ├──► worker(Sonnet)       ← 方向已定、動手做的事
-          │      └► worker-hard      ← worker 失敗後的升級
-          ├──► bulk(Haiku)          ← 大量讀取只要結論:圖片、長 log、網頁
-          ├──► librarian(Haiku)     ← 查知識庫。唯讀
-          ├──► harvester(Sonnet)    ← 挖歷史對話進知識庫。手動觸發
-          ├──► security-review(Sonnet) ← 靜態安全審查你自己的碼。唯讀
-          └──► security-test(Sonnet)   ← 授權動態測試你自己的 dev 環境
+## <img src="assets/icons/branch.svg" width="26" height="26" alt=""> 運作方式
 
-skill:handoff(交接筆記)、research(查外部資料並附來源)、usage-stats(量測 context 與子 agent 用量)、route-setup(一次性完整設定)、evidence-analysis(證據導向分析)、toolprune(工具修剪)、harness-tune(自我強化)
-hook :session 開始帶入分工慣例與記憶;context 過長時提醒;工具呼叫後偵測錯誤迴圈並提醒(loop guard)
+```mermaid
+flowchart LR
+  U([你]) --> O{{"主對話 · Opus<br/>理解、判斷、派工"}}
+  O --> W["worker · Sonnet<br/>動手實作，先驗證再回報"]
+  W -. 失敗才升級 .-> WH["worker-hard · Sonnet"]
+  O --> B["bulk · Haiku<br/>大量讀取，只回結論"]
+  O --> L["librarian · Haiku<br/>查記憶，唯讀"]
+  O --> HV["harvester · Sonnet<br/>挖歷史對話，手動觸發"]
+  O --> SR["security-review · Sonnet<br/>靜態審查，唯讀"]
+  O --> ST["security-test · Sonnet<br/>授權動態測試"]
+  L --- M[("claude-memory<br/>MEMORY.md · handoff.md · kb/ · web/")]
+  HK[["hooks<br/>帶入慣例與記憶 · context 提醒 · loop guard"]] -.-> O
+  classDef lead fill:#FF6A26,stroke:#C2410C,color:#fff
+  classDef mem fill:#1B2D52,stroke:#0E1A31,color:#fff
+  class O lead
+  class M,HK mem
 ```
 
 | 元件 | 模型 | 做什麼 |
@@ -199,7 +248,7 @@ hook :session 開始帶入分工慣例與記憶;context 過長時提醒;工具�
 1. **Context 隔離**（最大的一筆，而且是複利）。在主對話裡跑 30 次工具呼叫，那 30 份結果會被反覆計費到對話結束；派給子 agent 的話，主對話只收到一份摘要。派工要整包派，不要一件一件派，因為每次啟動子 agent 都要重付一次系統提示與記憶注入。
 2. **模型分層。** 有用，但是線性的：省的比例大致等於價差。
 3. **`effort` 等級。** worker 用 `medium`，失敗才升級到 worker-hard（`high`）；librarian 用 `low`。
-4. **主對話別開太久。** 隔離只管得到工具呼叫，管不到對話本身變長，所以 plugin 另外盯著長度，超過門檻就提醒寫交接筆記（見[進階設定](#進階設定)）。話題告一段落時，換新對話或 `/clear` 仍然最省。
+4. **主對話別開太久。** 隔離只管得到工具呼叫，管不到對話本身變長，所以 plugin 另外盯著長度，超過門檻就提醒寫交接筆記（見[進階設定](#advanced)）。話題告一段落時，換新對話或 `/clear` 仍然最省。
 
 ### 失敗怎麼辦
 
@@ -209,7 +258,9 @@ hook :session 開始帶入分工慣例與記憶;context 過長時提醒;工具�
 
 ---
 
-## 進階設定
+<a name="advanced"></a>
+
+## <img src="assets/icons/wrench.svg" width="26" height="26" alt=""> 進階設定
 
 ### context 提醒與自動壓縮
 
@@ -218,7 +269,7 @@ hook :session 開始帶入分工慣例與記憶;context 過長時提醒;工具�
 - 有設 `autoCompactWindow` 時，提醒只會告訴你約多少 k 會自動壓縮、壓縮後會帶回交接筆記；沒設才給可複製的指令：告一段落用 `/clear`、做到一半用 `/compact` 並指定重點、後半段是除錯雜訊就用 `/rewind` 局部摘要。
 - 每次壓縮、`/clear`、新 session 開始時，SessionStart hook 自動帶入 `handoff.md`：專案有 `claude-memory/` 就用它，否則用 transcript 旁 auto memory 目錄的 `handoff.md`（Claude Code 只會自動帶入 auto memory 的 MEMORY.md 索引，不會帶 handoff.md）。
 
-建議在 `~/.claude/settings.json` 把自動壓縮當保險（plugin 不能代設，`/smart-agent-route:route-setup` 會幫你安全地寫入）：
+建議在 `~/.claude/settings.json` 把自動壓縮當保險（plugin 不能代設，`/chutora:route-setup` 會幫你安全地寫入）：
 
 ```
 "autoCompactWindow": 153000
@@ -228,10 +279,10 @@ hook :session 開始帶入分工慣例與記憶;context 過長時提醒;工具�
 
 ### 狀態列（選用）
 
-顯示 `模型 │ ctx 95k │ 提醒 100k │ 壓縮 120k`，壓縮點讀自 `autoCompactWindow`（沒設就不顯示）。plugin 不能設定主狀態列：plugin 安裝的使用者請用 `/smart-agent-route:route-setup`，它會把檔案放到固定位置；install.sh 安裝的用 `bash install.sh --with-statusline`，或手動貼進 settings.json：
+顯示 `模型 │ ctx 95k │ 提醒 100k │ 壓縮 120k`，壓縮點讀自 `autoCompactWindow`（沒設就不顯示）。plugin 不能設定主狀態列：plugin 安裝的使用者請用 `/chutora:route-setup`，它會把檔案放到固定位置；install.sh 安裝的用 `bash install.sh --with-statusline`，或手動貼進 settings.json：
 
 ```json
-"statusLine": { "type": "command", "command": "python3 ~/.claude/hooks/smart-agent-route/statusline.py" }
+"statusLine": { "type": "command", "command": "python3 ~/.claude/hooks/chutora/statusline.py" }
 ```
 
 ### 子 agent 看板與回覆模式切換鍵（選用）
@@ -243,7 +294,7 @@ hook :session 開始帶入分工慣例與記憶;context 過長時提醒;工具�
 | `agent-board` | 常駐面板列出每個子 agent 的類型、模型、狀態、經過時間、token 與估計金額（API 牌價），上方顯示合計。可以縮小成一行摘要，用 `/agent-board` 開關；底部有「⇄ 回覆：精簡／詳細」切換鍵 |
 | `reply-detail` | 在 system prompt 注入回覆格式：預設精簡三段（現況／你要做的／需要你決定或提供），只對主對話生效。看板的切換鍵切到「詳細」後，之後每則回覆都是詳細版，直到切回精簡；只要單次詳細版時，直接輸入「詳細說明」就會把上一則改寫成詳細版 |
 
-安裝：用 plugin 市集的話是 `/plugin install agent-board@smart-agent-route`、`/plugin install reply-detail@smart-agent-route`；用 install.sh 的話加 `--with-agent-board`、`--with-reply-detail`（VS Code 不能帶 `--plugin-dir`，腳本會把目錄加進 `settings.json` 的 `env.CLAUDE_CODE_PLUGIN_DIRS`）。裝完在 VS Code 執行 Developer: Reload Window。
+安裝：用 plugin 市集的話是 `/plugin install agent-board@chutora`、`/plugin install reply-detail@chutora`；用 install.sh 的話加 `--with-agent-board`、`--with-reply-detail`（VS Code 不能帶 `--plugin-dir`，腳本會把目錄加進 `settings.json` 的 `env.CLAUDE_CODE_PLUGIN_DIRS`）。裝完在 VS Code 執行 Developer: Reload Window。
 
 agent-board 的設定（plugin 的 userConfig，預設都開）：`autoOpen` 子 agent 啟動時自動開面板、`persistent` 對話一開始就開且不自動收起、`detailButton` 看板底部的回覆模式切換鍵（名稱沿用舊版）。切換鍵切到詳細時，看板會在你送出的每則訊息附上「這一輪寫詳細版」的要求；reload 後回到精簡。
 
@@ -255,7 +306,9 @@ agent-board 的設定（plugin 的 userConfig，預設都開）：`autoOpen` 子
 
 ---
 
-## 記憶
+<a name="memory"></a>
+
+## <img src="assets/icons/brain.svg" width="26" height="26" alt=""> 記憶
 
 ```
 <你的資料夾>/claude-memory/
@@ -296,7 +349,9 @@ agent-board 的設定（plugin 的 userConfig，預設都開）：`autoOpen` 子
 
 ---
 
-## 設計取捨
+<a name="tradeoffs"></a>
+
+## <img src="assets/icons/scale.svg" width="26" height="26" alt=""> 設計取捨
 
 ### 這是 RAG，只是不用向量
 
@@ -318,9 +373,11 @@ agent-board 的設定（plugin 的 userConfig，預設都開）：`autoOpen` 子
 
 ---
 
-## 其他安裝方式
+<a name="install"></a>
 
-不想用 marketplace 的話，repo 內附 `install.sh`，或直接 `claude --plugin-dir ./plugins/smart-agent-route`。
+## <img src="assets/icons/box.svg" width="26" height="26" alt=""> 其他安裝方式
+
+不想用 marketplace 的話，repo 內附 `install.sh`，或直接 `claude --plugin-dir ./plugins/chutora`。
 
 ```
 bash install.sh                    # 複製安裝(agent、skill、hook 放進 ~/.claude/,沒有命名空間前綴;重跑即更新)
@@ -335,22 +392,24 @@ bash install.sh --with-reply-detail  # 另外載入回覆格式 mod(同上)
 
 注意事項：
 
-- 這種模式下名稱沒有命名空間：agent 是 `worker`，skill 是 `/handoff`（plugin 安裝則是 `smart-agent-route:worker`）。
-- 裝了哪些東西記在 `~/.claude/.smart-agent-route-installed`。內容完全相同的既有檔案會併入清單；內容不同的（你自己的）不會覆蓋，並給警告。
+- 這種模式下名稱沒有命名空間：agent 是 `worker`，skill 是 `/handoff`（plugin 安裝則是 `chutora:worker`）。
+- 裝了哪些東西記在 `~/.claude/.chutora-installed`。內容完全相同的既有檔案會併入清單；內容不同的（你自己的）不會覆蓋，並給警告。
 - `--with-statusline` 可與預設的複製模式或 `--link` 併用，不能與 `--agents-only`、`--uninstall` 併用。它只動 `settings.json` 的 `statusLine` 這個 key：檔案不存在就建立，已有 `statusLine` 絕不覆蓋（只印出建議片段），其餘情況寫入前先備份成 `settings.json.bak-<timestamp>`。JSON 壞掉或沒有 python3 時什麼都不做。
 - `--with-agent-board`、`--with-reply-detail` 的限制同 `--with-statusline`，兩者可以同時使用。它們只動 `env.CLAUDE_CODE_PLUGIN_DIRS`：已有的路徑保留，寫入前先備份；`--uninstall` 只移除自己加的路徑。
 - install.sh 不會改你 `settings.json` 裡的 hooks，結尾會印出一段片段，由你自己併進 `"hooks"`。之後執行 `/route-setup` 取得完整功能。
 
-更多說明見 [docs/部署安裝.md](docs/部署安裝.md)與 [plugins/smart-agent-route/INSTALL.md](plugins/smart-agent-route/INSTALL.md)（英文版：[INSTALL.en.md](plugins/smart-agent-route/INSTALL.en.md)）。
+更多說明見 [docs/部署安裝.md](docs/部署安裝.md)與 [plugins/chutora/INSTALL.md](plugins/chutora/INSTALL.md)（英文版：[INSTALL.en.md](plugins/chutora/INSTALL.en.md)）。
 
 ---
 
-## 目錄
+<a name="layout"></a>
+
+## <img src="assets/icons/folder.svg" width="26" height="26" alt=""> 目錄
 
 ```
-smart-agent-route/
+chutora/
 ├── .claude-plugin/marketplace.json   ← 市集目錄
-├── plugins/smart-agent-route/            ← plugin 本體
+├── plugins/chutora/            ← plugin 本體
 │   ├── .claude-plugin/plugin.json
 │   ├── agents/                       ← worker / worker-hard / bulk / librarian / harvester / security-review / security-test
 │   ├── skills/                       ← handoff / research / usage-stats / route-setup / evidence-analysis / security-review / security-test / toolprune / harness-tune
@@ -368,16 +427,36 @@ smart-agent-route/
 
 ---
 
-## 狀態
+<a name="roadmap"></a>
 
-**v0.10.0 — 早期版本。** 0.7.0 以前叫 tiered-agents，升級請先移除舊版（見 [docs/部署安裝.md](docs/部署安裝.md#從-tiered-agents070-以前升級)）。 context 提醒 hook、handoff、bulk、Explore 覆蓋版移植自作者的個人設定：hook 已在真實對話中觸發、Explore 與 bulk 已確認跑在 Haiku，但都還在驗證期。worker-hard 升級鏈、research skill 與 plugin 形式的 hook 尚未實際使用。agent-board 與 reply-detail 已在 VS Code 擴充 2.1.301 實測過看板；常駐模式、看板裡的按鈕與回覆格式注入還在驗證。
+## <img src="assets/icons/flag.svg" width="26" height="26" alt=""> 路線圖
+
+| 狀態 | 項目 | 說明 |
+|---|---|---|
+| <img src="assets/icons/next.svg" width="18" height="18" alt=""> 下一步 | **卡關救援 `/chutora:rescue`**（招牌功能） | AI 反覆失敗、越修越亂時一鍵救援：收集證據、停損、給你兩三條脫困路線選、把教訓記下來，下次不再卡在同一處 |
+| <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 程式碼地圖與影響範圍 | 產生精簡的符號索引存進記憶，改函式前先列出會受影響的地方；檔案改了會提醒索引過期 |
+| <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 危險操作守門 | 刪檔、force push、動 production 這類操作一律先確認 |
+| <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 路由從結果學習 | 記下每次派工的結果，整理成委派表的修正建議，你確認才改 |
+| <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 健檢 | 一個指令跑完測試缺口、過期記憶、沒用到的工具、安全快掃 |
+
+所有新功能都照同一個原則：**輕量、手動、可逆**，不為了自動化多燒 token。
+
+**吸收過的開源方法論**：rea（證據導向分析）、strix（安全審查與測試）、TokenEconomizer（省 token）、[harness2](https://github.com/google-research/harness2)（自我強化）；規劃中的項目參考 [ruflo](https://github.com/ruvnet/ruflo) 與 [codegraph](https://github.com/colbymchenry/codegraph)。Chutora 只取方法論、自己實作，不含它們的程式碼。
+
+---
+
+<a name="status"></a>
+
+## <img src="assets/icons/pin.svg" width="26" height="26" alt=""> 狀態
+
+**v0.11.0 — 早期版本。** 0.10.0 以前叫 smart-agent-route、0.7.0 以前叫 tiered-agents，升級請先移除舊版（見 [docs/部署安裝.md](docs/部署安裝.md#從-smart-agent-route0100-以前升級)）。 context 提醒 hook、handoff、bulk、Explore 覆蓋版移植自作者的個人設定：hook 已在真實對話中觸發、Explore 與 bulk 已確認跑在 Haiku，但都還在驗證期。worker-hard 升級鏈、research skill 與 plugin 形式的 hook 尚未實際使用。agent-board 與 reply-detail 已在 VS Code 擴充 2.1.301 實測過看板；常駐模式、看板裡的按鈕與回覆格式注入還在驗證。
 
 已知會需要調整的地方：
 
-- 委派靠 `description` 匹配，不是保證。要確定就 `@agent-smart-agent-route:worker`
+- 委派靠 `description` 匹配，不是保證。要確定就 `@agent-chutora:worker`
 - hook 在 Cowork 的行為未驗證
 - `MEMORY.md` 會腐化，需要你定期整理（超過 150 行即是訊號）
-- Haiku 執行層預設留空，見 `plugins/smart-agent-route/skills/route-setup/templates/runner.md.example` 的啟用條件
+- Haiku 執行層預設留空，見 `plugins/chutora/skills/route-setup/templates/runner.md.example` 的啟用條件
 - `harvester` 只讀得到本機 session
 - mod 的 API 標示為搶先體驗（early access），Claude Code 改版時可能要跟著調整
 
@@ -385,6 +464,8 @@ smart-agent-route/
 
 ---
 
-## 授權
+<a name="license"></a>
+
+## <img src="assets/icons/doc.svg" width="26" height="26" alt=""> 授權
 
 MIT

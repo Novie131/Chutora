@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-HOOKS = ROOT / "plugins" / "smart-agent-route" / "hooks"
+HOOKS = ROOT / "plugins" / "chutora" / "hooks"
 CONTEXT_CHECK = HOOKS / "context-check.py"
 SESSION_START = HOOKS / "session-start.sh"
 GUIDE = HOOKS / "guide.md"
@@ -377,13 +377,13 @@ class SessionStartTest(SessionStartBase):
         self.assertEqual(d["hookSpecificOutput"]["additionalContext"].strip(),
                          GUIDE.read_text().strip())
         self.assertIn("/route-setup", d["systemMessage"])
-        self.assertNotIn("smart-agent-route:route-setup", d["systemMessage"])
+        self.assertNotIn("chutora:route-setup", d["systemMessage"])
         self.assertEqual(self.shown(), "1")
 
     def test_plugin_root_uses_namespaced_command(self):
         r = self.run_hook(plugin_root=HOOKS.parent)
         d = json.loads(r.stdout)
-        self.assertIn("/smart-agent-route:route-setup", d["systemMessage"])
+        self.assertIn("/chutora:route-setup", d["systemMessage"])
 
     def test_json_includes_memory(self):
         mem = self.proj / "claude-memory"
@@ -428,7 +428,7 @@ class SessionStartTest(SessionStartBase):
         self.assertEqual(got.rstrip("\n"), text.replace("\r", "\r").rstrip("\n"))
 
     def test_statusline_sync_in_plugin_mode(self):
-        dst = self.home / ".claude" / "smart-agent-route" / "statusline"
+        dst = self.home / ".claude" / "chutora" / "statusline"
         dst.mkdir(parents=True)
         (dst / "statusline.py").write_text("old\n")
         r = self.run_hook(plugin_root=HOOKS.parent)
@@ -437,7 +437,7 @@ class SessionStartTest(SessionStartBase):
         self.assertEqual((dst / "compact.py").read_text(), COMPACT.read_text())
 
     def test_statusline_sync_skips_symlink(self):
-        dst = self.home / ".claude" / "smart-agent-route" / "statusline"
+        dst = self.home / ".claude" / "chutora" / "statusline"
         dst.mkdir(parents=True)
         target = self.tmp / "mine.py"
         target.write_text("mine\n")
@@ -448,8 +448,8 @@ class SessionStartTest(SessionStartBase):
 
     def test_no_sync_without_target_dir_or_plugin_root(self):
         self.run_hook(plugin_root=HOOKS.parent)
-        self.assertFalse((self.home / ".claude" / "smart-agent-route").exists())
-        dst = self.home / ".claude" / "smart-agent-route" / "statusline"
+        self.assertFalse((self.home / ".claude" / "chutora").exists())
+        dst = self.home / ".claude" / "chutora" / "statusline"
         dst.mkdir(parents=True)
         self.run_hook()  # 非 plugin 模式
         self.assertEqual(list(dst.iterdir()), [])

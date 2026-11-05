@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-POST_TOOL = ROOT / "plugins" / "smart-agent-route" / "hooks" / "post-tool.py"
+POST_TOOL = ROOT / "plugins" / "chutora" / "hooks" / "post-tool.py"
 
 
 class PostToolTest(unittest.TestCase):

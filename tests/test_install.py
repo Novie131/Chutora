@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 INSTALL = ROOT / "install.sh"
-SRC = ROOT / "plugins" / "smart-agent-route"
+SRC = ROOT / "plugins" / "chutora"
 AGENTS = sorted(p.name for p in (SRC / "agents").glob("*.md"))
 SKILLS = sorted(p.name for p in (SRC / "skills").iterdir() if p.is_dir())
 
@@ -20,7 +20,7 @@ class InstallTest(unittest.TestCase):
         self.home = self.tmp / "home"
         self.home.mkdir()
         self.claude = self.home / ".claude"
-        self.manifest = self.claude / ".smart-agent-route-installed"
+        self.manifest = self.claude / ".chutora-installed"
 
     def run_install(self, *args):
         env = os.environ.copy()
@@ -58,8 +58,8 @@ class InstallTest(unittest.TestCase):
             self.assertTrue((self.claude / "skills" / s).is_dir())
             self.assertFalse((self.claude / "skills" / s).is_symlink())
             self.assertIn(f"skills/{s}", lines)
-        self.assertTrue((self.claude / "hooks" / "smart-agent-route" / "context-check.py").is_file())
-        self.assertIn("hooks/smart-agent-route", lines)
+        self.assertTrue((self.claude / "hooks" / "chutora" / "context-check.py").is_file())
+        self.assertIn("hooks/chutora", lines)
 
     # b
     def test_rerun_restores(self):
@@ -79,11 +79,18 @@ class InstallTest(unittest.TestCase):
 
     # d
     def test_legacy_location_removed(self):
-        legacy = self.user_file("skills/smart-agent-route/old.md")
+        legacy = self.user_file("skills/chutora/old.md")
         self.run_install()
         self.assertFalse(legacy.parent.exists())
 
     # e
+    def test_legacy_smart_agent_route_warned(self):
+        old = self.claude / "hooks" / "smart-agent-route"
+        old.mkdir(parents=True)
+        r = self.run_install()
+        self.assertIn("smart-agent-route", r.stdout + r.stderr)
+        self.assertTrue(old.exists())  # 只提醒,不自動刪
+
     def test_uninstall_only_manifest_items(self):
         self.run_install()
         mine = self.user_file("agents/mine.md")
@@ -93,7 +100,7 @@ class InstallTest(unittest.TestCase):
             self.assertFalse((self.claude / "agents" / a).exists())
         for s in SKILLS:
             self.assertFalse((self.claude / "skills" / s).exists())
-        self.assertFalse((self.claude / "hooks" / "smart-agent-route").exists())
+        self.assertFalse((self.claude / "hooks" / "chutora").exists())
         self.assertTrue(mine.exists())
         self.assertTrue(skill.exists())
         self.assertFalse(self.manifest.exists())
@@ -142,7 +149,7 @@ class InstallTest(unittest.TestCase):
         for s in SKILLS:
             p = self.claude / "skills" / s
             self.assertEqual(os.readlink(p), str(SRC / "skills" / s))
-        self.assertEqual(os.readlink(self.claude / "hooks" / "smart-agent-route"),
+        self.assertEqual(os.readlink(self.claude / "hooks" / "chutora"),
                          str(SRC / "hooks"))
         self.run_install("--link")  # 重跑不出錯
         self.assertEqual(mine.read_text(), "mine\n")
@@ -161,7 +168,7 @@ class InstallTest(unittest.TestCase):
             self.assertFalse((self.claude / "agents" / a).is_symlink())
         for s in SKILLS:
             self.assertFalse((self.claude / "skills" / s).is_symlink())
-        self.assertFalse((self.claude / "hooks" / "smart-agent-route").is_symlink())
+        self.assertFalse((self.claude / "hooks" / "chutora").is_symlink())
         self.assertTrue(other_link.is_symlink())
         self.assertTrue(other_target.exists())
         self.assertTrue(mine.exists())
@@ -178,7 +185,7 @@ class InstallTest(unittest.TestCase):
         self.assertTrue(all(l.startswith("agents/") for l in self.manifest_lines()))
 
     # statusline
-    CMD = "python3 ~/.claude/hooks/smart-agent-route/statusline.py"
+    CMD = "python3 ~/.claude/hooks/chutora/statusline.py"
 
     def baks(self):
         return sorted(self.claude.glob("settings.json.bak-*"))
@@ -267,10 +274,10 @@ class InstallTest(unittest.TestCase):
 
     def test_agent_board_copy(self):
         self.run_install("--with-agent-board")
-        dest = self.claude / "smart-agent-route" / "agent-board"
+        dest = self.claude / "chutora" / "agent-board"
         self.assertTrue(dest.is_dir())
         self.assertFalse(dest.is_symlink())
-        self.assertIn("smart-agent-route/agent-board", self.manifest_lines())
+        self.assertIn("chutora/agent-board", self.manifest_lines())
         self.assertEqual(self.plugin_dirs(), str(dest))
         self.run_install("--with-agent-board")
         self.assertEqual(self.plugin_dirs(), str(dest))
@@ -281,7 +288,7 @@ class InstallTest(unittest.TestCase):
 
     def test_agent_board_uninstall_keeps_other_paths(self):
         self.run_install("--with-agent-board")
-        dest = self.claude / "smart-agent-route" / "agent-board"
+        dest = self.claude / "chutora" / "agent-board"
         p = self.claude / "settings.json"
         data = json.loads(p.read_text())
         data["env"][self.VAR] = f"/x/other:{dest}"
@@ -325,10 +332,10 @@ class InstallTest(unittest.TestCase):
 
     def test_reply_detail_copy(self):
         self.run_install("--with-reply-detail")
-        dest = self.claude / "smart-agent-route" / "reply-detail"
+        dest = self.claude / "chutora" / "reply-detail"
         self.assertTrue(dest.is_dir())
         self.assertFalse(dest.is_symlink())
-        self.assertIn("smart-agent-route/reply-detail", self.manifest_lines())
+        self.assertIn("chutora/reply-detail", self.manifest_lines())
         self.assertEqual(self.plugin_dirs(), str(dest))
         self.run_install("--uninstall")
         self.assertFalse(dest.exists())
@@ -344,7 +351,7 @@ class InstallTest(unittest.TestCase):
 
     def test_both_mods_copy(self):
         self.run_install("--with-agent-board", "--with-reply-detail")
-        base = self.claude / "smart-agent-route"
+        base = self.claude / "chutora"
         self.assertEqual(self.plugin_dirs(), f"{base / 'agent-board'}:{base / 'reply-detail'}")
         self.run_install("--uninstall")
         self.assertFalse((base / "agent-board").exists())
@@ -354,8 +361,8 @@ class InstallTest(unittest.TestCase):
 
     def test_reply_detail_uninstall_keeps_other_paths(self):
         self.run_install("--with-agent-board", "--with-reply-detail")
-        dest = self.claude / "smart-agent-route" / "reply-detail"
-        board = self.claude / "smart-agent-route" / "agent-board"
+        dest = self.claude / "chutora" / "reply-detail"
+        board = self.claude / "chutora" / "agent-board"
         p = self.claude / "settings.json"
         data = json.loads(p.read_text())
         data["env"][self.VAR] = f"/x/other:{board}:{dest}"

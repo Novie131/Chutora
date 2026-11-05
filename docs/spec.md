@@ -1,6 +1,6 @@
-# smart-agent-route 架構 spec
+# chutora 架構 spec
 
-> 英文文件（README.en.md、plugins/smart-agent-route/INSTALL.en.md）是繁中版的翻譯；改 README.md 或 INSTALL.md 時要同步更新這兩份英文版。
+> 英文文件（README.en.md、plugins/chutora/INSTALL.en.md）是繁中版的翻譯；改 README.md 或 INSTALL.md 時要同步更新這兩份英文版。
 
 ## 目標
 
@@ -107,7 +107,7 @@ worker 從 0.6 的 `low` 改為 `medium`:執行層做錯由主對話收拾的成
 ## 目錄結構
 
 ```
-smart-agent-route/
+chutora/
 ├── .claude-plugin/plugin.json    ← 只有 manifest 放這裡
 ├── agents/
 │   ├── worker.md
@@ -137,13 +137,13 @@ smart-agent-route/
 
 `agents/`、`skills/`、`hooks/` 必須在 plugin 根目錄,**不可放進 `.claude-plugin/`**。
 
-plugin 內的元件都帶命名空間:agent 是 `smart-agent-route:worker`,skill 是 `/smart-agent-route:handoff`。
+plugin 內的元件都帶命名空間:agent 是 `chutora:worker`,skill 是 `/chutora:handoff`。
 
 `plugin.json`:
 
 ```json
 {
-  "name": "smart-agent-route",
+  "name": "chutora",
   "description": "分層委派架構:Opus 規劃、Sonnet 執行、Haiku 檢索與大量讀取,搭配 context 長度提醒與交接筆記…",
   "version": "0.8.0"
 }
@@ -358,7 +358,7 @@ worker、worker-hard、bulk 的回報前兩行固定:
 - **記憶退回 auto memory。** 沒有 `claude-memory/` 時：librarian 在 `claude-memory/` 之後搜 auto memory 目錄（`~/.claude/projects/<專案路徑把 / 換成 ->/memory/`）；harvester 寫入退回該目錄（筆記放 `kb/`，索引行寫進它的 `MEMORY.md`，保持精簡）；research 存到其 `web/`，`MEMORY.md` 只加一行指向 `web/INDEX.md`（取代原本的「不存檔」）。session-start.sh 沒有 `claude-memory/` 時**不**帶入 auto memory 的 `MEMORY.md`，因為 Claude Code 本來就會自己帶。
 - **`route-setup` skill**（`disable-model-invocation: true`，只能由使用者呼叫）。逐項說明「做什麼 → 影響 → 怎麼還原」，一次問一項、可略過：記憶、Haiku Explore、`autoCompactWindow` 153000、狀態列、模型（只回報不強改）。結束寫完成標記（全部略過也寫）。
 - **`apply_settings.py`**（標準函式庫）是唯一寫 `settings.json` 的路徑：只碰 `statusLine` 與 `autoCompactWindow`；已有值不覆蓋（結束碼 3）；JSON 壞掉或最外層不是物件不寫（結束碼 2）；寫前備份 `settings.json.bak-<時間>`；暫存檔＋`os.replace` 整份寫回；檔案不存在就建立。`install.sh --with-statusline` 也呼叫它。工具呼叫被權限擋下時，skill 不重試不繞路，把完整指令交給使用者以 `! <指令>` 自己執行。
-- **狀態列檔案放固定位置。** user settings 不會展開 `${CLAUDE_PLUGIN_ROOT}`，而快取目錄含版本號、升級即失效，所以 plugin 安裝時把 `statusline.py`、`compact.py` 複製到 `~/.claude/smart-agent-route/statusline/`；session-start.sh 之後在該目錄存在時自動同步（內容不同才複製，目的地是符號連結不動）。
+- **狀態列檔案放固定位置。** user settings 不會展開 `${CLAUDE_PLUGIN_ROOT}`，而快取目錄含版本號、升級即失效，所以 plugin 安裝時把 `statusline.py`、`compact.py` 複製到 `~/.claude/chutora/statusline/`；session-start.sh 之後在該目錄存在時自動同步（內容不同才複製，目的地是符號連結不動）。
 - **session-start.sh 的提示。** 標記檔 `${CLAUDE_PLUGIN_DATA:-$HOME/.claude/hooks}/.route-setup-done` 不存在且 `.route-setup-shown` 計數 < 3 時，輸出 JSON：`systemMessage` 一句話提示 route-setup，原本的全部文字放 `hookSpecificOutput.additionalContext`，並計數加 1；其他情況照舊輸出純文字。只用 sh 與 awk，JSON 跳脫 `\`、`"`、換行、tab 與其他控制字元，任何錯誤安靜結束。`hooks.json` 不新增 hook。
 - **不採用 plugin settings 的 `agent` 鍵。** 它會把使用者所有對話的主 agent 換成 plugin 指定的那個，副作用遠大於「少打一個指令」的好處。
 - **不自動寫 `settings.json`。** plugin 無法安全地代使用者改全域設定；一律經使用者同意，且 33k buffer 只是作者機器的實測值，需使用者用 `/context` 確認。
@@ -366,7 +366,7 @@ worker、worker-hard、bulk 的回報前兩行固定:
 ## 已知限制
 
 - plugin 跨對話,記憶跟著資料夾走。Cowork 忘了連接資料夾等於失憶。
-- 委派靠 description 匹配,非保證。要確定用 `@agent-smart-agent-route:worker`。
+- 委派靠 description 匹配,非保證。要確定用 `@agent-chutora:worker`。
 - hook 在 Cowork 是否執行、`CLAUDE_PROJECT_DIR` 是否指向連接資料夾,未驗證。
 - 使用者若已在 `~/.claude/` 自設同類 hook 或 CLAUDE.md 分工規則,會重複提醒。
 - `MEMORY.md` 會腐化,需定期整理。超過 150 行或出現已不成立的敘述即是訊號。

@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCRIPT = os.path.join(ROOT, "plugins", "smart-agent-route", "skills", "usage-stats", "usage_stats.py")
+SCRIPT = os.path.join(ROOT, "plugins", "chutora", "skills", "usage-stats", "usage_stats.py")
 
 
 def rec(mid, rid, ctx, model="claude-opus-5-5", ts="2026-10-10T01:00:00Z", side=False, out=10):
@@ -41,7 +41,7 @@ class UsageStatsTest(unittest.TestCase):
               [rec("s1", "q1", 1000, model="claude-opus-5-5", side=True),
                rec("s2", "q2", 1000, model="claude-haiku-5-5", side=True)])
         with open(os.path.join(p, "s1", "subagents", "agent-x.meta.json"), "w") as f:
-            json.dump({"agentType": "smart-agent-route:worker"}, f)
+            json.dump({"agentType": "chutora:worker"}, f)
         write(os.path.join(p, "s1", "subagents", "agent-y.jsonl"),
               [rec("s3", "q3", 1000, model="claude-haiku-5-5", side=True)])
         write(os.path.join(p, "s2.jsonl"), [rec("m4", "r4", 300000)])
@@ -81,8 +81,8 @@ class UsageStatsTest(unittest.TestCase):
     def test_agent_type_split(self):
         out = self.run_script("--project", "alpha")
         lines = out.splitlines()
-        self.assertTrue(any("smart-agent-route:worker" in l and "claude-opus-5-5" in l for l in lines))
-        self.assertTrue(any("smart-agent-route:worker" in l and "claude-haiku-5-5" in l for l in lines))
+        self.assertTrue(any("chutora:worker" in l and "claude-opus-5-5" in l for l in lines))
+        self.assertTrue(any("chutora:worker" in l and "claude-haiku-5-5" in l for l in lines))
         self.assertTrue(any("(未知)" in l and "claude-haiku-5-5" in l for l in lines))
         self.assertIn("子 agent 呼叫比例：3/7", out)
         self.assertIn("1/2", out)  # 有派子 agent 的 session：s1 / (s1, s2)
