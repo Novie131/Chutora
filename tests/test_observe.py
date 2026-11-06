@@ -28,7 +28,8 @@ class ObserveTest(unittest.TestCase):
 
     def env(self, extra=None):
         e = dict(os.environ, HOME=str(self.home), CLAUDE_PROJECT_DIR=str(self.proj), CHUTORA_LANG="zh")
-        for k in ("CHUTORA_OBSERVE", "CHUTORA_OBSERVE_MAX_MB"):
+        for k in ("CHUTORA_OBSERVE", "CHUTORA_OBSERVE_MAX_MB", "CHUTORA_OBSERVE_PRIVACY", "CHUTORA_TRIM",
+                  "CHUTORA_MCP_TRIM", "CHUTORA_MCP_TRIM_EXCLUDE", "CHUTORA_MODE"):
             e.pop(k, None)
         e.update(extra or {})
         return e
@@ -140,6 +141,98 @@ class ObserveTest(unittest.TestCase):
         sig = [r["signal"] for r in self.obs()]
         self.assertEqual(sig, ["guard_ask", "tool_ok"])
         self.assertEqual(self.obs()[0]["rules"], ["git-reset-hard"])
+
+    # ---------------------------------------------------------------- 隱私開關
+    def test_privacy_normal_keeps_masked_160(self):
+        p = "不對，不是這樣，key=sk-ant-REALSECRETVALUE123456 " + "細節" * 200
+        self.hook({"hook_event_name": "UserPromptSubmit", "prompt": p})
+        rec = self.obs()[0]
+        self.assertEqual(rec["signal"], "user_correction")
+        self.assertLessEqual(len(rec["summary"]), 160)
+        self.assertTrue(rec["summary"].startswith("不對"))
+        self.assertNotIn("REALSECRETVALUE", json.dumps(rec, ensure_ascii=False))
+
+    def test_privacy_strict_env_and_file(self):
+        secret = "不對，我不是要這個，改 billing 模組"
+        self.hook({"hook_event_name": "UserPromptSubmit", "prompt": secret}, env={"CHUTORA_OBSERVE_PRIVACY": "strict"})
+        cfg = self.home / ".claude" / "chutora"
+        cfg.mkdir(parents=True, exist_ok=True)
+        (cfg / "observe-privacy").write_text("strict\n")
+        self.hook({"hook_event_name": "UserPromptSubmit", "prompt": "選 B"})
+        self.hook({"hook_event_name": "PostToolUse", "tool_name": "AskUserQuestion",
+                  "tool_input": {"questions": [{"question": "範圍？"}]},
+                  "tool_response": {"answers": {"範圍？": "只改 billing 文件"}}})
+        recs = self.obs()
+        self.assertEqual([r["signal"] for r in recs], ["user_correction", "user_choice", "user_choice"])
+        self.assertEqual(recs[0]["chars"], len(secret))
+        text = json.dumps(recs, ensure_ascii=False)
+        self.assertNotIn("billing", text)
+        self.assertNotIn("選 B", text)
+        for r in recs:
+            self.assertNotIn("summary", r)
+            self.assertNotIn("match", r)
+        # 環境變數 normal 優先於檔案
+        self.hook({"hook_event_name": "UserPromptSubmit", "prompt": secret}, env={"CHUTORA_OBSERVE_PRIVACY": "normal"})
+        self.assertIn("billing", self.obs()[-1]["summary"])
+
+    # ---------------------------------------------------------------- 被瘦身、重讀訊號
+    def test_trimmed_signal_bash_and_mcp(self):
+        noisy = "\n".join(f"npm http fetch GET 200 https://registry.npmjs.org/pkg-{i} {i}ms (cache miss)" for i in range(400))
+        out = self.hook({"hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_use_id": "toolu_t1",
+                         "tool_input": {"command": "npm install --loglevel=http"},
+                         "tool_response": {"stdout": noisy + "\nadded 120 packages in 3s", "stderr": ""}},
+                        script=HOOKS / "trim.py")
+        self.assertIn("updatedToolOutput", out)
+        big = json.dumps([{"id": i, "name": f"item {i}", "note": None} for i in range(300)])
+        out2 = self.hook({"hook_event_name": "PostToolUse", "tool_name": "mcp__db__query", "tool_use_id": "toolu_t2",
+                          "tool_input": {"sql": "select"}, "tool_response": [{"type": "text", "text": big}]},
+                         script=HOOKS / "mcptrim.py")
+        self.assertIn("updatedMCPToolOutput", out2)
+        recs = [r for r in self.obs() if r["signal"] == "trimmed"]
+        self.assertEqual([(r["tool"], r["kind"]) for r in recs], [("Bash", "bash"), ("mcp__db__query", "mcp")])
+        for r in recs:
+            self.assertGreater(r["orig_chars"], r["saved_chars"])
+            self.assertGreater(r["saved_chars"], 1000)
+            self.assertNotIn("summary", r)  # 不存輸出內容
+            self.assertLess(len(json.dumps(r)), 300)
+
+    def test_trimmed_signal_respects_observe_off(self):
+        noisy = "\n".join(f"npm http fetch GET 200 https://registry.npmjs.org/pkg-{i}" for i in range(400))
+        self.hook({"hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_input": {"command": "npm install"},
+                   "tool_response": {"stdout": noisy, "stderr": ""}}, script=HOOKS / "trim.py", env={"CHUTORA_OBSERVE": "0"})
+        self.assertEqual(self.obs(), [])
+
+    def test_reread_signal_relative_path_or_hash(self):
+        big = "\n".join(f"line {i}: some source code here = {i * 7}" for i in range(200))
+        tp = self.home / "t.jsonl"
+        entries = []
+
+        def read(tid, path):
+            n = len(entries)
+            entries.append({"uuid": f"a{n}", "parentUuid": entries[-1]["uuid"] if entries else None,
+                            "message": {"content": [{"type": "tool_use", "id": tid, "name": "Read"}]}})
+            entries.append({"uuid": f"u{n}", "parentUuid": f"a{n}",
+                            "message": {"content": [{"type": "tool_result", "tool_use_id": tid}]}})
+            tp.write_text("\n".join(json.dumps(e) for e in entries) + "\n")
+            return self.hook({"hook_event_name": "PostToolUse", "tool_name": "Read", "tool_use_id": tid,
+                              "transcript_path": str(tp), "tool_input": {"file_path": path},
+                              "tool_response": {"type": "text", "file": {"filePath": path, "content": big, "numLines": 200,
+                                                                         "startLine": 1, "totalLines": 200}}},
+                             script=HOOKS / "dedup.py")
+        inside = str(self.proj / "src" / "app.py")
+        outside = "/opt/secret-place/app.py"
+        self.assertEqual(read("r1", inside), "")
+        self.assertIn("Chutora", read("r2", inside))
+        self.assertIn("Chutora", read("r3", inside))
+        read("r4", outside)
+        self.assertIn("Chutora", read("r5", outside))
+        recs = [r for r in self.obs() if r["signal"] == "reread"]
+        self.assertEqual([r.get("n") for r in recs], [2, 3, 2])
+        self.assertEqual(recs[0]["file"], os.path.join("src", "app.py"))
+        self.assertNotIn("file", recs[2])
+        self.assertEqual(len(recs[2]["file_hash"]), 12)
+        self.assertNotIn("secret-place", json.dumps(recs))
+        self.assertGreater(recs[0]["saved_chars"], 1000)
 
     def test_bad_input_quiet(self):
         for raw in ("", "x", "[1]"):

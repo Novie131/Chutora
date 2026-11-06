@@ -16,6 +16,7 @@ Claude Code 自 2.1.86 起內建類似機制（重複讀取未變更的檔案時
 - 內容雜湊必須相同；範圍（offset/limit、起始行、行數）必須相同；圖片、PDF、notebook、被截斷的讀取不處理；
   小檔（不到 MIN_CHARS 字元）不處理。
 
+判定重讀時在觀察紀錄寫一筆 reread（專案內的相對路徑或專案外路徑的雜湊、第幾次；見 observe.py）。
 開關：CHUTORA_DEDUP=0 關閉；/chutora dedup on|off 寫入 ~/.claude/chutora/dedup。任何例外都安靜放行。
 """
 import hashlib
@@ -27,6 +28,11 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from trim import add_stats, cfg_file, conf_dir  # noqa: E402
+
+try:
+    import observe
+except Exception:  # pragma: no cover
+    observe = None
 
 try:
     from compact import lang
@@ -162,6 +168,12 @@ def process(data):
             out = {"hookSpecificOutput": {"hookEventName": "PostToolUse",
                                           "updatedToolOutput": dict(resp, file=new_file)}}
             add_stats(len(content) - len(text), "dedup", session_id=data.get("session_id"))
+            if observe:  # 觀察紀錄：重讀（專案內記相對路徑，專案外只記路徑雜湊）
+                try:
+                    observe.note(data, "reread", n=prev["n"], saved_chars=len(content) - len(text),
+                                 **observe.where(f.get("filePath") or ti.get("file_path"), data.get("cwd")))
+                except Exception:
+                    pass
     if out is None:
         seen[key] = {"hash": h, "id": tuid, "n": 1}
     save_state(st)

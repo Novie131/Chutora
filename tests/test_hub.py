@@ -25,7 +25,8 @@ class HubTest(unittest.TestCase):
         self.data.mkdir()
 
     def run_hub(self, *args, lang="zh", **kw):
-        env = {k: v for k, v in os.environ.items() if k not in ("LC_ALL", "LC_MESSAGES", "LANG", "LOOP_GUARD_REPEAT")}
+        env = {k: v for k, v in os.environ.items() if k not in ("LC_ALL", "LC_MESSAGES", "LANG", "LOOP_GUARD_REPEAT",
+                                                                  "CHUTORA_OBSERVE_PRIVACY")}
         env.update({"HOME": str(self.home), "CLAUDE_PROJECT_DIR": str(self.proj),
                     "CLAUDE_PLUGIN_DATA": str(self.data), "CHUTORA_LANG": lang})
         env.update(kw)
@@ -139,6 +140,20 @@ class HubTest(unittest.TestCase):
         self.assertIn("關閉（CHUTORA_OBSERVE=0）", self.run_hub(CHUTORA_OBSERVE="0").stdout)
         r = self.run_hub("guard", "rules", lang="en")
         self.assertIn("rm-catastrophe [deny]", r.stdout)
+
+    def test_observe_privacy_switch(self):
+        self.assertIn("隱私：一般", self.run_hub().stdout)
+        r = self.run_hub("observe", "privacy", "strict")
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual(self.conf("observe-privacy"), "strict")
+        self.assertIn("隱私：嚴格", self.run_hub().stdout)
+        self.assertIn("嚴格", self.run_hub("observe", "privacy").stdout)
+        self.assertIn("privacy: strict", self.run_hub(lang="en").stdout)
+        self.assertEqual(self.run_hub("observe", "privacy", "normal").returncode, 0)
+        self.assertIsNone(self.conf("observe-privacy"))
+        self.assertIn("CHUTORA_OBSERVE_PRIVACY=strict", self.run_hub(CHUTORA_OBSERVE_PRIVACY="strict").stdout)
+        self.assertEqual(self.run_hub("observe", "privacy", "loose").returncode, 2)
+        self.assertIn("隱私", self.run_hub("doctor").stdout)
 
     def test_mcp_trim_exclude_include_text(self):
         self.assertIn("純文字／Markdown 不動", self.run_hub().stdout)

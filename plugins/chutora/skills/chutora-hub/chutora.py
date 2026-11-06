@@ -3,7 +3,7 @@
 
 用法：chutora.py [status] | doctor | mode [economy|balanced|quality] | lang [zh|en|auto]
       | trim|dedup|mcp-trim [on|off] | mcp-trim exclude|include <server> | mcp-trim text on|off
-      | ask [on|off] | guard [on|off|rules] | observe [on|off]
+      | ask [on|off] | guard [on|off|rules] | observe [on|off] | observe privacy [strict|normal]
 status 與 doctor 唯讀；其他子指令只寫 ~/.claude/chutora/ 底下自己的設定檔。
 """
 import glob
@@ -253,6 +253,21 @@ def observe_info():
     return p, (os.path.getsize(p) if os.path.isfile(p) else None)
 
 
+def observe_privacy():
+    """回傳 ("strict"|"normal", 來源)。和 hooks/observe.py 的 privacy() 同一套規則。"""
+    v = os.environ.get("CHUTORA_OBSERVE_PRIVACY", "").strip().lower()
+    if v in ("strict", "normal"):
+        return v, "CHUTORA_OBSERVE_PRIVACY=" + v
+    if read_text(os.path.join(CONF, "observe-privacy")).lower() == "strict":
+        return "strict", "/chutora observe privacy strict"
+    return "normal", ""
+
+
+def privacy_label(level):
+    return (T("嚴格（糾正與選擇只記長度）", "strict (corrections and choices: length only)") if level == "strict"
+            else T("一般（糾正存前 160 字、已遮罩）", "normal (corrections: first 160 chars, masked)"))
+
+
 def mcp_excludes():
     m = hook_mod("mcptrim")
     try:
@@ -319,14 +334,16 @@ def status():
                   f"; {n_rules} default rules{', disabled: ' + ','.join(off_rules) if off_rules else ''}, {n_user} of yours, {recent} stopped in the last 7 days")
     else:
         extra = ""
-    print(T(f"- 危險守門（實驗中）：{'開啟' if on4 else '關閉（' + why4 + '）'}（force push、rm -rf 專案外、碰 .env 等先問你；rm -rf ~ 這類直接擋）{extra}",
-            f"- Danger guard (experimental): {'on' if on4 else 'off (' + why4 + ')'} (asks before force push, rm -rf outside the project, touching .env…; blocks rm -rf ~ and the like){extra}"))
+    print(T(f"- 危險守門（實驗中）：{'開啟' if on4 else '關閉（' + why4 + '）'}（force push、rm -rf 專案外、碰 .env 等先問你；rm -rf ~ 這類直接擋；略過權限模式下備份不了的也直接擋）{extra}",
+            f"- Danger guard (experimental): {'on' if on4 else 'off (' + why4 + ')'} (asks before force push, rm -rf outside the project, touching .env…; blocks rm -rf ~ and the like, and in bypass-permissions mode also what a backup can't undo){extra}"))
     on5, why5 = toggle_state("observe")
     oi = observe_info()
     size = T(f"，{oi[1] // 1024:,} KB", f", {oi[1] // 1024:,} KB") if oi and oi[1] else ""
     where = (oi[0].replace(HOME, "~") if oi else "~/.claude/chutora/projects/<id>/observations.jsonl")
-    print(T(f"- 觀察紀錄（實驗中）：{'開啟' if on5 else '關閉（' + why5 + '）'}（不花 token，記在 {where}{size}）",
-            f"- Observation log (experimental): {'on' if on5 else 'off (' + why5 + ')'} (costs no tokens; kept in {where}{size})"))
+    pv, pv_why = observe_privacy()
+    pv_txt = privacy_label(pv) + (f" [{pv_why}]" if pv_why else "")
+    print(T(f"- 觀察紀錄（實驗中）：{'開啟' if on5 else '關閉（' + why5 + '）'}（不花 token，記在 {where}{size}；隱私：{pv_txt}）",
+            f"- Observation log (experimental): {'on' if on5 else 'off (' + why5 + ')'} (costs no tokens; kept in {where}{size}; privacy: {pv_txt})"))
     print()
     print(T("可以做的事（直接回覆編號或名稱）：", "What you can do (reply with a number or name):"))
     items = [
@@ -345,6 +362,7 @@ def status():
         ("/chutora mcp-trim exclude|include <server>", "某個 MCP server 完全不瘦身／恢復", "never trim one MCP server / undo"),
         ("/chutora guard on|off|rules", "危險守門開關與規則清單（實驗中）", "danger guard switch and rule list (experimental)"),
         ("/chutora observe on|off", "觀察紀錄開關（實驗中）", "observation log switch (experimental)"),
+        ("/chutora observe privacy strict|normal", "觀察紀錄隱私：strict 時你的糾正與選擇只記長度", "observation privacy: strict keeps only the length of your corrections and choices"),
     ]
     for i, (c, zh, en) in enumerate(items, 1):
         print(f"{i}. {c} — {T(zh, en)}")
@@ -458,7 +476,8 @@ def doctor():
         writable = os.access(probe, os.W_OK)
         big = oi[1] is not None and oi[1] > 6 * 1024 * 1024
         add(OK if writable and not big else FIX, T("觀察紀錄", "observation log"),
-            oi[0].replace(HOME, "~") + (T(f"（{oi[1] // 1024:,} KB）", f" ({oi[1] // 1024:,} KB)") if oi[1] else T("（還沒有紀錄）", " (nothing yet)")),
+            oi[0].replace(HOME, "~") + (T(f"（{oi[1] // 1024:,} KB）", f" ({oi[1] // 1024:,} KB)") if oi[1] else T("（還沒有紀錄）", " (nothing yet)"))
+            + T(f"；隱私：{privacy_label(observe_privacy()[0])}", f"; privacy: {privacy_label(observe_privacy()[0])}"),
             "" if writable and not big else (T(f"{probe} 不能寫入", f"{probe} is not writable") if not writable
                                               else T("超過 5 MB 卻沒有輪替；確認 observe.py 是新版", "Over 5 MB without rotating; check observe.py is up to date")))
 
@@ -632,6 +651,31 @@ def mcp_sub(action, arg):
     return 0
 
 
+def observe_privacy_cmd(arg):
+    a = (arg or "").strip().lower()
+    if not a:
+        pv, why = observe_privacy()
+        print(T(f"觀察紀錄隱私：{privacy_label(pv)}{'（' + why + '）' if why else ''}。可用 /chutora observe privacy strict|normal 切換。",
+                f"Observation privacy: {privacy_label(pv)}{' (' + why + ')' if why else ''}. Switch with /chutora observe privacy strict|normal."))
+        return 0
+    alias = {"嚴格": "strict", "一般": "normal", "on": "strict", "off": "normal"}
+    a = alias.get(a, a)
+    if a not in ("strict", "normal"):
+        print(T(f"不認得的設定：{arg}。可用 strict、normal。", f"Unknown value: {arg}. Use strict or normal."))
+        return 2
+    write_conf("observe-privacy", "strict" if a == "strict" else None)
+    if a == "strict":
+        print(T("已切到嚴格隱私（寫入 ~/.claude/chutora/observe-privacy）：之後你的糾正與選擇只記長度，不存你打的字；改回：/chutora observe privacy normal。",
+                "Strict privacy is on (saved to ~/.claude/chutora/observe-privacy): from now on only the length of your corrections and choices is kept, none of your words; undo: /chutora observe privacy normal."))
+    else:
+        print(T("已改回一般隱私：糾正存前 160 字（已遮罩金鑰）。", "Back to normal privacy: corrections keep their first 160 characters (secrets masked)."))
+    env = os.environ.get("CHUTORA_OBSERVE_PRIVACY", "").strip().lower()
+    if env in ("strict", "normal") and env != a:
+        print(T(f"注意：環境變數 CHUTORA_OBSERVE_PRIVACY={env} 優先，目前仍是 {env}。",
+                f"Note: the CHUTORA_OBSERVE_PRIVACY={env} environment variable takes precedence, so it is still {env}."))
+    return 0
+
+
 def guard_rules():
     g = hook_mod("guard")
     if not g:
@@ -674,6 +718,8 @@ def main(argv):
             return guard_rules()
         return toggle("guard", rest)
     if sub in ("observe", "觀察"):
+        if rest.lower() in ("privacy", "隱私"):
+            return observe_privacy_cmd(argv[2] if len(argv) > 2 else "")
         return toggle("observe", rest)
     if sub in ("ask", "反問", "先問我"):
         return ask(rest)

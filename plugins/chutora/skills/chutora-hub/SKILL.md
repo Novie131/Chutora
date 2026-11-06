@@ -13,7 +13,7 @@ description: Chutora 的單一入口。使用者輸入 /chutora、問「Chutora 
 - `dedup [on|off]`（或「去重」）→ 查看或切換讀檔去重
 - `mcp-trim [on|off]` → 查看或切換 MCP 輸出瘦身；`mcp-trim exclude|include <server>` 讓某個 server 完全不瘦身／恢復；`mcp-trim text on|off` 純文字也瘦身（預設不瘦）
 - `guard [on|off|rules]`（或「守門」）→ 危險守門（實驗中）：查看、開關、列出規則
-- `observe [on|off]`（或「觀察」）→ 觀察紀錄（實驗中）：查看或開關
+- `observe [on|off]`（或「觀察」）→ 觀察紀錄（實驗中）：查看或開關；`observe privacy [strict|normal]` 查看或切換隱私（strict 時你的糾正與選擇只記長度）
 - `ask`（或「先問我」）→ 印出反問步驟，接著**照步驟用 AskUserQuestion 反問使用者**；`ask on|off` 開關自動反問提醒
 - `lang [zh|en|auto]` → 查看或切換提醒訊息語言
 
@@ -24,4 +24,4 @@ description: Chutora 的單一入口。使用者輸入 /chutora、問「Chutora 
 - mode：切換後，這個對話剩下的部分也照新模式做（新模式的規則在 `../../hooks/modes/` 或 `~/.claude/hooks/chutora/modes/` 的對應檔案，讀一次即可）；新對話開始時 hook 會自動帶入。
 - ask：腳本只印步驟；你接著真的去問（用 AskUserQuestion，題數照腳本寫的上限），問完把答案寫成任務說明，再繼續原本的工作。只有主對話能反問，子 agent 不行。
 - guard／observe off：危險守門會把「關掉守門或觀察」當成要問的動作，跳出確認是正常的，由使用者決定；不要換別的方法繞過。
-- 腳本只讀紀錄、只寫 `~/.claude/chutora/` 底下自己的設定檔（`mode`、`lang`、`trim`、`dedup`、`mcp-trim`、`mcp-trim-exclude`、`mcp-trim-text`、`ask`、`guard`、`observe`），不碰 settings.json。
+- 腳本只讀紀錄、只寫 `~/.claude/chutora/` 底下自己的設定檔（`mode`、`lang`、`trim`、`dedup`、`mcp-trim`、`mcp-trim-exclude`、`mcp-trim-text`、`ask`、`guard`、`observe`、`observe-privacy`），不碰 settings.json。

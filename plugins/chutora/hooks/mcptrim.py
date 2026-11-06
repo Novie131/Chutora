@@ -14,7 +14,7 @@ Slack、資料庫、網頁這類 MCP 工具常回傳一大坨資料。超過門�
 開關：CHUTORA_MCP_TRIM=0 關閉；/chutora mcp-trim on|off 寫入 ~/.claude/chutora/mcp-trim。
 排除清單：CHUTORA_MCP_TRIM_EXCLUDE（逗號分隔）或 ~/.claude/chutora/mcp-trim-exclude（一行一個），
 寫工具全名、前綴（例如 mcp__github__ 或 mcp__slack__read_thread），或只寫 server 名稱（例如 slack、
-claude_ai_Notion，等同 mcp__<名稱>__）；/chutora mcp-trim exclude <server> 會幫你加。門檻依模式。任何例外都安靜放行。
+claude_ai_Notion，等同 mcp__<名稱>__）；/chutora mcp-trim exclude <server> 會幫你加。門檻依模式。真的瘦身時在觀察紀錄寫一筆 trimmed。任何例外都安靜放行。
 """
 import json
 import os
@@ -22,7 +22,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from trim import add_stats, cfg_file, conf_dir, mode, save_raw_text, shrink  # noqa: E402
+from trim import add_stats, cfg_file, conf_dir, mode, observe_trimmed, save_raw_text, shrink  # noqa: E402
 
 try:
     from compact import lang
@@ -207,6 +207,7 @@ def process(data):
     if saved <= 0:
         return None
     add_stats(saved, "mcp", session_id=data.get("session_id"))
+    observe_trimmed(data, total_before, saved, "mcp")
     return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedMCPToolOutput": new_resp}}
 
 

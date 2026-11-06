@@ -9,11 +9,15 @@
   session   session id
   agent     main（主對話）或子 agent 類型（例如 worker、Explore）
   signal    tool_ok、tool_fail、repeat_error、delegation_result、user_correction、user_choice、user_prompt、
-            guard_ask／guard_deny（由 guard.py 呼叫 append() 寫入：被守門攔下的呼叫不會有 PostToolUse）
+            guard_ask／guard_deny（由 guard.py 呼叫 append() 寫入：被守門攔下的呼叫不會有 PostToolUse）、
+            trimmed（trim.py／mcptrim.py 實際瘦身時寫入：工具、原長度 orig_chars、省下 saved_chars）、
+            reread（dedup.py 判定重讀時寫入：專案內的相對路徑或專案外路徑的雜湊、第幾次 n、省下 saved_chars）
   tool      工具名（沒有就省略）
   summary   精簡摘要：指令、路徑、子 agent 描述等，已遮罩金鑰、截到 160 字元；不存工具輸出內容
   其他      out_chars（輸出大小）、count（重複次數）、match（糾正用語）、chars（提示長度）等數字或短字串
-使用者的一般提示只記長度（user_prompt），不記內容；糾正與選擇才記一小段（已遮罩）。
+使用者的一般提示只記長度（user_prompt），不記內容；糾正與選擇才記一小段（已遮罩，糾正最多 160 字元）。
+嚴格隱私：CHUTORA_OBSERVE_PRIVACY=strict，或 /chutora observe privacy strict（寫入 ~/.claude/chutora/observe-privacy），
+糾正與選擇（含 AskUserQuestion 的答案）也只記長度，不存任何你打的字。
 
 輪替：檔案超過 5 MB（CHUTORA_OBSERVE_MAX_MB 可調）就移到 archive/，最多留 5 份。
 開關：CHUTORA_OBSERVE=0，或 /chutora observe off（寫入 ~/.claude/chutora/observe）。
@@ -53,6 +57,24 @@ def enabled():
             return f.read().strip().lower() != "off"
     except OSError:
         return True
+
+
+def privacy():
+    """回傳 ("strict"|"normal", 來源)。環境變數優先，其次 ~/.claude/chutora/observe-privacy。"""
+    v = os.environ.get("CHUTORA_OBSERVE_PRIVACY", "").strip().lower()
+    if v in ("strict", "normal"):
+        return v, "CHUTORA_OBSERVE_PRIVACY=" + v
+    try:
+        with open(os.path.join(os.path.expanduser("~"), ".claude", "chutora", "observe-privacy")) as f:
+            if f.read().strip().lower() == "strict":
+                return "strict", "/chutora observe privacy strict"
+    except OSError:
+        pass
+    return "normal", ""
+
+
+def strict():
+    return privacy()[0] == "strict"
 
 
 def now():
@@ -216,7 +238,11 @@ def build(data, ddir, root):
         elif tool == "AskUserQuestion":
             ans = resp.get("answers") if isinstance(resp, dict) else None
             if isinstance(ans, dict) and ans:
-                rec.update(signal="user_choice", summary=short("; ".join(f"{k} → {v}" for k, v in ans.items()), 200))
+                text = "; ".join(f"{k} → {v}" for k, v in ans.items())
+                if strict():
+                    rec.update(signal="user_choice", summary=None, chars=len(text))
+                else:
+                    rec.update(signal="user_choice", summary=short(text, 200))
             return rec
         else:
             return rec
@@ -240,8 +266,12 @@ def build(data, ddir, root):
             return None
         m = CORRECTION.search(p)
         if m:
+            if strict():  # 嚴格隱私：只記長度
+                return dict(base, signal="user_correction", chars=len(p))
             return dict(base, signal="user_correction", match=m.group(0), summary=short(p, 160), chars=len(p))
         if CHOICE.match(p):
+            if strict():
+                return dict(base, signal="user_choice", chars=len(p))
             return dict(base, signal="user_choice", summary=short(p, 40), chars=len(p))
         return dict(base, signal="user_prompt", chars=len(p))
     return None
@@ -258,6 +288,29 @@ def append(rec, cwd=None):
     rotate(path)
     with open(path, "a", encoding="utf-8") as f:
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+
+def where(path, cwd=None):
+    """檔案路徑在觀察紀錄裡的寫法：專案內 → 相對路徑；專案外 → {"file_hash": sha256 前 12 字元}。"""
+    import hashlib
+    from projectid import project_info
+    try:
+        root = project_info(cwd)["root"]
+    except Exception:
+        root = None
+    p = os.path.abspath(str(path or ""))
+    if root and (p == root or p.startswith(root.rstrip("/") + "/")):
+        return {"file": os.path.relpath(p, root)}
+    return {"file_hash": hashlib.sha256(p.encode("utf-8", "replace")).hexdigest()[:12]}
+
+
+def note(data, signal, **fields):
+    """給 trim.py／mcptrim.py／dedup.py 用：寫一筆訊號，任何錯誤都吞掉（不影響工具結果、不輸出）。"""
+    try:
+        append(dict({"ts": now(), "session": data.get("session_id"), "agent": agent_of(data), "signal": signal,
+                     "tool": data.get("tool_name")}, **fields), data.get("cwd"))
+    except Exception:
+        pass
 
 
 def process(data):

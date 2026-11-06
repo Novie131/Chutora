@@ -12,6 +12,7 @@
 
 開關：CHUTORA_TRIM=0 關閉；/chutora trim on|off 寫入 ~/.claude/chutora/trim。
 門檻依模式（~/.claude/chutora/mode）：economy 較積極、quality 較保守。
+真的瘦身時在觀察紀錄寫一筆 trimmed（工具、原長度、省下多少；見 observe.py）。
 任何例外都安靜放行（不輸出），絕不擋住工具結果。
 """
 import datetime
@@ -280,6 +281,15 @@ def add_stats(saved_chars, kind="bash", session_id=None):
     os.replace(tmp, p)
 
 
+def observe_trimmed(data, orig_chars, saved_chars, kind):
+    """觀察紀錄：這次真的瘦身了（只寫檔、不輸出，不增加 token）。"""
+    try:
+        import observe
+        observe.note(data, "trimmed", kind=kind, orig_chars=int(orig_chars), saved_chars=int(saved_chars))
+    except Exception:
+        pass
+
+
 def note(stats, path):
     s = stats
     if lang() == "en":
@@ -332,6 +342,7 @@ def process(data):
     if saved <= 0:
         return None
     add_stats(saved, session_id=data.get("session_id"))
+    observe_trimmed(data, len(stdout) + len(stderr), saved, "bash")
     return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedToolOutput": new}}
 
 
