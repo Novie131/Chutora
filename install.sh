@@ -178,7 +178,8 @@ hook 不會自動啟用:本腳本不改你的 settings.json。要啟用請把下
     { "hooks": [{ "type": "command",
         "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/context-check.py" }] },
     { "hooks": [{ "type": "command",
-        "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/ask.py" }] }
+        "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/ask.py" }] },
+    { "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/observe.py" }] }
   ],
   "PostToolUse": [
     { "hooks": [{ "type": "command",
@@ -193,19 +194,24 @@ hook 不會自動啟用:本腳本不改你的 settings.json。要啟用請把下
       "hooks": [{ "type": "command",
         "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/mcptrim.py" }] },
     { "hooks": [{ "type": "command",
-        "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/activity.py" }] }
+        "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/activity.py" }] },
+    { "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/observe.py" }] }
   ],
   "PreToolUse": [
+    { "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|Read",
+      "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/guard.py" }] },
     { "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/activity.py" }] }
   ],
   "PostToolUseFailure": [
-    { "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/activity.py" }] }
+    { "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/activity.py" }] },
+    { "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/observe.py" }] }
   ],
   "SubagentStart": [
     { "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/activity.py" }] }
   ],
   "SubagentStop": [
-    { "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/activity.py" }] }
+    { "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/activity.py" }] },
+    { "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/observe.py" }] }
   ]
 MSG
 }
