@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/Novie131/chutora/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Novie131/chutora/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="version 0.15.0" src="https://img.shields.io/badge/version-0.15.0-FF6A26">
+  <img alt="version 0.16.0-beta.1" src="https://img.shields.io/badge/version-0.16.0--beta.1-FF6A26">
   <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-1B2D52">
   <img alt="VS Code supported" src="https://img.shields.io/badge/VS%20Code-supported-1B2D52">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-2EA043"></a>
@@ -85,7 +85,7 @@
 |---|---|---|
 | <img src="assets/icons/scissors.svg" width="18" height="18" alt=""> 噪音輸出瘦身 | 自動 | 安裝、建置、測試這類又長又雜的指令輸出，進到 context 前先瘦身：去色碼、收斂進度列與重複行，保留開頭、結尾、錯誤與摘要。讀檔類指令、`git diff`、失敗的指令都不動。`/chutora trim off` 或 `CHUTORA_TRIM=0` 關閉 |
 | <img src="assets/icons/copies.svg" width="18" height="18" alt=""> 讀檔去重 | 自動 | 同一段對話裡再讀一次「沒變的同一個範圍」時，只回一行「跟第 N 次讀的一樣」，不再整份重送。主對話與每個子 agent 分開算；壓縮、`/clear`、`/rewind` 後舊內容不在對話裡，就照常重讀。Claude Code 內建的同類機制有出手時不重複處理。`/chutora dedup off` 或 `CHUTORA_DEDUP=0` 關閉 |
-| <img src="assets/icons/plug.svg" width="18" height="18" alt=""> MCP 輸出瘦身 | 自動 | Slack、資料庫、網頁這類 MCP 工具回傳一大坨資料時，長陣列只留前幾十筆並註明另有幾筆、連續相同的項目合併、過長字串截斷、空欄位拿掉。可設定排除清單。`/chutora mcp-trim off` 或 `CHUTORA_MCP_TRIM=0` 關閉 |
+| <img src="assets/icons/plug.svg" width="18" height="18" alt=""> MCP 輸出瘦身 | 自動 | Slack、資料庫這類 MCP 工具回傳一大坨 JSON 時，長陣列只留前幾十筆並註明另有幾筆、連續相同的項目合併、空欄位拿掉。純文字和 Markdown（例如使用說明、文件內容）不動。`/chutora mcp-trim exclude <server>` 讓某個 server 完全不瘦身；`/chutora mcp-trim off` 或 `CHUTORA_MCP_TRIM=0` 關閉 |
 
 被瘦身或去重的原文一定另存在 `~/.claude/chutora/raw/`（保留最近 50 份），Claude 需要時會用 Read 讀回來。三種模式的門檻不同：省錢最積極、品質最保守。
 
@@ -128,6 +128,8 @@
 | `research` | 派工／指令 | 查官方文件、API 用法、版本差異等可能已變動的資訊，回答附來源，官方資料存進 `web/` |
 | `harvester`（Sonnet） | 只在你明確要求時 | 把過去的對話紀錄挖成知識庫筆記。成本較高，偶爾跑一次 |
 | micro-skills | 內建範本 | `MEMORY.md` 範本與分工慣例裡的寫法：把專案的固定指令與事實寫成短小的條件式記憶，用到才讀，少走回頭路 |
+| 變更紀錄（實驗中） | 自動 | `claude-memory/changes.jsonl` 記下做了什麼、復原點在哪、有沒有告訴你、你怎麼回應；目前由危險守門寫入，給之後會改設定的功能用 |
+| 記憶身分資料（實驗中） | 新寫入時 | 新的記憶檔開頭帶 id、建立與最後使用時間、可信度、來源、依據的檔案與指紋、版本、取代關係與狀態；既有記憶檔不改寫。格式見[進階說明](docs/advanced.md#memory) |
 
 ### 7. 分析品質與資安
 
@@ -136,6 +138,7 @@
 | `evidence-analysis` | 派工／指令 | 調查、找根因、審查結論時使用。每個結論標成觀察、推論或未知並附出處，先給概覽再深入，最後留一份可追查的 finding ledger |
 | `security-review`（Sonnet） | 派工 | 靜態審查：對照 OWASP 類別，找不安全寫法、金鑰或 token 外洩。只讀不改，回報附證據、嚴重度與修補建議。只用於你自己或已授權的程式碼 |
 | `security-test`（Sonnet） | 派工 | 動態測試：實際打你已授權且隔離的 dev／測試環境，驗證漏洞。開工前一定先確認授權範圍，不碰 production、不外送資料 |
+| 危險守門（實驗中） | 自動 | 工具執行前檢查「永遠要問清單」：force push、推到 main、刪專案外的檔案、碰 `.env` 或金鑰檔、`DROP TABLE`、`terraform destroy`、`kubectl delete`、改 Claude Code 或 Chutora 設定、`git reset --hard`、`git clean -f` 先問你；`rm -rf ~`、`rm -rf /` 這類直接擋。`git push origin feat/x`、`rm -rf node_modules` 不攔。清單可在 `~/.claude/chutora/always-ask` 增減；`/chutora guard off` 或 `CHUTORA_GUARD=0` 關閉 |
 
 ### 8. 自我強化：越用越順手
 
@@ -143,13 +146,14 @@
 |---|---|---|
 | `harness-tune` | 指令 | 某類任務一再做不順時使用：先讀過去的教訓，提出一到三個小調整，你確認後一次只改一項，改前備份、可回滾 |
 | `harness-lessons.md` | 自動（由 harness-tune 寫入） | 記錄每次調整的結果（有效、無效、已還原），下一次調整從上一次的結論出發 |
+| 觀察紀錄（實驗中） | 自動 | 學習的地基：把工具成功／失敗、重複錯誤、子 agent 結果、你的糾正（「不對」「我不是要這個」）與選擇，記到 `~/.claude/chutora/projects/<專案 id>/observations.jsonl`。不輸出任何東西所以不花 token；只存精簡摘要、不存工具輸出、遮罩金鑰；超過 5 MB 自動輪替。`/chutora observe off` 或 `CHUTORA_OBSERVE=0` 關閉 |
 
 ### 9. 入口、介面與設定
 
 | 功能 | 觸發 | 做什麼 |
 |---|---|---|
 | `/chutora` | 指令 | 單一入口：狀態總覽（版本、模式、context、loop guard、各開關與累計省下的量）加上功能選單，回覆編號就能執行 |
-| `/chutora doctor` | 指令 | 唯讀安裝健檢：python3、hooks、狀態列、記憶庫、自動壓縮、Haiku Explore、舊版殘留，要修的項目附修法 |
+| `/chutora doctor` | 指令 | 唯讀安裝健檢：python3、hooks、狀態列、記憶庫、自動壓縮、Haiku Explore、舊版殘留、危險守門自訂規則、觀察紀錄，要修的項目附修法 |
 | 三種模式 | 指令 | `/chutora mode economy`／`balanced`／`quality`：改變 session 開始時帶入的派工慣例、瘦身門檻與反問題數，不改各 agent 的模型 |
 | 中英雙語 | 自動 | 提醒訊息、狀態列、`/chutora` 依系統語言切換；`/chutora lang zh`／`en`／`auto` 可固定 |
 | 駕駛艙狀態列 | 自動（設好狀態列後） | Claude 工作時狀態列即時顯示目前動作：`▶ worker·Sonnet 跑測試 npm test · 12s │ 本次 42k tok │ 瘦身省≈8k │ ctx 95k/120k`；閒置時維持原本的精簡版。只用官方狀態列與標準 hooks，`CHUTORA_ACTIVITY=0` 關閉 |
@@ -270,7 +274,8 @@ ANTHROPIC_API_KEY=... python3 bench/run.py --runs 3 --model opus
 | <img src="assets/icons/shield.svg" width="18" height="18" alt=""> 已完成（0.14） | 讀檔去重、MCP 輸出瘦身、反問 | 同一段對話重讀沒變的檔案只回一行；MCP 的大坨資料先瘦身；需求模糊或你說不確定時先用選擇題問清楚，答案寫成任務說明 |
 | <img src="assets/icons/shield.svg" width="18" height="18" alt=""> 已完成（0.15） | 駕駛艙 | 狀態列即時顯示 Claude 正在做什麼（穩定版，只用官方機制）；agent-board 升級成完整面板：現在、待辦進度、工作量、時間線、檔案 |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 程式碼地圖與影響範圍 | 產生精簡的符號索引存進記憶，改函式前先列出會受影響的地方；檔案改了會提醒索引過期 |
-| <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 危險操作守門 | 刪檔、force push、動 production 這類操作一律先確認 |
+| <img src="assets/icons/eyes.svg" width="18" height="18" alt=""> 實驗中：feat/v2-batch1 | 危險操作守門 | force push、推到 main、刪專案外的檔案、碰 `.env`、`DROP TABLE` 這類操作先問你，`rm -rf ~` 這類直接擋；清單可自訂 |
+| <img src="assets/icons/eyes.svg" width="18" height="18" alt=""> 實驗中：feat/v2-batch1 | 學習的地基 | 不花 token 的觀察紀錄、變更紀錄、記憶身分資料；MCP 瘦身不再砍純文字說明 |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 路由從結果學習 | 記下每次派工的結果，整理成委派表的修正建議，你確認才改 |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 卡關救援 | AI 反覆失敗、越修越亂時一鍵救援：收集證據、停損、給你兩三條脫困路線、把教訓記下來 |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 專案健檢 | 在 `/chutora doctor` 的安裝健檢之外，再一次檢查測試缺口、過期記憶、沒用到的工具、安全快掃 |
@@ -299,7 +304,7 @@ ANTHROPIC_API_KEY=... python3 bench/run.py --runs 3 --model opus
 
 ## <img src="assets/icons/pin.svg" width="26" height="26" alt=""> 狀態
 
-**v0.15.0 — 早期版本。** 0.10.0 以前叫 smart-agent-route、0.7.0 以前叫 tiered-agents，升級請先移除舊版（見 [docs/部署安裝.md](docs/部署安裝.md#從-smart-agent-route0100-以前升級)）。 context 提醒 hook、handoff、bulk、Explore 覆蓋版移植自作者的個人設定：hook 已在真實對話中觸發、Explore 與 bulk 已確認跑在 Haiku，但都還在驗證期。worker-hard 升級鏈、research skill 與 plugin 形式的 hook 尚未實際使用。agent-board 與 reply-detail 已在 VS Code 擴充 2.1.301 實測過看板；常駐模式、看板裡的按鈕與回覆格式注入還在驗證。0.12 新增的 `/chutora`、doctor、三種模式、中英雙語與每週回顧已有單元測試，還沒在真實對話中長期驗證。0.13 的噪音輸出瘦身與 0.14 的讀檔去重、MCP 輸出瘦身、反問都有單元測試，但替換工具輸出的格式是依 Claude Code 型別定義與官方文件推斷，還沒在真實對話中確認。
+**v0.16.0-beta.1 — 早期版本（實驗分支 feat/v2-batch1）。** 0.10.0 以前叫 smart-agent-route、0.7.0 以前叫 tiered-agents，升級請先移除舊版（見 [docs/部署安裝.md](docs/部署安裝.md#從-smart-agent-route0100-以前升級)）。 context 提醒 hook、handoff、bulk、Explore 覆蓋版移植自作者的個人設定：hook 已在真實對話中觸發、Explore 與 bulk 已確認跑在 Haiku，但都還在驗證期。worker-hard 升級鏈、research skill 與 plugin 形式的 hook 尚未實際使用。agent-board 與 reply-detail 已在 VS Code 擴充 2.1.301 實測過看板；常駐模式、看板裡的按鈕與回覆格式注入還在驗證。0.12 新增的 `/chutora`、doctor、三種模式、中英雙語與每週回顧已有單元測試，還沒在真實對話中長期驗證。0.13 的噪音輸出瘦身與 0.14 的讀檔去重、MCP 輸出瘦身、反問都有單元測試，但替換工具輸出的格式是依 Claude Code 型別定義與官方文件推斷，還沒在真實對話中確認。0.16 的危險守門、觀察紀錄與 MCP 瘦身修正有單元測試，並用 `claude -p`（Claude Code 2.1.319）實測過：守門在預設模式與 `--dangerously-skip-permissions` 下都把要問的指令攔下沒有執行、一般指令照常執行；觀察紀錄不增加 token；長篇純文字的 MCP 輸出完整保留、長 JSON 陣列照常瘦身。互動模式下守門跳出的確認畫面還沒實測。
 
 已知會需要調整的地方：
 

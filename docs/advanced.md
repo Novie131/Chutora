@@ -116,12 +116,12 @@ Claude Code 自 2.1.86 起內建類似機制（重複讀取未變更的檔案時
 
 `hooks/mcptrim.py`（PostToolUse，`mcp__.*`）處理 MCP 工具回傳的大坨資料，用 `updatedMCPToolOutput` 替換：
 
-- **何時處理**：整份輸出超過門檻才動，門檻與保留量依模式：省錢 3000 字元／陣列留 20 筆／字串留 800 字元，平衡 4000／30／1500，品質 8000／60／3000。省不到兩成就不動。
-- **JSON**：長陣列保留前 N 筆並註明另有幾筆、連續相同的項目合併成一行、過長的字串截斷、`null`、`""`、`[]`、`{}` 這類空欄位拿掉。
-- **純文字**：沿用噪音輸出瘦身的行規則（保留開頭、結尾、錯誤與摘要行）。
+- **何時處理**：整份輸出超過門檻才動，門檻與保留量依模式：省錢 3000 字元／陣列留 20 筆，平衡 4000／30，品質 8000／60。省不到兩成就不動。
+- **JSON**：長陣列保留前 N 筆並註明另有幾筆、連續相同的項目合併成一行、`null`、`""`、`[]`、`{}` 這類空欄位拿掉。字串欄位不截斷。
+- **純文字與 Markdown 不動**：使用說明、文件內容這類輸出每一行都可能有用。0.15 曾把 Claude Docs connector 的 `guide` 說明砍掉 204 行，0.16 起預設不處理。真的想瘦身純文字，用 `/chutora mcp-trim text on`（或 `CHUTORA_MCP_TRIM_TEXT=1`）：會沿用噪音輸出瘦身的行規則（保留開頭、結尾、錯誤與摘要行），並截斷 JSON 裡的長字串（省錢 800、平衡 1500、品質 3000 字元）。
 - **形狀照抄**：原本是字串就回字串，是 content 陣列就回 content 陣列；圖片等非文字區塊不動。
 - **原文**：存到 `~/.claude/chutora/raw/<tool_use_id>.log`，輸出最後一行寫明路徑。
-- **排除清單**：環境變數 `CHUTORA_MCP_TRIM_EXCLUDE`（逗號分隔）或 `~/.claude/chutora/mcp-trim-exclude`（一行一個），寫工具全名或前綴，例如 `mcp__github__`。
+- **排除清單**：`/chutora mcp-trim exclude <server>`（`include` 恢復，改檔前備份成 `.bak`），或直接寫環境變數 `CHUTORA_MCP_TRIM_EXCLUDE`（逗號分隔）、`~/.claude/chutora/mcp-trim-exclude`（一行一個）。可以寫工具全名、前綴（`mcp__github__`），或只寫 server 名稱（`github`，等同 `mcp__github__`）。
 - **開關**：`/chutora mcp-trim off` 或 `CHUTORA_MCP_TRIM=0`。
 
 ### 反問
@@ -132,6 +132,29 @@ Claude Code 自 2.1.86 起內建類似機制（重複讀取未變更的檔案時
 - **怎麼問**：用 Claude Code 內建的 AskUserQuestion，一次最多省錢 3 題、平衡 4 題、品質 5 題；每題第一個選項是建議選項，也一定有「照預設、別問了」。只問會改變結果的：範圍（做／不做）、怎樣算完成、限制（不能動什麼）、邊界情況、取捨（快還是完整）。
 - **答案去哪**：寫成 `claude-memory/briefs/<日期>-<slug>.md`（沒有 claude-memory 時放 auto memory 目錄的 `briefs/`），欄位是目標、範圍、驗收標準、限制、邊界情況、取捨；派工時附給 worker。「怎樣算完成」就是驗收標準，之後的落地驗收會直接用它。
 - **開關**：`/chutora ask off` 或 `CHUTORA_ASK=0` 只關掉「你說不確定時」的提醒；`/chutora ask` 隨時可以強制先問。
+
+### 危險守門（實驗中）
+
+`hooks/guard.py`（PreToolUse，`Bash|Write|Edit|MultiEdit|NotebookEdit|Read`）在工具執行前檢查「永遠要問清單」，命中時回傳標準的 `hookSpecificOutput.permissionDecision` 與雙語的 `permissionDecisionReason`：
+
+- **先問你（ask）**：force push（`--force`、`-f`、`--force-with-lease`、`+分支`）；推到 main／master（含沒寫分支、但目前就在 main）；`rm -rf` 或刪除專案外的檔案（暫存目錄底下除外）；刪掉整個專案或它的 `.git`；刪除路徑含無法確認的變數；讀寫 `.env`（`.env.example` 這類範本除外）與金鑰檔（`id_rsa`、`*.pem`、`*.key`、`.netrc`…）；`DROP TABLE`／`DROP DATABASE`／`TRUNCATE`；`terraform destroy`；`kubectl delete`；修改 `~/.claude/settings.json`、專案的 `.claude/settings.json` 或 Chutora 設定（含 `/chutora guard off`）；`git reset --hard`；`git clean -f`。
+- **直接擋（deny）**：非常明確的災難：`rm -rf /`、`rm -rf ~`、刪除系統目錄、`mkfs`、`dd of=/dev/<磁碟>`。原因回給 Claude，請你自己決定要不要在終端機執行。
+- **不誤攔**：指令先經過一個小型 shell 斷詞（引號、heredoc、`$(...)`、`sh -c`、`sudo`／`env` 前綴、`cd` 之後的路徑），所以 commit 訊息、`echo`、`grep` 裡「提到」這些字不會被攔；`git push origin feat/x`、`rm -rf node_modules`、`rm -rf build/` 都照常執行。解析不了（例如引號沒關）時退回保守的整段比對。這是盡力而為的檢查，不是沙盒。
+- **權限模式**：PreToolUse hook 在任何權限模式下都會先執行。官方文件寫明 `deny` 在 bypassPermissions／`--dangerously-skip-permissions` 下仍然有效；`ask` 在 bypass 下怎麼處理文件沒寫，所以實測了 Claude Code 2.1.319 的 `claude -p`：預設模式、`--allowedTools Bash`（allow 規則）與 `--dangerously-skip-permissions` 下，被要求確認的指令都沒有執行（沒有人可以確認，記在 `permission_denials`），原因回給 Claude。互動模式下的確認畫面，以及互動式 bypass 模式的行為還沒實測。在 bypassPermissions／dontAsk 模式下，原因會另外告訴 Claude「這次沒有執行，請向你說明、不要繞路」。
+- **自訂**：`~/.claude/chutora/always-ask` 一行一條：`<regex>` 額外要問（比對 Bash 指令全文，或檔案工具的路徑）、`deny: <regex>` 額外直接擋、`!<規則 id>` 移除一條預設規則（`/chutora guard rules` 列出 id）、`#` 開頭是註解。壞掉的 regex 會被略過，`/chutora doctor` 會列出來。
+- **紀錄**：每次攔下都寫一筆到變更紀錄（見[記憶](#memory)）與觀察紀錄；之後同一個呼叫真的執行了（你按了允許），會補記 `user_response: approved`。
+- **開關**：`/chutora guard off`（寫入 `~/.claude/chutora/guard`；這個指令本身也會先問你）或 `CHUTORA_GUARD=0`。
+
+### 觀察紀錄（實驗中）
+
+`hooks/observe.py`（PostToolUse、PostToolUseFailure、SubagentStop、UserPromptSubmit）把發生的事記到 `~/.claude/chutora/projects/<專案 id>/observations.jsonl`，是之後「從結果學習」的地基。
+
+- **不花 token**：hook 不輸出任何東西。實測同一個任務各跑兩次，有這些 hook 的輸入 token 是 83,795／83,790，沒有的是 83,788／83,785，差距在每次執行本來就有的幾個 token 之內。
+- **專案 id**：從 `CLAUDE_PROJECT_DIR`（沒有就用目前目錄）往上找 git repo，取 remote URL（去掉帳密與 `.git`）的 sha256 前 12 字元；沒有 remote 用 repo 根目錄路徑；不在 repo 裡用目錄路徑。同一個 repo 換位置 clone 也是同一個 id。資料夾裡的 `meta.json` 寫著它是哪個專案。
+- **每筆內容**：時間、session、agent（`main` 或子 agent 類型）、訊號（`tool_ok`、`tool_fail`、`repeat_error`、`delegation_result`、`user_correction`、`user_choice`、`user_prompt`、`guard_ask`、`guard_deny`）、工具名、精簡摘要（指令、路徑、子 agent 描述，最多 160 字元）與輸出大小。**不存工具輸出內容**；一般提示只記長度；常見金鑰格式（`sk-…`、`ghp_…`、`AKIA…`、JWT、`Bearer …`、`password=…`、網址裡的帳密、私鑰區塊）一律遮罩。
+- **糾正與選擇**：「不對」「錯了」「我不是要這個」「不是這樣」、`that's wrong`、`not what I asked` 這類話記成 `user_correction`；只回一個編號、「選 B」、以及 AskUserQuestion 的答案記成 `user_choice`。
+- **輪替**：超過 5 MB 移到同一層的 `archive/`，最多留 5 份（`CHUTORA_OBSERVE_MAX_MB` 可調）。
+- **開關**：`/chutora observe off`（寫入 `~/.claude/chutora/observe`）或 `CHUTORA_OBSERVE=0`。
 
 ---
 
@@ -236,6 +259,32 @@ agent-board 的設定（plugin 的 userConfig，預設都開）：`autoOpen` 子
 
 保持 `MEMORY.md` 薄很重要：超過上限會被截斷（hook 最多帶入 120 行，auto memory 200 行），而且常駐內容是每個 session 都付的固定成本。它會腐化，需要定期整理；超過 150 行就是警訊。
 
+### 變更紀錄與記憶身分資料（實驗中）
+
+**變更紀錄** `claude-memory/changes.jsonl`（沒有 claude-memory 時放 auto memory 目錄）：每行一筆 JSON，只追加、不改寫。欄位：`id`、`ts`、`action`（動作代號，例如 `guard_ask`）、`summary`（已遮罩、截短）、`restore_point`（復原點位置，例如備份檔或 git commit；沒有就是 `null`）、`notified`（是否已告知你）、`user_response`（`null`、`approved`、`rejected`、`undone`…）、`source`、`session`。之後的更新另外追加一行 `{"id": …, "update": {…}}`，讀取時合併。這一批只有危險守門會寫；讀寫模組是 `hooks/changes.py`（`python3 changes.py list` 看最近幾筆），給之後會改設定的功能記「改了什麼、怎麼復原、你怎麼回應」。
+
+**記憶身分資料**：新寫入的記憶檔最上面可以帶一段 YAML（工具模組 `hooks/memmeta.py`）：
+
+```yaml
+---
+id: mem-20261107-a1b2c3
+created: 2026-11-07T10:00:00+0800
+last_used: 2026-11-07T10:00:00+0800
+confidence: 0.7        # 0～1：你親口說的 0.9 以上，推測的 0.5 左右
+source: user           # user／observed／handoff／research／inferred／imported
+bound_files:           # 這條記憶依據的檔案與內容指紋（sha256 前 12 字元）
+  - path: src/app.py
+    sha: 3f2a9c0d11ee
+version: 1
+supersedes: null       # 取代哪一條舊記憶的 id
+status: active         # active／stale／superseded／archived
+---
+```
+
+- `bound_files` 的指紋讓之後可以發現「這條記憶依據的檔案已經改了」（`memmeta.py check <檔案>`）。
+- **既有記憶檔一律不改寫**；`memmeta.py new` 只建立新檔，檔案已存在就拒絕。舊檔開頭的其他欄位（例如 auto memory 的 `name`、`description`、`type`）讀寫時原樣保留。
+- 這一批只提供格式與工具，還沒有功能會自動寫記憶。
+
 ### 知識庫與 harvester
 
 餵知識庫有兩種方式：自己把 `.md` 放進 `kb/`（不用任何前處理，librarian 立刻找得到），或叫 `harvester` 去挖歷史對話（它會先列出可讀的 session 讓你選範圍）。先講清楚四個限制：
@@ -313,7 +362,7 @@ chutora/
 │   ├── .claude-plugin/plugin.json
 │   ├── agents/                       ← worker / worker-hard / bulk / librarian / harvester / security-review / security-test
 │   ├── skills/                       ← handoff / research / usage-stats / route-setup / evidence-analysis / security-review / security-test / toolprune / harness-tune / chutora-hub
-│   ├── hooks/                        ← SessionStart 帶入、context 長度提醒、loop guard、modes/（三種模式）、weekly.py（每週回顧）、trim.py（噪音輸出瘦身）、dedup.py（讀檔去重）、mcptrim.py（MCP 輸出瘦身）、ask.py（反問提醒）
+│   ├── hooks/                        ← SessionStart 帶入、context 長度提醒、loop guard、modes/（三種模式）、weekly.py（每週回顧）、trim.py（噪音輸出瘦身）、dedup.py（讀檔去重）、mcptrim.py（MCP 輸出瘦身）、ask.py（反問提醒）、guard.py（危險守門）、observe.py（觀察紀錄）、changes.py（變更紀錄）、memmeta.py（記憶身分資料）、projectid.py、redact.py
 │   （範本在 skills/route-setup/templates/：MEMORY.md、知識庫說明、Explore、Haiku 層範本）
 ├── plugins/agent-board/              ← 子 agent 看板 mod（選裝）
 ├── plugins/reply-detail/             ← 回覆格式 mod（選裝）

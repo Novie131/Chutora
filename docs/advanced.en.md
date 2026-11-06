@@ -114,12 +114,12 @@ Switch: `/chutora dedup off` (saved to `~/.claude/chutora/dedup`) or `CHUTORA_DE
 
 `hooks/mcptrim.py` (PostToolUse, `mcp__.*`) handles huge payloads from MCP tools and replaces them through `updatedMCPToolOutput`:
 
-- **When**: only when the whole output is over the threshold; thresholds and how much is kept depend on the mode: economy 3,000 chars / 20 list items / 800-char strings, balanced 4,000 / 30 / 1,500, quality 8,000 / 60 / 3,000. Left alone if it saves less than a fifth.
-- **JSON**: long lists keep the first N items with a count of the rest, consecutive identical items are merged into one line, overlong strings are cut, and empty fields (`null`, `""`, `[]`, `{}`) are dropped.
-- **Plain text**: the same line rules as noisy-output trimming (start, end, errors and summaries kept).
+- **When**: only when the whole output is over the threshold; thresholds and how much is kept depend on the mode: economy 3,000 chars / 20 list items, balanced 4,000 / 30, quality 8,000 / 60. Left alone if it saves less than a fifth.
+- **JSON**: long lists keep the first N items with a count of the rest, consecutive identical items are merged into one line, and empty fields (`null`, `""`, `[]`, `{}`) are dropped. String fields are not cut.
+- **Plain text and Markdown are left alone**: in usage guides and document content every line may matter. 0.15 once cut 204 lines from the Claude Docs connector's `guide` text; from 0.16 they are not touched by default. To trim plain text anyway, use `/chutora mcp-trim text on` (or `CHUTORA_MCP_TRIM_TEXT=1`): the noisy-output line rules apply (start, end, errors and summaries kept) and long strings inside JSON are cut (economy 800, balanced 1,500, quality 3,000 chars).
 - **Shape preserved**: a string stays a string, a content array stays a content array; images and other non-text blocks are untouched.
 - **Original**: saved to `~/.claude/chutora/raw/<tool_use_id>.log`, with the path on the last line of the output.
-- **Exclude list**: the `CHUTORA_MCP_TRIM_EXCLUDE` environment variable (comma-separated) or `~/.claude/chutora/mcp-trim-exclude` (one per line), with full tool names or prefixes such as `mcp__github__`.
+- **Exclude list**: `/chutora mcp-trim exclude <server>` (`include` to undo; the file is backed up to `.bak` first), or set the `CHUTORA_MCP_TRIM_EXCLUDE` environment variable (comma-separated) or `~/.claude/chutora/mcp-trim-exclude` (one per line) yourself. Use full tool names, prefixes (`mcp__github__`) or just a server name (`github`, same as `mcp__github__`).
 - **Switch**: `/chutora mcp-trim off` or `CHUTORA_MCP_TRIM=0`.
 
 ### Clarify
@@ -130,6 +130,29 @@ Inspired by the clarify step in [github/spec-kit](https://github.com/github/spec
 - **How**: Claude Code's built-in AskUserQuestion, at most 3 questions in economy, 4 in balanced, 5 in quality; the recommended option comes first and "use the defaults, stop asking" is always there. It only asks what changes the result: scope (in / out), what counts as done, constraints (what must not change), edge cases, trade-offs (fast vs complete).
 - **Where the answers go**: `claude-memory/briefs/<date>-<slug>.md` (or `briefs/` in the auto memory folder) with goal, scope, acceptance criteria, constraints, edge cases and trade-offs, attached when delegating to worker. "What counts as done" is the acceptance criteria, ready for the planned completion checks.
 - **Switch**: `/chutora ask off` or `CHUTORA_ASK=0` only turns off the reminder when you say you're unsure; `/chutora ask` always forces it.
+
+### Danger guard (experimental)
+
+`hooks/guard.py` (PreToolUse, `Bash|Write|Edit|MultiEdit|NotebookEdit|Read`) checks an always-ask list before a tool runs and, on a match, returns the standard `hookSpecificOutput.permissionDecision` with a bilingual `permissionDecisionReason`:
+
+- **Ask you first (ask)**: force push (`--force`, `-f`, `--force-with-lease`, `+branch`); pushing to main/master (including no branch given while you are on main); `rm -rf` or deleting files outside the project (temp folders excepted); deleting the whole project or its `.git`; a delete path with a variable that can't be checked; reading or writing `.env` (templates such as `.env.example` excepted) and key files (`id_rsa`, `*.pem`, `*.key`, `.netrc`…); `DROP TABLE` / `DROP DATABASE` / `TRUNCATE`; `terraform destroy`; `kubectl delete`; changing `~/.claude/settings.json`, the project's `.claude/settings.json` or Chutora settings (including `/chutora guard off`); `git reset --hard`; `git clean -f`.
+- **Blocked (deny)**: unmistakable disasters: `rm -rf /`, `rm -rf ~`, deleting a system folder, `mkfs`, `dd of=/dev/<disk>`. The reason goes back to Claude, and it's up to you to run it yourself in a terminal.
+- **No false alarms**: commands go through a small shell tokenizer first (quotes, heredocs, `$(...)`, `sh -c`, `sudo` / `env` prefixes, paths after `cd`), so merely *mentioning* these words in a commit message, `echo` or `grep` isn't caught; `git push origin feat/x`, `rm -rf node_modules` and `rm -rf build/` run as usual. When a command can't be parsed (an unclosed quote, say) it falls back to a conservative whole-text match. It is a best-effort check, not a sandbox.
+- **Permission modes**: PreToolUse hooks run first in every permission mode. The official docs say `deny` still applies under bypassPermissions / `--dangerously-skip-permissions`; they don't say what `ask` does there, so it was tested with `claude -p` on Claude Code 2.1.319: in default mode, with `--allowedTools Bash` (an allow rule) and with `--dangerously-skip-permissions`, a command the guard asks about did not run (nobody could confirm it; it shows up in `permission_denials`) and the reason went back to Claude. The confirmation prompt in an interactive session, and interactive bypass mode, have not been tested yet. In bypassPermissions / dontAsk mode the reason also tells Claude "this did not run; explain it to the user and don't work around it".
+- **Your rules**: `~/.claude/chutora/always-ask`, one per line: `<regex>` adds an ask rule (matched against the whole Bash command, or a file tool's path), `deny: <regex>` adds a block rule, `!<rule id>` removes a default rule (`/chutora guard rules` lists the ids), and `#` starts a comment. Broken regexes are skipped and listed by `/chutora doctor`.
+- **Record**: every stop is written to the change log (see [Memory](#memory)) and the observation log; if the same call then actually runs (you allowed it), it is marked `user_response: approved`.
+- **Switch**: `/chutora guard off` (saved to `~/.claude/chutora/guard`; this command itself asks you first) or `CHUTORA_GUARD=0`.
+
+### Observation log (experimental)
+
+`hooks/observe.py` (PostToolUse, PostToolUseFailure, SubagentStop, UserPromptSubmit) records what happened in `~/.claude/chutora/projects/<project id>/observations.jsonl`, the groundwork for learning from outcomes later.
+
+- **No tokens**: the hook prints nothing. Running the same task twice each way, input tokens were 83,795 / 83,790 with these hooks and 83,788 / 83,785 without, within the few tokens every run varies by anyway.
+- **Project id**: from `CLAUDE_PROJECT_DIR` (or the current folder) up to the git repo, the first 12 characters of the sha256 of the remote URL (credentials and `.git` removed); with no remote, of the repo root path; outside a repo, of the folder path. The same repo cloned elsewhere gets the same id. `meta.json` in that folder says which project it is.
+- **Each record**: time, session, agent (`main` or the subagent type), signal (`tool_ok`, `tool_fail`, `repeat_error`, `delegation_result`, `user_correction`, `user_choice`, `user_prompt`, `guard_ask`, `guard_deny`), tool name, a short summary (command, path or subagent description, at most 160 characters) and the output size. **Tool output is never stored**; ordinary prompts only record their length; common key formats (`sk-…`, `ghp_…`, `AKIA…`, JWTs, `Bearer …`, `password=…`, credentials in URLs, private-key blocks) are masked.
+- **Corrections and choices**: "不對", "錯了", "我不是要這個", "不是這樣", "that's wrong", "not what I asked" and the like become `user_correction`; a bare number, "option B" and AskUserQuestion answers become `user_choice`.
+- **Rotation**: past 5 MB the file moves to `archive/` next to it, keeping at most 5 (`CHUTORA_OBSERVE_MAX_MB` to adjust).
+- **Switch**: `/chutora observe off` (saved to `~/.claude/chutora/observe`) or `CHUTORA_OBSERVE=0`.
 
 ---
 
@@ -234,6 +257,32 @@ Where memory lives:
 
 Keeping `MEMORY.md` thin matters: it is truncated beyond its limit (the hook injects up to 120 lines; auto memory 200), and resident content is a fixed cost paid in every session. It decays over time, so tidy it periodically; more than 150 lines is the warning sign.
 
+### Change log and memory identity (experimental)
+
+**Change log** `claude-memory/changes.jsonl` (the auto memory folder when there is no claude-memory): one JSON object per line, append-only. Fields: `id`, `ts`, `action` (an action code such as `guard_ask`), `summary` (masked and shortened), `restore_point` (where to restore from, such as a backup file or a git commit; `null` when there is none), `notified` (whether you were told), `user_response` (`null`, `approved`, `rejected`, `undone`…), `source`, `session`. Later updates append a line `{"id": …, "update": {…}}`, merged when read. In this batch only the danger guard writes to it; the module is `hooks/changes.py` (`python3 changes.py list` shows the latest entries), for later features that change settings to record what changed, how to undo it and how you responded.
+
+**Memory identity**: newly written memory files can start with a YAML block (module `hooks/memmeta.py`):
+
+```yaml
+---
+id: mem-20261107-a1b2c3
+created: 2026-11-07T10:00:00+0800
+last_used: 2026-11-07T10:00:00+0800
+confidence: 0.7        # 0 to 1: 0.9+ when you said it yourself, around 0.5 when inferred
+source: user           # user / observed / handoff / research / inferred / imported
+bound_files:           # files this memory relies on, with content fingerprints (first 12 chars of sha256)
+  - path: src/app.py
+    sha: 3f2a9c0d11ee
+version: 1
+supersedes: null       # id of the older memory this one replaces
+status: active         # active / stale / superseded / archived
+---
+```
+
+- The `bound_files` fingerprints let a later check notice that a file the memory relies on has changed (`memmeta.py check <file>`).
+- **Existing memory files are never rewritten**; `memmeta.py new` only creates new files and refuses when the file exists. Other front-matter fields in old files (such as auto memory's `name`, `description`, `type`) are kept as they are.
+- This batch only provides the format and the tool; nothing writes memory automatically yet.
+
 ### Knowledge base and harvester
 
 You can feed the knowledge base in two ways: drop `.md` files into `kb/` yourself (no preprocessing, librarian finds them immediately), or ask `harvester` to mine past conversations (it lists the available sessions and lets you choose the scope first). Four limits to know:
@@ -311,7 +360,7 @@ chutora/
 │   ├── .claude-plugin/plugin.json
 │   ├── agents/                       ← worker / worker-hard / bulk / librarian / harvester / security-review / security-test
 │   ├── skills/                       ← handoff / research / usage-stats / route-setup / evidence-analysis / security-review / security-test / toolprune / harness-tune / chutora-hub
-│   ├── hooks/                        ← SessionStart injection, context-length reminder, loop guard, modes/ (three modes), weekly.py (weekly recap), trim.py (noisy-output trimming), dedup.py (read dedup), mcptrim.py (MCP output trimming), ask.py (clarify reminder)
+│   ├── hooks/                        ← SessionStart injection, context-length reminder, loop guard, modes/ (three modes), weekly.py (weekly recap), trim.py (noisy-output trimming), dedup.py (read dedup), mcptrim.py (MCP output trimming), ask.py (clarify reminder), guard.py (danger guard), observe.py (observation log), changes.py (change log), memmeta.py (memory identity), projectid.py, redact.py
 │   (templates are in skills/route-setup/templates/: MEMORY.md, knowledge-base guide, Explore, Haiku-layer example)
 ├── plugins/agent-board/              ← subagent board mod (optional)
 ├── plugins/reply-detail/             ← reply format mod (optional)

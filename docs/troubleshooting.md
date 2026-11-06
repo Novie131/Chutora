@@ -68,7 +68,19 @@ plugin 沒辦法自己設定主狀態列。plugin 安裝的用 `/chutora:route-s
 
 ### MCP 工具的輸出被瘦身後少了需要的內容
 
-輸出最後一行有原文路徑，請 Claude 用 Read 讀；常遇到的話，把那個工具加進 `~/.claude/chutora/mcp-trim-exclude`（一行一個工具名或前綴），或 `/chutora mcp-trim off`。
+輸出最後一行有原文路徑，請 Claude 用 Read 讀；常遇到的話，`/chutora mcp-trim exclude <server>` 讓那個 server 完全不瘦身（或把工具名、前綴寫進 `~/.claude/chutora/mcp-trim-exclude`），或 `/chutora mcp-trim off`。0.15 以前純文字的說明文件也會被瘦身，0.16 起預設不動。
+
+### 危險守門擋到不該擋的指令
+
+先看原因裡的規則 id（例如 `[rm-home]`）。只是這一次：照提示允許即可。以後都不想被問：在 `~/.claude/chutora/always-ask` 加一行 `!rm-home`。全部關掉：`/chutora guard off` 或 `CHUTORA_GUARD=0`。如果是誤判（指令其實很安全），請開 issue 附上那個指令。
+
+### `claude -p` 或略過權限模式下，指令被守門擋下沒有執行
+
+這是預期行為：非互動執行沒有人可以按確認，Claude Code 會把「先問你」當成拒絕。確定要做，就自己在終端機執行，或那一次加上 `CHUTORA_GUARD=0`。
+
+### 觀察紀錄沒有寫入
+
+先看 `/chutora` 是否顯示「觀察紀錄（實驗中）：開啟」。install.sh 安裝的要把新版 hooks 片段（PostToolUse、PostToolUseFailure、SubagentStop、UserPromptSubmit 的 `observe.py`，以及 PreToolUse 的 `guard.py`）合併進 `settings.json`；`/chutora doctor` 會檢查這一項。
 
 ### 還是不行
 

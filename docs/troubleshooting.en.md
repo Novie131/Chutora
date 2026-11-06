@@ -68,7 +68,19 @@ The number of questions follows the mode: economy 3, balanced 4, quality 5 (`/ch
 
 ### An MCP tool's trimmed output is missing something
 
-The last line of the output has the original's path, so ask Claude to Read it; if it keeps happening, add that tool to `~/.claude/chutora/mcp-trim-exclude` (one tool name or prefix per line), or `/chutora mcp-trim off`.
+The last line of the output has the original's path, so ask Claude to Read it; if it keeps happening, `/chutora mcp-trim exclude <server>` keeps that server untouched (or write tool names or prefixes into `~/.claude/chutora/mcp-trim-exclude`), or `/chutora mcp-trim off`. Before 0.16 plain-text guides were trimmed too; from 0.16 they are left alone by default.
+
+### The danger guard stops a command it shouldn't
+
+Look at the rule id in the reason (for example `[rm-home]`). Just this once: allow it at the prompt. Never ask about it again: add a line `!rm-home` to `~/.claude/chutora/always-ask`. Turn it all off: `/chutora guard off` or `CHUTORA_GUARD=0`. If it is a false alarm (the command really is safe), please open an issue with the command.
+
+### With `claude -p` or a skip-permissions mode, the guard stopped a command and it didn't run
+
+That is expected: a non-interactive run has nobody to confirm, so Claude Code treats "ask first" as a refusal. If you are sure, run it yourself in a terminal, or set `CHUTORA_GUARD=0` for that run.
+
+### Nothing is written to the observation log
+
+Check that `/chutora` shows "Observation log (experimental): on". For an install.sh install, merge the new hooks snippet into `settings.json` (`observe.py` on PostToolUse, PostToolUseFailure, SubagentStop and UserPromptSubmit, plus `guard.py` on PreToolUse); `/chutora doctor` checks this.
 
 ### Still stuck
 

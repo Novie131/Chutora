@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/Novie131/chutora/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Novie131/chutora/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="version 0.15.0" src="https://img.shields.io/badge/version-0.15.0-FF6A26">
+  <img alt="version 0.16.0-beta.1" src="https://img.shields.io/badge/version-0.16.0--beta.1-FF6A26">
   <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-1B2D52">
   <img alt="VS Code supported" src="https://img.shields.io/badge/VS%20Code-supported-1B2D52">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-2EA043"></a>
@@ -85,7 +85,7 @@ The first four groups all do one thing: **the main conversation only receives th
 |---|---|---|
 | <img src="assets/icons/scissors.svg" width="18" height="18" alt=""> Noisy-output trimming | auto | Long, noisy command output such as installs, builds and test runs is trimmed before it reaches the context: color codes stripped, progress bars and repeated lines collapsed, the start, the end, errors and summaries kept. File-reading commands, `git diff` and failed commands are left alone. Turn off with `/chutora trim off` or `CHUTORA_TRIM=0` |
 | <img src="assets/icons/copies.svg" width="18" height="18" alt=""> Read dedup | auto | When the same conversation re-reads the same unchanged range, it gets one line ("same as read #N") instead of the whole file again. The main conversation and each subagent are counted separately; after a compact, `/clear` or `/rewind` the earlier content is gone, so files are read normally again. Steps aside when Claude Code's own equivalent already fired. Turn off with `/chutora dedup off` or `CHUTORA_DEDUP=0` |
-| <img src="assets/icons/plug.svg" width="18" height="18" alt=""> MCP output trimming | auto | When MCP tools such as Slack, databases or web fetchers return a huge payload, long lists keep the first few dozen items with a count of the rest, repeated items are merged, overlong strings are cut and empty fields dropped. Supports an exclude list. Turn off with `/chutora mcp-trim off` or `CHUTORA_MCP_TRIM=0` |
+| <img src="assets/icons/plug.svg" width="18" height="18" alt=""> MCP output trimming | auto | When MCP tools such as Slack or databases return a huge JSON payload, long lists keep the first few dozen items with a count of the rest, repeated items are merged and empty fields dropped. Plain text and Markdown (such as usage guides or document content) are left alone. `/chutora mcp-trim exclude <server>` keeps one server untouched; turn off with `/chutora mcp-trim off` or `CHUTORA_MCP_TRIM=0` |
 
 Whatever is trimmed or deduped is always saved in full under `~/.claude/chutora/raw/` (the latest 50), and Claude reads it back with Read when needed. Thresholds depend on the mode: economy trims most, quality least.
 
@@ -128,6 +128,8 @@ Misunderstanding the task and redoing it is the biggest token waste of all. A li
 | `research` | delegated / command | Looks up official docs, API usage, version differences and other facts that may have changed; answers cite sources and official material is saved to `web/` |
 | `harvester` (Sonnet) | only when you explicitly ask | Mines past conversation transcripts into knowledge-base notes. Costly; run occasionally |
 | micro-skills | built-in template | A convention in the `MEMORY.md` template and delegation guide: record a project's fixed commands and facts as short, condition-triggered memories, read only when needed |
+| Change log (experimental) | auto | `claude-memory/changes.jsonl` records what was done, where the restore point is, whether you were told and how you responded; written by the danger guard for now, for later features that change settings |
+| Memory identity (experimental) | on new writes | New memory files start with an id, created and last-used times, confidence, source, the files they rely on with fingerprints, version, what they supersede and a status; existing memory files are never rewritten. Format in the [advanced guide](docs/advanced.en.md#memory) |
 
 ### 7. Analysis quality and security
 
@@ -136,6 +138,7 @@ Misunderstanding the task and redoing it is the biggest token waste of all. A li
 | `evidence-analysis` | delegated / command | For investigations, root-causing and reviewing conclusions. Labels every conclusion as observation, inference or unknown with sources, goes from overview to detail, and leaves a traceable finding ledger |
 | `security-review` (Sonnet) | delegated | Static review against OWASP categories: unsafe patterns, leaked keys or tokens. Read-only; reports with evidence, severity and fixes. Only for your own or authorized code |
 | `security-test` (Sonnet) | delegated | Dynamic testing against your own authorized, isolated dev/test environment to verify vulnerabilities. Always confirms scope first; never touches production or sends data out |
+| Danger guard (experimental) | auto | Checks an always-ask list before a tool runs: force push, pushing to main, deleting files outside the project, touching `.env` or key files, `DROP TABLE`, `terraform destroy`, `kubectl delete`, changing Claude Code or Chutora settings, `git reset --hard` and `git clean -f` ask you first; `rm -rf ~`, `rm -rf /` and the like are blocked. `git push origin feat/x` and `rm -rf node_modules` pass. Edit the list in `~/.claude/chutora/always-ask`; turn off with `/chutora guard off` or `CHUTORA_GUARD=0` |
 
 ### 8. Self-improvement: gets smoother with use
 
@@ -143,13 +146,14 @@ Misunderstanding the task and redoing it is the biggest token waste of all. A li
 |---|---|---|
 | `harness-tune` | command | For a kind of task that keeps going badly: reads past lessons, proposes one to three small adjustments, and after you confirm changes one thing at a time, with a backup and rollback |
 | `harness-lessons.md` | auto (written by harness-tune) | Records each adjustment's result (worked, didn't, rolled back) so the next tune starts from the last conclusion |
+| Observation log (experimental) | auto | The groundwork for learning: tool successes and failures, repeating errors, subagent results, your corrections ("that's wrong", "not what I asked") and choices go to `~/.claude/chutora/projects/<project id>/observations.jsonl`. It prints nothing, so it costs no tokens; only short summaries are kept, never tool output, keys are masked, and it rotates past 5 MB. Turn off with `/chutora observe off` or `CHUTORA_OBSERVE=0` |
 
 ### 9. Entry point, interface and setup
 
 | Feature | Trigger | What it does |
 |---|---|---|
 | `/chutora` | command | Single entry point: status overview (version, mode, context, loop guard, each switch and how much it has saved) plus a menu; reply with a number to run it |
-| `/chutora doctor` | command | Read-only install check: python3, hooks, status line, memory store, auto-compact, Haiku Explore, old-version leftovers, with a fix for each problem |
+| `/chutora doctor` | command | Read-only install check: python3, hooks, status line, memory store, auto-compact, Haiku Explore, old-version leftovers, your danger-guard rules and the observation log, with a fix for each problem |
 | Three modes | command | `/chutora mode economy` / `balanced` / `quality`: changes the delegation conventions injected at session start, the trimming thresholds and how many clarify questions are asked; does not change any agent's model |
 | Chinese and English | auto | Reminders, the status line and `/chutora` follow the system language; pin it with `/chutora lang zh` / `en` / `auto` |
 | Flight Deck status line | auto (once the status line is set up) | While Claude works, the status line shows the current action: `▶ worker·Sonnet Run tests npm test · 12s │ session 42k tok │ trimmed≈8k │ ctx 95k/120k`; when idle it keeps the compact layout. Uses only the official status line and standard hooks; `CHUTORA_ACTIVITY=0` turns it off |
@@ -270,7 +274,8 @@ ANTHROPIC_API_KEY=... python3 bench/run.py --runs 3 --model opus
 | <img src="assets/icons/shield.svg" width="18" height="18" alt=""> Done (0.14) | Read dedup, MCP output trimming, clarify | Unchanged re-reads in the same conversation get one line; huge MCP payloads are trimmed first; vague tasks or "not sure" get a few multiple-choice questions first, with the answers saved as a task brief |
 | <img src="assets/icons/shield.svg" width="18" height="18" alt=""> Done (0.15) | Flight Deck | The status line shows what Claude is doing right now (stable path, official mechanisms only); agent-board becomes a full panel: now, to-do progress, workload, timeline, files |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> Planned | Code map and blast radius | A compact symbol index saved to memory; before changing a function, list what it affects; warns when the index is stale |
-| <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> Planned | Dangerous-action guard | Always confirm before deleting files, force-pushing or touching production |
+| <img src="assets/icons/eyes.svg" width="18" height="18" alt=""> Experimental: feat/v2-batch1 | Dangerous-action guard | Force push, pushing to main, deleting files outside the project, touching `.env`, `DROP TABLE` and the like ask you first; `rm -rf ~` and the like are blocked; the list is yours to edit |
+| <img src="assets/icons/eyes.svg" width="18" height="18" alt=""> Experimental: feat/v2-batch1 | Groundwork for learning | A token-free observation log, a change log and memory identity data; MCP trimming no longer cuts plain-text guides |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> Planned | Routing that learns from outcomes | Record how each delegation turned out and suggest delegation-table fixes, applied only after you confirm |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> Planned | Stuck rescue | When the AI keeps failing and every fix makes it worse: gather evidence, stop the bleeding, offer two or three ways out, and record the lesson |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> Planned | Project checkup | Beyond the `/chutora doctor` install check: test gaps, stale memory, unused tools and a quick security sweep in one go |
@@ -299,7 +304,7 @@ Every new feature follows the same principle: **lightweight, manual, reversible*
 
 ## <img src="assets/icons/pin.svg" width="26" height="26" alt=""> Status
 
-**v0.15.0, early version.** Versions up to 0.10.0 were named smart-agent-route, and up to 0.7.0 tiered-agents; to upgrade, remove the old version first (see the section on upgrading from tiered-agents (0.7.0 and earlier) in the [deployment notes](docs/%E9%83%A8%E7%BD%B2%E5%AE%89%E8%A3%9D.md)). The context reminder hook, handoff, bulk, and the Explore override were ported from the author's personal setup: the hook has fired in real conversations and Explore and bulk are confirmed to run on Haiku, but all are still being validated. The worker-hard escalation chain, the research skill, and the plugin form of the hooks have not been used in practice yet. agent-board and reply-detail have been tested in the VS Code extension 2.1.301 for the board; persistent mode, the button in the board, and the reply-format injection are still being validated. The `/chutora` entry point, doctor, modes, bilingual messages and weekly recap added in 0.12 have unit tests but haven't been validated in long real-world use yet. Noisy-output trimming (0.13) and read dedup, MCP output trimming and clarify (0.14) have unit tests, but the format for replacing tool output was inferred from Claude Code's type definitions and docs and has not yet been confirmed in a real session.
+**v0.16.0-beta.1, early version (experimental branch feat/v2-batch1).** Versions up to 0.10.0 were named smart-agent-route, and up to 0.7.0 tiered-agents; to upgrade, remove the old version first (see the section on upgrading from tiered-agents (0.7.0 and earlier) in the [deployment notes](docs/%E9%83%A8%E7%BD%B2%E5%AE%89%E8%A3%9D.md)). The context reminder hook, handoff, bulk, and the Explore override were ported from the author's personal setup: the hook has fired in real conversations and Explore and bulk are confirmed to run on Haiku, but all are still being validated. The worker-hard escalation chain, the research skill, and the plugin form of the hooks have not been used in practice yet. agent-board and reply-detail have been tested in the VS Code extension 2.1.301 for the board; persistent mode, the button in the board, and the reply-format injection are still being validated. The `/chutora` entry point, doctor, modes, bilingual messages and weekly recap added in 0.12 have unit tests but haven't been validated in long real-world use yet. Noisy-output trimming (0.13) and read dedup, MCP output trimming and clarify (0.14) have unit tests, but the format for replacing tool output was inferred from Claude Code's type definitions and docs and has not yet been confirmed in a real session. The 0.16 danger guard, observation log and MCP trimming fix have unit tests and were tested with `claude -p` (Claude Code 2.1.319): the guard stopped the commands it should ask about, without running them, in default mode and with `--dangerously-skip-permissions`, while ordinary commands ran; the observation log added no tokens; long plain-text MCP output came through in full while a long JSON list was still trimmed. The confirmation prompt the guard triggers in an interactive session has not been tested yet.
 
 Known rough edges:
 

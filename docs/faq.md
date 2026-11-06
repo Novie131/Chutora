@@ -6,7 +6,7 @@
 不用，MIT 授權。用量跟平常一樣算在你的 Claude 方案裡；Chutora 的目的就是讓同樣的用量做更多事。
 
 **會不會改我的設定？**
-plugin 安裝本身不改 `settings.json`。只有 `/chutora:route-setup` 會在你逐項同意後寫入，寫之前先備份，已有的值不覆蓋。`/chutora mode` 和 `/chutora lang` 只寫 `~/.claude/chutora/` 底下自己的兩個小檔案。`/chutora doctor` 完全唯讀。
+plugin 安裝本身不改 `settings.json`。只有 `/chutora:route-setup` 會在你逐項同意後寫入，寫之前先備份，已有的值不覆蓋。`/chutora mode` 和 `/chutora lang` 只寫 `~/.claude/chutora/` 底下自己的兩個小檔案。`/chutora doctor` 完全唯讀。實驗中的觀察紀錄寫在 `~/.claude/chutora/projects/`，危險守門攔下時在 `claude-memory/changes.jsonl`（或 auto memory 目錄）追加一行，都不碰 `settings.json`。
 
 **跟 Claude Code 內建的 `/rewind` 差在哪？**
 `/rewind` 會在你每次送出訊息前存檔，可以還原主對話用編輯工具改過的檔案。官方文件寫明兩個例外：子 agent 改的檔案、Bash 指令改的檔案，都不會被還原。Chutora 把實作交給 worker 子 agent，所以這部分目前請用 git；路線圖上的「卡關救援」會補上這塊。
@@ -46,6 +46,18 @@ hooks 只讀寫本機檔案。只有你要查外部資料時（research）才會
 
 **MCP 輸出瘦身會不會漏掉我要的欄位？**
 被略過的筆數、截斷的字串都會在輸出裡註明，原文一定存在 `~/.claude/chutora/raw/`。某個工具一定要完整輸出，就把它加進排除清單（`CHUTORA_MCP_TRIM_EXCLUDE` 或 `~/.claude/chutora/mcp-trim-exclude`）。
+
+**MCP 瘦身為什麼不瘦純文字了？**
+0.15 曾把一個 connector 的使用說明砍掉 204 行，Claude 就照著殘缺的說明做事。說明文件每一行都可能有用，所以 0.16 起純文字與 Markdown 預設不動，只處理 JSON 的長陣列與重複項。真的想瘦純文字：`/chutora mcp-trim text on`。
+
+**危險守門會不會擋到我平常的指令？**
+它只看「永遠要問清單」：`git push origin feat/x`、`rm -rf node_modules`、`npm install` 這類一般指令不攔，commit 訊息或 `echo` 裡「提到」危險指令也不攔。某條規則一直問到你不想再被問，就在 `~/.claude/chutora/always-ask` 加一行 `!<規則 id>`（`/chutora guard rules` 列出 id）。
+
+**用 `--dangerously-skip-permissions` 時守門還有用嗎？**
+有。`rm -rf ~` 這類「直接擋」在任何權限模式都擋（官方文件寫明）。「先問你」的項目用 `claude -p` 加這個旗標實測時沒有執行（沒有人能確認，當成拒絕），Claude 會收到原因並向你說明。互動模式下的行為還沒實測。
+
+**觀察紀錄會不會花 token？存了什麼？**
+不花：它不輸出任何東西，實測有沒有它，同一個任務的輸入 token 只差每次執行本來就有的幾個。它只存精簡摘要（指令、路徑、工具名、輸出大小），不存工具輸出內容，一般提示只記長度，常見金鑰格式會遮罩。檔案在 `~/.claude/chutora/projects/<專案 id>/`，超過 5 MB 自動輪替；不想要就 `/chutora observe off`。
 
 **Benchmark 的數字在哪？**
 還沒公布。`bench/run.py` 已經可以跑，但在實際跑完、核對過之前不放任何數字，見 README 的 [Benchmark](../README.md#benchmark)。
