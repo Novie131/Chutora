@@ -2,16 +2,19 @@
 """PostToolUse（mcp__*）hook：MCP 輸出瘦身。
 
 Slack、資料庫、網頁這類 MCP 工具常回傳一大坨資料。超過門檻時，在進入 context 之前：
-- JSON：長陣列保留前 N 筆並註明「另有 M 筆」、連續相同的項目合併、過長的字串欄位截斷、
-  空值欄位（null、""、[]、{}）拿掉；
-- 純文字：沿用 trim.py 的行規則（保留開頭、結尾、錯誤與摘要行，收斂重複行）。
+- JSON：長陣列保留前 N 筆並註明「另有 M 筆」、連續相同的項目合併、空值欄位（null、""、[]、{}）拿掉；
+- 純文字、Markdown（例如使用說明、文件內容）預設一律不動：這類輸出通常每一行都有用，
+  曾經發生把 connector 的 guide 說明砍掉 204 行的事。JSON 裡的長字串欄位預設也不截斷，理由相同。
+  真的想瘦身純文字時，設 CHUTORA_MCP_TRIM_TEXT=1（或 ~/.claude/chutora/mcp-trim-text 寫 on），
+  就會沿用 trim.py 的行規則並截斷 JSON 長字串。
 原文一定另存到 ~/.claude/chutora/raw/<tool_use_id>.log，並在輸出最後寫明路徑。
 回傳形狀照抄原本的（字串、content 陣列、或帶 content 的物件），圖片等非文字區塊不動，
 用 PostToolUse 的 hookSpecificOutput.updatedMCPToolOutput 替換。
 
 開關：CHUTORA_MCP_TRIM=0 關閉；/chutora mcp-trim on|off 寫入 ~/.claude/chutora/mcp-trim。
 排除清單：CHUTORA_MCP_TRIM_EXCLUDE（逗號分隔）或 ~/.claude/chutora/mcp-trim-exclude（一行一個），
-寫工具全名或前綴（例如 mcp__github__ 或 mcp__slack__read_thread）。門檻依模式。任何例外都安靜放行。
+寫工具全名、前綴（例如 mcp__github__ 或 mcp__slack__read_thread），或只寫 server 名稱（例如 slack、
+claude_ai_Notion，等同 mcp__<名稱>__）；/chutora mcp-trim exclude <server> 會幫你加。門檻依模式。任何例外都安靜放行。
 """
 import json
 import os
@@ -40,17 +43,30 @@ def enabled():
     return cfg_file("mcp-trim") != "off"
 
 
-def excluded(tool):
+def text_trim_enabled():
+    """純文字／Markdown 與 JSON 長字串要不要瘦身（預設不要）。"""
+    if os.environ.get("CHUTORA_MCP_TRIM_TEXT", "").strip() == "1":
+        return True
+    return cfg_file("mcp-trim-text") == "on"
+
+
+def exclude_patterns():
     pats = [p.strip() for p in os.environ.get("CHUTORA_MCP_TRIM_EXCLUDE", "").split(",") if p.strip()]
     try:
         with open(os.path.join(conf_dir(), "mcp-trim-exclude")) as f:
             pats += [ln.strip() for ln in f if ln.strip() and not ln.startswith("#")]
     except OSError:
         pass
-    return any(tool == p or tool.startswith(p) for p in pats)
+    # 只寫 server 名稱（沒有 mcp__ 前綴）→ 視為 mcp__<名稱>__
+    return [p if p.startswith("mcp__") else f"mcp__{p}__" for p in pats]
+
+
+def excluded(tool):
+    return any(tool == p or tool.startswith(p) for p in exclude_patterns())
 
 
 def shrink_json(v, keep, max_str, st):
+    """max_str 為 None 時不截斷字串（預設）。"""
     if isinstance(v, dict):
         out = {}
         for k, x in v.items():
@@ -79,7 +95,7 @@ def shrink_json(v, keep, max_str, st):
             st["items"] += rest
             items = items[:keep] + [f"… {rest} more items omitted" if lang() == "en" else f"…另有 {rest} 筆已略過"]
         return [shrink_json(x, keep, max_str, st) for x in items]
-    if isinstance(v, str) and len(v) > max_str:
+    if max_str is not None and isinstance(v, str) and len(v) > max_str:
         st["strings"] += 1
         cut = len(v) - max_str
         return v[:max_str] + (f"… ({cut} chars cut)" if lang() == "en" else f"…（截斷 {cut} 字元）")
@@ -91,6 +107,7 @@ def shrink_text(text, md):
     limit, keep, max_str = LIMITS[md]
     if len(text) <= limit:
         return None
+    text_too = text_trim_enabled()
     s = text.strip()
     if s[:1] in ("{", "["):
         try:
@@ -99,10 +116,13 @@ def shrink_text(text, md):
             obj = None
         if obj is not None:
             st = {"items": 0, "merged": 0, "strings": 0, "dropped": 0}
-            new = json.dumps(shrink_json(obj, keep, max_str, st), ensure_ascii=False, separators=(",", ":"))
+            new = json.dumps(shrink_json(obj, keep, max_str if text_too else None, st), ensure_ascii=False,
+                             separators=(",", ":"))
             if len(new) < len(text):
                 return new, st
             return None
+    if not text_too:  # 純文字、Markdown：預設不動
+        return None
     r = shrink(text, "noisy", md)
     if r:
         return r[0], {"lines": r[1]["skipped"]}

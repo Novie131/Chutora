@@ -28,7 +28,7 @@ class McpTrimTest(unittest.TestCase):
         data = {"hook_event_name": "PostToolUse", "tool_name": tool, "tool_use_id": tool_use_id,
                 "tool_input": {"channel": "C1"}, "tool_response": resp}
         e = dict(os.environ, HOME=str(self.home), CHUTORA_LANG="zh")
-        for k in ("CHUTORA_MCP_TRIM", "CHUTORA_MCP_TRIM_EXCLUDE", "CHUTORA_MODE"):
+        for k in ("CHUTORA_MCP_TRIM", "CHUTORA_MCP_TRIM_EXCLUDE", "CHUTORA_MCP_TRIM_TEXT", "CHUTORA_MODE"):
             e.pop(k, None)
         e.update(env or {})
         r = subprocess.run([sys.executable, str(MCP)], input=json.dumps(data), capture_output=True, text=True, env=e, timeout=30)
@@ -52,9 +52,13 @@ class McpTrimTest(unittest.TestCase):
         st = json.loads((self.conf / "trim-stats.json").read_text())
         self.assertGreater(st["kinds"]["mcp"], 1000)
 
-    def test_string_response_and_long_strings(self):
+    def test_long_json_strings_kept_by_default(self):
         big = json.dumps({"page": "x" * 9000})
-        out = self.run_hook(big)
+        self.assertIsNone(self.run_hook(big))
+
+    def test_string_response_and_long_strings_opt_in(self):
+        big = json.dumps({"page": "x" * 9000})
+        out = self.run_hook(big, env={"CHUTORA_MCP_TRIM_TEXT": "1"})
         new = out["hookSpecificOutput"]["updatedMCPToolOutput"]
         self.assertIsInstance(new, str)
         self.assertIn("截斷", new)
@@ -66,9 +70,32 @@ class McpTrimTest(unittest.TestCase):
         self.assertIn("content", new)
         self.assertFalse(new["isError"])
 
-    def test_plain_text_lines(self):
+    def test_plain_text_untouched_by_default(self):
         text = "\n".join(f"row {i}: Downloading chunk {i} 45%" for i in range(600)) + "\nERROR: quota exceeded\nDone."
-        out = self.run_hook([{"type": "text", "text": text}])
+        self.assertIsNone(self.run_hook([{"type": "text", "text": text}]))
+        self.assertIsNone(self.run_hook(text))
+
+    def test_long_guide_text_untouched(self):
+        """實際發生過：Claude Docs connector 的 guide 說明被砍掉 204 行。長篇說明文字一律不動。"""
+        doc = "# Docs guide\n\n" + "\n".join(
+            f"- Step {i}: call `batch` with a pending block, then replace it with the section body ({i})." for i in range(300))
+        for resp in ([{"type": "text", "text": doc}], doc, {"content": [{"type": "text", "text": doc}]}):
+            self.assertIsNone(self.run_hook(resp, tool="mcp__Claude_Docs__guide"))
+        # 包在 JSON 字串裡的長篇 Markdown 也不截斷
+        self.assertIsNone(self.run_hook([{"type": "text", "text": json.dumps({"topic": "index", "text": doc})}],
+                                        tool="mcp__Claude_Docs__guide"))
+        self.assertFalse((self.conf / "raw").exists())
+
+    def test_long_json_array_still_trimmed_next_to_text(self):
+        doc = "\n".join(f"line {i} of the manual" for i in range(400))
+        out = self.run_hook([{"type": "text", "text": doc}, {"type": "text", "text": slack_json()}])
+        new = out["hookSpecificOutput"]["updatedMCPToolOutput"]
+        self.assertEqual(new[0]["text"], doc)
+        self.assertIn("另有 170 筆", json.loads(new[1]["text"])["messages"][-1])
+
+    def test_plain_text_lines_opt_in(self):
+        text = "\n".join(f"row {i}: Downloading chunk {i} 45%" for i in range(600)) + "\nERROR: quota exceeded\nDone."
+        out = self.run_hook([{"type": "text", "text": text}], env={"CHUTORA_MCP_TRIM_TEXT": "1"})
         new = out["hookSpecificOutput"]["updatedMCPToolOutput"]
         self.assertIn("ERROR: quota exceeded", new[0]["text"])
         self.assertIn("略過", new[0]["text"])
@@ -90,6 +117,13 @@ class McpTrimTest(unittest.TestCase):
         self.assertIsNone(self.run_hook([{"type": "text", "text": slack_json()}], env={"CHUTORA_MCP_TRIM": "0"}))
         self.conf.mkdir(parents=True, exist_ok=True)
         (self.conf / "mcp-trim").write_text("off\n")
+        self.assertIsNone(self.run_hook([{"type": "text", "text": slack_json()}]))
+
+    def test_exclude_by_server_name(self):
+        self.assertIsNone(self.run_hook([{"type": "text", "text": slack_json()}], env={"CHUTORA_MCP_TRIM_EXCLUDE": "slack"}))
+        self.assertIsNotNone(self.run_hook([{"type": "text", "text": slack_json()}], env={"CHUTORA_MCP_TRIM_EXCLUDE": "slackbot"}))
+        self.conf.mkdir(parents=True, exist_ok=True)
+        (self.conf / "mcp-trim-exclude").write_text("slack\n")
         self.assertIsNone(self.run_hook([{"type": "text", "text": slack_json()}]))
 
     def test_exclude_file(self):
