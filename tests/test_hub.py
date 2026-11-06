@@ -123,6 +123,47 @@ class HubTest(unittest.TestCase):
         self.run_hub("mode", "economy")
         self.assertIn("3000 字元", self.run_hub().stdout)
 
+    def test_guard_and_observe_status_and_switches(self):
+        out = self.run_hub().stdout
+        self.assertIn("危險守門（實驗中）：開啟", out)
+        self.assertIn("觀察紀錄（實驗中）：開啟", out)
+        self.assertIn("/chutora guard on|off|rules", out)
+        self.assertEqual(self.run_hub("guard", "off").returncode, 0)
+        self.assertEqual(self.conf("guard"), "off")
+        self.assertEqual(self.run_hub("observe", "off").returncode, 0)
+        out = self.run_hub().stdout
+        self.assertIn("危險守門（實驗中）：關閉（/chutora guard off）", out)
+        self.assertIn("觀察紀錄（實驗中）：關閉", out)
+        self.run_hub("guard", "on")
+        self.assertIsNone(self.conf("guard"))
+        self.assertIn("關閉（CHUTORA_OBSERVE=0）", self.run_hub(CHUTORA_OBSERVE="0").stdout)
+        r = self.run_hub("guard", "rules", lang="en")
+        self.assertIn("rm-catastrophe [deny]", r.stdout)
+
+    def test_mcp_trim_exclude_include_text(self):
+        self.assertIn("純文字／Markdown 不動", self.run_hub().stdout)
+        self.assertEqual(self.run_hub("mcp-trim", "exclude", "Claude_Docs").returncode, 0)
+        self.assertEqual(self.conf("mcp-trim-exclude"), "Claude_Docs")
+        self.assertIn("mcp__Claude_Docs__", self.run_hub().stdout)
+        self.run_hub("mcp-trim", "exclude", "slack")
+        self.assertTrue((self.home / ".claude" / "chutora" / "mcp-trim-exclude.bak").exists())
+        self.assertEqual(self.run_hub("mcp-trim", "include", "mcp__Claude_Docs__").returncode, 0)
+        self.assertEqual(self.conf("mcp-trim-exclude"), "slack")
+        self.assertEqual(self.run_hub("mcp-trim", "exclude", "bad name;rm").returncode, 2)
+        self.run_hub("mcp-trim", "text", "on")
+        self.assertEqual(self.conf("mcp-trim-text"), "on")
+        self.run_hub("mcp-trim", "text", "off")
+        self.assertIsNone(self.conf("mcp-trim-text"))
+
+    def test_doctor_flags_bad_guard_rules(self):
+        c = self.home / ".claude" / "chutora"
+        c.mkdir(parents=True)
+        (c / "always-ask").write_text("([broken\n\\bnpm publish\\b\n")
+        r = self.run_hub("doctor")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("[要修] 危險守門", r.stdout)
+        self.assertIn("([broken", r.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -2,8 +2,9 @@
 """/chutora 的腳本：狀態總覽、安裝健檢、模式與語言切換。只用標準函式庫。
 
 用法：chutora.py [status] | doctor | mode [economy|balanced|quality] | lang [zh|en|auto]
-      | trim|dedup|mcp-trim [on|off] | ask [on|off]
-status 與 doctor 唯讀；mode／lang 只寫 ~/.claude/chutora/ 底下自己的設定檔。
+      | trim|dedup|mcp-trim [on|off] | mcp-trim exclude|include <server> | mcp-trim text on|off
+      | ask [on|off] | guard [on|off|rules] | observe [on|off]
+status 與 doctor 唯讀；其他子指令只寫 ~/.claude/chutora/ 底下自己的設定檔。
 """
 import glob
 import json
@@ -178,6 +179,8 @@ TOGGLES = {  # 子指令 → (設定檔名, 環境變數, 中文名, 英文名)
     "dedup": ("dedup", "CHUTORA_DEDUP", "讀檔去重", "Read dedup"),
     "mcp-trim": ("mcp-trim", "CHUTORA_MCP_TRIM", "MCP 輸出瘦身", "MCP output trimming"),
     "ask": ("ask", "CHUTORA_ASK", "反問提醒", "Clarify reminders"),
+    "guard": ("guard", "CHUTORA_GUARD", "危險守門", "Danger guard"),
+    "observe": ("observe", "CHUTORA_OBSERVE", "觀察紀錄", "Observation log"),
 }
 ASK_MAX = {"economy": 3, "balanced": 4, "quality": 5}
 
@@ -208,6 +211,54 @@ def saved_kinds():
 
 def cmd(name):
     return f"/chutora:{name}" if namespaced() else f"/{name}"
+
+
+def hook_mod(name):
+    """載入 hooks/ 底下的模組（guard、projectid、changes、mcptrim）；載不到回傳 None。"""
+    if not HOOKS:
+        return None
+    try:
+        import importlib
+        return importlib.import_module(name)
+    except Exception:
+        return None
+
+
+def guard_info():
+    """回傳 (預設規則數, 停用的預設規則, 使用者規則數, 壞掉的行, 最近 7 天攔下幾次)。"""
+    g = hook_mod("guard")
+    if not g:
+        return None
+    off, extra, bad = g.user_rules()
+    recent = 0
+    ch = hook_mod("changes")
+    if ch:
+        import time
+        cutoff = time.strftime("%Y-%m-%d", time.localtime(time.time() - 7 * 86400))
+        recent = sum(1 for x in ch.read(project_dir=project_dir()) if str(x.get("action", "")).startswith("guard_")
+                     and str(x.get("ts", ""))[:10] >= cutoff)
+    return len(g.RULES), sorted(off & set(g.RULES)), len(extra), bad, recent
+
+
+def observe_info():
+    """回傳 (observations.jsonl 路徑, 大小 bytes 或 None)；唯讀，不建立目錄。"""
+    pid = hook_mod("projectid")
+    if not pid:
+        return None
+    try:
+        d = pid.project_data_dir(project_dir(), create=False)
+    except Exception:
+        return None
+    p = os.path.join(d, "observations.jsonl")
+    return p, (os.path.getsize(p) if os.path.isfile(p) else None)
+
+
+def mcp_excludes():
+    m = hook_mod("mcptrim")
+    try:
+        return m.exclude_patterns() if m else []
+    except Exception:
+        return []
 
 
 # ------------------------------------------------------------------ status
@@ -254,6 +305,28 @@ def status():
     n = ASK_MAX[mode]
     print(T(f"- 反問：{'開啟' if on3 else '關閉（' + why3 + '）'}（大任務且模糊、或你說不確定時先問，最多 {n} 題；/chutora ask 可強制先問）",
             f"- Clarify: {'on' if on3 else 'off (' + why3 + ')'} (asks first, up to {n} questions, on big vague tasks or when you're unsure; /chutora ask forces it)"))
+    ex = mcp_excludes()
+    text_on = os.environ.get("CHUTORA_MCP_TRIM_TEXT", "").strip() == "1" or read_text(os.path.join(CONF, "mcp-trim-text")).lower() == "on"
+    print(T(f"  MCP 瘦身只處理 JSON 長陣列與重複項；純文字／Markdown {'也會瘦身（mcp-trim text on）' if text_on else '不動'}；"
+            f"排除：{', '.join(ex) if ex else '無'}",
+            f"  MCP trimming only touches long JSON lists and repeats; plain text / Markdown {'is trimmed too (mcp-trim text on)' if text_on else 'is left alone'}; "
+            f"excluded: {', '.join(ex) if ex else 'none'}"))
+    on4, why4 = toggle_state("guard")
+    gi = guard_info()
+    if gi:
+        n_rules, off_rules, n_user, bad, recent = gi
+        extra = T(f"；預設 {n_rules} 條{'、停用 ' + ','.join(off_rules) if off_rules else ''}、你的規則 {n_user} 條、近 7 天攔下 {recent} 次",
+                  f"; {n_rules} default rules{', disabled: ' + ','.join(off_rules) if off_rules else ''}, {n_user} of yours, {recent} stopped in the last 7 days")
+    else:
+        extra = ""
+    print(T(f"- 危險守門（實驗中）：{'開啟' if on4 else '關閉（' + why4 + '）'}（force push、rm -rf 專案外、碰 .env 等先問你；rm -rf ~ 這類直接擋）{extra}",
+            f"- Danger guard (experimental): {'on' if on4 else 'off (' + why4 + ')'} (asks before force push, rm -rf outside the project, touching .env…; blocks rm -rf ~ and the like){extra}"))
+    on5, why5 = toggle_state("observe")
+    oi = observe_info()
+    size = T(f"，{oi[1] // 1024:,} KB", f", {oi[1] // 1024:,} KB") if oi and oi[1] else ""
+    where = (oi[0].replace(HOME, "~") if oi else "~/.claude/chutora/projects/<id>/observations.jsonl")
+    print(T(f"- 觀察紀錄（實驗中）：{'開啟' if on5 else '關閉（' + why5 + '）'}（不花 token，記在 {where}{size}）",
+            f"- Observation log (experimental): {'on' if on5 else 'off (' + why5 + ')'} (costs no tokens; kept in {where}{size})"))
     print()
     print(T("可以做的事（直接回覆編號或名稱）：", "What you can do (reply with a number or name):"))
     items = [
@@ -268,7 +341,10 @@ def status():
         (cmd("route-setup"), "完整設定：狀態列、自動壓縮、記憶庫", "full setup: status line, auto-compact, memory"),
         ("/chutora trim on|off", "噪音輸出瘦身開關（原文存在 ~/.claude/chutora/raw/）", "turn noisy-output trimming on/off (originals kept in ~/.claude/chutora/raw/)"),
         ("/chutora dedup on|off", "讀檔去重開關（同一段對話重讀沒變的檔案不再重送）", "turn read dedup on/off (unchanged re-reads aren't sent again)"),
-        ("/chutora mcp-trim on|off", "MCP 輸出瘦身開關（長陣列、長字串先瘦身）", "turn MCP output trimming on/off (long lists and strings trimmed)"),
+        ("/chutora mcp-trim on|off", "MCP 輸出瘦身開關（只瘦 JSON 長陣列與重複項）", "turn MCP output trimming on/off (long JSON lists and repeats only)"),
+        ("/chutora mcp-trim exclude|include <server>", "某個 MCP server 完全不瘦身／恢復", "never trim one MCP server / undo"),
+        ("/chutora guard on|off|rules", "危險守門開關與規則清單（實驗中）", "danger guard switch and rule list (experimental)"),
+        ("/chutora observe on|off", "觀察紀錄開關（實驗中）", "observation log switch (experimental)"),
     ]
     for i, (c, zh, en) in enumerate(items, 1):
         print(f"{i}. {c} — {T(zh, en)}")
@@ -301,7 +377,8 @@ def doctor():
         need = {"session-start.sh": "SessionStart", "context-check.py": "UserPromptSubmit", "post-tool.py": "PostToolUse",
                 "trim.py": "PostToolUse (Bash: trim)", "dedup.py": "PostToolUse (Read: dedup)",
                 "mcptrim.py": "PostToolUse (mcp__: MCP trim)", "ask.py": "UserPromptSubmit (ask)",
-                "activity.py": "PreToolUse/PostToolUse (activity)"}
+                "activity.py": "PreToolUse/PostToolUse (activity)", "guard.py": "PreToolUse (guard)",
+                "observe.py": "PostToolUse/PostToolUseFailure/SubagentStop/UserPromptSubmit (observe)"}
         missing = [ev for f, ev in need.items() if f not in hooks_json]
         if missing:
             add(FIX, "hooks", T("settings.json 缺少：", "missing in settings.json: ") + ", ".join(missing),
@@ -357,6 +434,33 @@ def doctor():
               "Remove the old version as described in docs (upgrading from smart-agent-route); point settings.json paths to chutora"))
     else:
         add(OK, T("舊版 smart-agent-route", "old smart-agent-route"), T("沒有殘留", "nothing left over"))
+
+    gi = guard_info()
+    if gi is None:
+        add(OPT, T("危險守門", "danger guard"), T("找不到 guard.py", "guard.py not found"))
+    else:
+        bad = gi[3]
+        on_g, why_g = toggle_state("guard")
+        if bad:
+            add(FIX, T("危險守門", "danger guard"),
+                T(f"~/.claude/chutora/always-ask 有 {len(bad)} 行不是有效的 regex（已略過）：", f"{len(bad)} line(s) in ~/.claude/chutora/always-ask are not valid regex (skipped): ")
+                + " | ".join(b.strip() for b in bad[:3]),
+                T("修正或刪掉那幾行；每行一個 regex，! 開頭表示移除預設規則", "Fix or remove those lines; one regex per line, ! to remove a default rule"))
+        else:
+            add(OK if on_g else OPT, T("危險守門", "danger guard"),
+                (T("開啟", "on") if on_g else T(f"關閉（{why_g}）", f"off ({why_g})")) +
+                T(f"，你的規則 {gi[2]} 條", f", {gi[2]} rule(s) of yours"),
+                "" if on_g else T("/chutora guard on 重新開啟", "Turn it back on with /chutora guard on"))
+    oi = observe_info()
+    if oi:
+        d = os.path.dirname(oi[0])
+        probe = d if os.path.isdir(d) else CONF if os.path.isdir(CONF) else CLAUDE
+        writable = os.access(probe, os.W_OK)
+        big = oi[1] is not None and oi[1] > 6 * 1024 * 1024
+        add(OK if writable and not big else FIX, T("觀察紀錄", "observation log"),
+            oi[0].replace(HOME, "~") + (T(f"（{oi[1] // 1024:,} KB）", f" ({oi[1] // 1024:,} KB)") if oi[1] else T("（還沒有紀錄）", " (nothing yet)")),
+            "" if writable and not big else (T(f"{probe} 不能寫入", f"{probe} is not writable") if not writable
+                                              else T("超過 5 MB 卻沒有輪替；確認 observe.py 是新版", "Over 5 MB without rotating; check observe.py is up to date")))
 
     add(OK, T("版本", "version"), f"{version()} ({kind})")
 
@@ -486,6 +590,67 @@ def ask(arg):
     return 0
 
 
+def mcp_sub(action, arg):
+    """mcp-trim exclude|include <server>、mcp-trim text on|off。寫檔前備份成 .bak。"""
+    path = os.path.join(CONF, "mcp-trim-exclude")
+    if action == "text":
+        a = arg.lower()
+        if a in ("on", "off"):
+            write_conf("mcp-trim-text", "on" if a == "on" else None)
+            print(T("純文字／Markdown 的 MCP 輸出也會瘦身（寫入 ~/.claude/chutora/mcp-trim-text）；改回：/chutora mcp-trim text off。"
+                    if a == "on" else "純文字／Markdown 的 MCP 輸出不再瘦身（預設）。",
+                    "Plain-text / Markdown MCP output will be trimmed too (saved to ~/.claude/chutora/mcp-trim-text); undo: /chutora mcp-trim text off."
+                    if a == "on" else "Plain-text / Markdown MCP output is no longer trimmed (the default)."))
+            return 0
+        print(T("用法：/chutora mcp-trim text on|off", "Usage: /chutora mcp-trim text on|off"))
+        return 2
+    name = arg.strip()
+    if not name or not re.match(r"^[\w.:-]+$", name):
+        print(T("用法：/chutora mcp-trim exclude|include <server 名稱或 mcp__ 前綴>", "Usage: /chutora mcp-trim exclude|include <server name or mcp__ prefix>"))
+        return 2
+    lines = read_text(path).splitlines()
+    norm = lambda x: x.strip() if x.strip().startswith("mcp__") else f"mcp__{x.strip()}__"  # noqa: E731
+    target = norm(name)
+    if action == "exclude":
+        if any(norm(x) == target for x in lines if x.strip() and not x.startswith("#")):
+            print(T(f"{target} 已在排除清單。", f"{target} is already excluded."))
+            return 0
+        lines.append(name)
+    else:
+        new = [x for x in lines if x.startswith("#") or not x.strip() or norm(x) != target]
+        if new == lines:
+            print(T(f"{target} 不在排除清單。", f"{target} is not in the exclude list."))
+            return 0
+        lines = new
+    os.makedirs(CONF, exist_ok=True)
+    if os.path.exists(path):
+        import shutil
+        shutil.copy2(path, path + ".bak")
+    write_conf("mcp-trim-exclude", "\n".join(lines) if lines else None)
+    print(T(f"已{'排除' if action == 'exclude' else '恢復'} {target}（寫入 ~/.claude/chutora/mcp-trim-exclude，舊檔備份為 .bak）。",
+            f"{'Excluded' if action == 'exclude' else 'Restored'} {target} (saved to ~/.claude/chutora/mcp-trim-exclude; previous file kept as .bak)."))
+    return 0
+
+
+def guard_rules():
+    g = hook_mod("guard")
+    if not g:
+        print(T("找不到 guard.py。", "guard.py not found."))
+        return 1
+    off, extra, bad = g.user_rules()
+    print(T("危險守門規則（ask＝先問你，deny＝直接擋）：", "Danger guard rules (ask = asks you first, deny = blocked):"))
+    for rid, (d, zh, en) in g.RULES.items():
+        state = T("（已停用）", " (disabled)") if rid in off else ""
+        print(f"- {rid} [{d}] {T(zh, en)}{state}")
+    for d, _, line in extra:
+        print(f"- {T('你的規則', 'yours')} [{d}] {line.strip()}")
+    for line in bad:
+        print(f"- {T('無效（略過）', 'invalid (skipped)')}: {line.strip()}")
+    print(T("調整：編輯 ~/.claude/chutora/always-ask，每行一個 regex；deny: 開頭直接擋；!<規則 id> 移除預設規則。",
+            "Adjust: edit ~/.claude/chutora/always-ask, one regex per line; prefix deny: to block; !<rule id> removes a default rule."))
+    return 0
+
+
 def main(argv):
     sub = argv[0].lower() if argv else "status"
     rest = argv[1] if len(argv) > 1 else ""
@@ -501,12 +666,21 @@ def main(argv):
     if sub in ("dedup", "去重"):
         return toggle("dedup", rest)
     if sub in ("mcp-trim", "mcptrim", "mcp"):
+        if rest.lower() in ("exclude", "include", "text"):
+            return mcp_sub(rest.lower(), argv[2] if len(argv) > 2 else "")
         return toggle("mcp-trim", rest)
+    if sub in ("guard", "守門"):
+        if rest.lower() in ("rules", "規則", "list"):
+            return guard_rules()
+        return toggle("guard", rest)
+    if sub in ("observe", "觀察"):
+        return toggle("observe", rest)
     if sub in ("ask", "反問", "先問我"):
         return ask(rest)
     if sub in ("lang", "language", "語言"):
         return set_lang(rest)
-    print(T(f"不認得的指令：{sub}。可用：status、doctor、mode、trim、dedup、mcp-trim、ask、lang。", f"Unknown command: {sub}. Available: status, doctor, mode, trim, dedup, mcp-trim, ask, lang."))
+    print(T(f"不認得的指令：{sub}。可用：status、doctor、mode、trim、dedup、mcp-trim、ask、guard、observe、lang。",
+            f"Unknown command: {sub}. Available: status, doctor, mode, trim, dedup, mcp-trim, ask, guard, observe, lang."))
     return 2
 
 
