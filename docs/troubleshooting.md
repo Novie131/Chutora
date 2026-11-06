@@ -76,7 +76,30 @@ plugin 沒辦法自己設定主狀態列。plugin 安裝的用 `/chutora:route-s
 
 ### `claude -p` 或略過權限模式下，指令被守門擋下沒有執行
 
-這是預期行為：非互動執行沒有人可以按確認，Claude Code 會把「先問你」當成拒絕。確定要做，就自己在終端機執行，或那一次加上 `CHUTORA_GUARD=0`。
+這是預期行為：非互動執行沒有人可以按確認，Claude Code 會把「先問你」當成拒絕。略過權限模式（`--dangerously-skip-permissions`）下，確認視窗可能被跳過，所以 force push、刪專案外或家目錄的東西、`DROP TABLE`、`terraform destroy`、`kubectl delete` 這幾類做了沒有備份可以救回的，守門會直接擋下（原因會寫「因為目前是略過權限模式」）。確定要做，就自己在終端機執行，或關掉略過權限模式後再試一次；也可以那一次加上 `CHUTORA_GUARD=0`。
+
+### 在你自己的互動式 Claude Code 驗證危險守門
+
+下面全部用安全的假目標：remote 不存在、要刪的資料夾也不存在，就算真的執行也不會改到任何東西。先開一個拋棄式的資料夾：
+
+```sh
+mkdir -p /tmp/chutora-guard-test && cd /tmp/chutora-guard-test && git init -q && git commit -q --allow-empty -m init
+```
+
+**(a) 一般模式：危險指令會跳確認視窗**
+
+1. 在這個資料夾執行 `claude`（不要加任何權限旗標），確認 `/chutora` 顯示「危險守門（實驗中）：開啟」。
+2. 跟 Claude 說：「用 Bash 執行 `git push --force chutora-guard-test-nowhere HEAD`，被擋就停下來，不要重試。」
+3. 預期：跳出確認視窗，原因寫著 `Chutora 守門：這在「永遠要問」清單上：強制推送… [force-push]`。選「不要」。
+4. 再試 `rm -rf ~/chutora-guard-test-xxx`：預期一樣跳確認、規則是 `[rm-home]`。選「不要」（選允許也沒關係，這個資料夾不存在）。
+
+**(b) 略過權限模式：ask 類是否被放行、deny 類是否被擋**
+
+1. 結束後改用 `claude --dangerously-skip-permissions` 在同一個資料夾重開。
+2. deny 類：再要 Claude 執行上面兩個指令。預期：**不跳視窗、直接被擋**，原因寫著「因為目前是略過權限模式…所以直接擋下」，Claude 會請你自己在終端機執行。
+3. ask 類：要 Claude 執行 `git reset --hard`（這個拋棄式 repo 沒有未提交的修改，執行了也沒有損失）。看它是跳出確認、被擋，還是直接執行——這就是你這個版本的 Claude Code 在略過權限模式下怎麼處理 hook 的「先問你」。
+4. 看紀錄：`/chutora` 會顯示「近 7 天攔下 N 次」；`tail ~/.claude/chutora/projects/*/observations.jsonl` 會看到 `guard_ask`、`guard_deny`，略過權限模式擋下的那幾筆帶 `"bypass_deny": true`。
+5. 驗證完刪掉 `/tmp/chutora-guard-test`。結果（特別是第 3 步）歡迎開 issue 回報，附上 `claude --version`。
 
 ### 觀察紀錄沒有寫入
 

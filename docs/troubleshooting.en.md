@@ -76,7 +76,30 @@ Look at the rule id in the reason (for example `[rm-home]`). Just this once: all
 
 ### With `claude -p` or a skip-permissions mode, the guard stopped a command and it didn't run
 
-That is expected: a non-interactive run has nobody to confirm, so Claude Code treats "ask first" as a refusal. If you are sure, run it yourself in a terminal, or set `CHUTORA_GUARD=0` for that run.
+That is expected: a non-interactive run has nobody to confirm, so Claude Code treats "ask first" as a refusal. In bypass-permissions mode (`--dangerously-skip-permissions`) a confirmation prompt may be skipped, so the kinds a backup can't undo (force push, deleting outside the project or in your home folder, `DROP TABLE`, `terraform destroy`, `kubectl delete`) are blocked outright, and the reason says it is because of bypass-permissions mode. If you are sure, run it yourself in a terminal, or turn off bypass-permissions mode and try again; you can also set `CHUTORA_GUARD=0` for that run.
+
+### Check the danger guard in your own interactive Claude Code
+
+Everything below uses harmless fake targets: the remote doesn't exist and neither does the folder to delete, so nothing changes even if a command runs. Start in a throwaway folder:
+
+```sh
+mkdir -p /tmp/chutora-guard-test && cd /tmp/chutora-guard-test && git init -q && git commit -q --allow-empty -m init
+```
+
+**(a) Default mode: dangerous commands show a confirmation prompt**
+
+1. Run `claude` in that folder (no permission flags) and check that `/chutora` shows "Danger guard (experimental): on".
+2. Tell Claude: "Use Bash to run `git push --force chutora-guard-test-nowhere HEAD`; if it's stopped, stop and don't retry."
+3. Expected: a confirmation prompt whose reason reads `Chutora guard: this is on the always-ask list: force push… [force-push]`. Choose No.
+4. Then try `rm -rf ~/chutora-guard-test-xxx`: expect the same prompt with `[rm-home]`. Choose No (Yes is harmless too; the folder doesn't exist).
+
+**(b) Bypass-permissions mode: is ask let through, is deny blocked**
+
+1. Quit and restart in the same folder with `claude --dangerously-skip-permissions`.
+2. Deny kind: ask Claude to run the two commands above again. Expected: **no prompt, blocked right away**, with a reason saying the session is in bypass-permissions mode so it is blocked outright; Claude asks you to run it yourself in a terminal.
+3. Ask kind: ask Claude to run `git reset --hard` (this throwaway repo has no uncommitted changes, so nothing is lost). See whether it prompts, is stopped, or simply runs: that is how your Claude Code version treats a hook's "ask" in bypass-permissions mode.
+4. Check the record: `/chutora` shows "N stopped in the last 7 days"; `tail ~/.claude/chutora/projects/*/observations.jsonl` shows `guard_ask` and `guard_deny`, and the ones blocked because of bypass-permissions mode carry `"bypass_deny": true`.
+5. Delete `/tmp/chutora-guard-test` when done. Results (step 3 especially) are welcome as an issue, with `claude --version`.
 
 ### Nothing is written to the observation log
 

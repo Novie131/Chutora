@@ -9,7 +9,7 @@
       "name": "chutora",
       "source": "./plugins/chutora",
       "description": "輕一點，飛更遠：用最少的 token 做最有效率的事。Opus 規劃、Sonnet 執行、Haiku 檢索與大量讀取，只把結論交回主對話；搭配交接筆記、跨對話記憶與 loop guard，長對話也不會越拉越貴。",
-      "version": "0.16.0-beta.1",
+      "version": "0.16.0-beta.2",
       "author": {
         "name": "Novie131"
       }

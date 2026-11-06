@@ -137,10 +137,11 @@ Claude Code 自 2.1.86 起內建類似機制（重複讀取未變更的檔案時
 
 `hooks/guard.py`（PreToolUse，`Bash|Write|Edit|MultiEdit|NotebookEdit|Read`）在工具執行前檢查「永遠要問清單」，命中時回傳標準的 `hookSpecificOutput.permissionDecision` 與雙語的 `permissionDecisionReason`：
 
-- **先問你（ask）**：force push（`--force`、`-f`、`--force-with-lease`、`+分支`）；推到 main／master（含沒寫分支、但目前就在 main）；`rm -rf` 或刪除專案外的檔案（暫存目錄底下除外）；刪掉整個專案或它的 `.git`；刪除路徑含無法確認的變數；讀寫 `.env`（`.env.example` 這類範本除外）與金鑰檔（`id_rsa`、`*.pem`、`*.key`、`.netrc`…）；`DROP TABLE`／`DROP DATABASE`／`TRUNCATE`；`terraform destroy`；`kubectl delete`；修改 `~/.claude/settings.json`、專案的 `.claude/settings.json` 或 Chutora 設定（含 `/chutora guard off`）；`git reset --hard`；`git clean -f`。
+- **先問你（ask）**：force push（`--force`、`-f`、`--force-with-lease`、`+分支`）；推到 main／master（含沒寫分支、但目前就在 main）；`rm -rf` 或刪除專案外的檔案（暫存目錄底下除外）；刪掉整個專案或它的 `.git`；刪除路徑含無法確認的變數；讀寫 `.env`（`.env.example` 這類範本除外）與金鑰檔（`id_rsa`、`*.pem`、`*.key`、`.netrc`…）；`DROP TABLE`／`DROP DATABASE`／`TRUNCATE`；`terraform destroy`；`kubectl delete`；修改 `~/.claude/settings.json`、專案的 `.claude/settings.json` 或 Chutora 設定（含 `/chutora guard off`；`/chutora:route-setup` 執行 Chutora 自己目錄裡的 `apply_settings.py` 除外，因為它已經逐項問過你。同名但在別處的腳本、同一行另外重導向到設定檔、或改寫這支腳本本身，照樣要問）；`git reset --hard`；`git clean -f`。
 - **直接擋（deny）**：非常明確的災難：`rm -rf /`、`rm -rf ~`、刪除系統目錄、`mkfs`、`dd of=/dev/<磁碟>`。原因回給 Claude，請你自己決定要不要在終端機執行。
 - **不誤攔**：指令先經過一個小型 shell 斷詞（引號、heredoc、`$(...)`、`sh -c`、`sudo`／`env` 前綴、`cd` 之後的路徑），所以 commit 訊息、`echo`、`grep` 裡「提到」這些字不會被攔；`git push origin feat/x`、`rm -rf node_modules`、`rm -rf build/` 都照常執行。解析不了（例如引號沒關）時退回保守的整段比對。這是盡力而為的檢查，不是沙盒。
-- **權限模式**：PreToolUse hook 在任何權限模式下都會先執行。官方文件寫明 `deny` 在 bypassPermissions／`--dangerously-skip-permissions` 下仍然有效；`ask` 在 bypass 下怎麼處理文件沒寫，所以實測了 Claude Code 2.1.319 的 `claude -p`：預設模式、`--allowedTools Bash`（allow 規則）與 `--dangerously-skip-permissions` 下，被要求確認的指令都沒有執行（沒有人可以確認，記在 `permission_denials`），原因回給 Claude。互動模式下的確認畫面，以及互動式 bypass 模式的行為還沒實測。在 bypassPermissions／dontAsk 模式下，原因會另外告訴 Claude「這次沒有執行，請向你說明、不要繞路」。
+- **權限模式**：PreToolUse hook 在任何權限模式下都會先執行。官方文件寫明 `deny` 在 bypassPermissions／`--dangerously-skip-permissions` 下仍然有效；`ask` 在 bypass 下怎麼處理文件沒寫，所以實測了 Claude Code 2.1.319 的 `claude -p`：預設模式、`--allowedTools Bash`（allow 規則）與 `--dangerously-skip-permissions` 下，被要求確認的指令都沒有執行（沒有人可以確認，記在 `permission_denials`），原因回給 Claude。互動模式下的確認畫面，以及互動式 bypass 模式的行為還沒實測（驗證步驟見[疑難排解](troubleshooting.md#在你自己的互動式-claude-code-驗證危險守門)）。在 bypassPermissions／dontAsk 模式下，原因會另外告訴 Claude「這次沒有執行，請向你說明、不要繞路」。
+- **略過權限模式直接擋**：hook 輸入的 `permission_mode`（官方文件列出的值：`default`、`plan`、`acceptEdits`、`auto`、`dontAsk`、`bypassPermissions`）是 `bypassPermissions` 時，確認視窗可能被跳過，所以備份不了的六條規則 `force-push`、`rm-outside`、`rm-home`、`sql-drop`、`terraform-destroy`、`kubectl-delete` 由 ask 改成 deny，原因會說明是因為略過權限模式，並請你自己在終端機執行或關掉略過權限模式後重試。其他規則與其他模式完全不變；`claude -p --dangerously-skip-permissions` 實測 hook 收到的值就是 `bypassPermissions`。
 - **自訂**：`~/.claude/chutora/always-ask` 一行一條：`<regex>` 額外要問（比對 Bash 指令全文，或檔案工具的路徑）、`deny: <regex>` 額外直接擋、`!<規則 id>` 移除一條預設規則（`/chutora guard rules` 列出 id）、`#` 開頭是註解。壞掉的 regex 會被略過，`/chutora doctor` 會列出來。
 - **紀錄**：每次攔下都寫一筆到變更紀錄（見[記憶](#memory)）與觀察紀錄；之後同一個呼叫真的執行了（你按了允許），會補記 `user_response: approved`。
 - **開關**：`/chutora guard off`（寫入 `~/.claude/chutora/guard`；這個指令本身也會先問你）或 `CHUTORA_GUARD=0`。
@@ -151,8 +152,10 @@ Claude Code 自 2.1.86 起內建類似機制（重複讀取未變更的檔案時
 
 - **不花 token**：hook 不輸出任何東西。實測同一個任務各跑兩次，有這些 hook 的輸入 token 是 83,795／83,790，沒有的是 83,788／83,785，差距在每次執行本來就有的幾個 token 之內。
 - **專案 id**：從 `CLAUDE_PROJECT_DIR`（沒有就用目前目錄）往上找 git repo，取 remote URL（去掉帳密與 `.git`）的 sha256 前 12 字元；沒有 remote 用 repo 根目錄路徑；不在 repo 裡用目錄路徑。同一個 repo 換位置 clone 也是同一個 id。資料夾裡的 `meta.json` 寫著它是哪個專案。
-- **每筆內容**：時間、session、agent（`main` 或子 agent 類型）、訊號（`tool_ok`、`tool_fail`、`repeat_error`、`delegation_result`、`user_correction`、`user_choice`、`user_prompt`、`guard_ask`、`guard_deny`）、工具名、精簡摘要（指令、路徑、子 agent 描述，最多 160 字元）與輸出大小。**不存工具輸出內容**；一般提示只記長度；常見金鑰格式（`sk-…`、`ghp_…`、`AKIA…`、JWT、`Bearer …`、`password=…`、網址裡的帳密、私鑰區塊）一律遮罩。
+- **每筆內容**：時間、session、agent（`main` 或子 agent 類型）、訊號（`tool_ok`、`tool_fail`、`repeat_error`、`delegation_result`、`user_correction`、`user_choice`、`user_prompt`、`guard_ask`、`guard_deny`、`trimmed`、`reread`）、工具名、精簡摘要（指令、路徑、子 agent 描述，最多 160 字元）與輸出大小。**不存工具輸出內容**；一般提示只記長度；常見金鑰格式（`sk-…`、`ghp_…`、`AKIA…`、JWT、`Bearer …`、`password=…`、網址裡的帳密、私鑰區塊）一律遮罩。
 - **糾正與選擇**：「不對」「錯了」「我不是要這個」「不是這樣」、`that's wrong`、`not what I asked` 這類話記成 `user_correction`；只回一個編號、「選 B」、以及 AskUserQuestion 的答案記成 `user_choice`。
+- **被瘦身與重讀**：噪音輸出瘦身或 MCP 瘦身真的動手時記一筆 `trimmed`（工具、`kind`、原長度 `orig_chars`、省下 `saved_chars`）；讀檔去重判定重讀時記一筆 `reread`（專案內記相對路徑 `file`，專案外只記路徑的 sha256 前 12 字元 `file_hash`；第幾次 `n`、省下 `saved_chars`）。都只寫檔、不輸出，不增加 token。Claude Code 自己把超大輸出存成檔案（約 30 KB 以上）時，瘦身不會出手，也就不會有 `trimmed`。
+- **隱私**：預設糾正句存前 160 字（已遮罩）、選擇存前 40 字。`/chutora observe privacy strict`（寫入 `~/.claude/chutora/observe-privacy`）或 `CHUTORA_OBSERVE_PRIVACY=strict` 時，糾正與選擇（含 AskUserQuestion 的答案）只記長度，不存你打的任何字；`/chutora observe privacy normal` 改回。環境變數優先於檔案，`/chutora` 與 doctor 會顯示目前設定。
 - **輪替**：超過 5 MB 移到同一層的 `archive/`，最多留 5 份（`CHUTORA_OBSERVE_MAX_MB` 可調）。
 - **開關**：`/chutora observe off`（寫入 `~/.claude/chutora/observe`）或 `CHUTORA_OBSERVE=0`。
 

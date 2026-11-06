@@ -54,10 +54,13 @@ hooks 只讀寫本機檔案。只有你要查外部資料時（research）才會
 它只看「永遠要問清單」：`git push origin feat/x`、`rm -rf node_modules`、`npm install` 這類一般指令不攔，commit 訊息或 `echo` 裡「提到」危險指令也不攔。某條規則一直問到你不想再被問，就在 `~/.claude/chutora/always-ask` 加一行 `!<規則 id>`（`/chutora guard rules` 列出 id）。
 
 **用 `--dangerously-skip-permissions` 時守門還有用嗎？**
-有。`rm -rf ~` 這類「直接擋」在任何權限模式都擋（官方文件寫明）。「先問你」的項目用 `claude -p` 加這個旗標實測時沒有執行（沒有人能確認，當成拒絕），Claude 會收到原因並向你說明。互動模式下的行為還沒實測。
+有。`rm -rf ~` 這類「直接擋」在任何權限模式都擋（官方文件寫明）。而且在這個模式下確認視窗可能被跳過，所以 force push、刪專案外或家目錄的東西、`DROP TABLE`、`terraform destroy`、`kubectl delete` 這幾類備份不了的也改成直接擋，原因會寫明是略過權限模式，請你自己在終端機執行或關掉這個模式再試。其他「先問你」的項目（例如 `git reset --hard`）用 `claude -p` 加這個旗標實測時沒有執行（沒有人能確認，當成拒絕）。互動模式下的行為還沒實測，可照[疑難排解](troubleshooting.md#在你自己的互動式-claude-code-驗證危險守門)自己驗證。
+
+**`/chutora:route-setup` 會不會問我兩次？**
+不會。它每一項都先問過你，再呼叫 Chutora 自己目錄裡的 `apply_settings.py`；守門認得這支腳本，不再跳第二次確認。別的方式改 `settings.json`（例如同名但在別處的腳本、`sed -i`、直接寫檔）照樣會問。
 
 **觀察紀錄會不會花 token？存了什麼？**
-不花：它不輸出任何東西，實測有沒有它，同一個任務的輸入 token 只差每次執行本來就有的幾個。它只存精簡摘要（指令、路徑、工具名、輸出大小），不存工具輸出內容，一般提示只記長度，常見金鑰格式會遮罩。檔案在 `~/.claude/chutora/projects/<專案 id>/`，超過 5 MB 自動輪替；不想要就 `/chutora observe off`。
+不花：它不輸出任何東西，實測有沒有它，同一個任務的輸入 token 只差每次執行本來就有的幾個。它只存精簡摘要（指令、路徑、工具名、輸出大小），不存工具輸出內容，一般提示只記長度，常見金鑰格式會遮罩；也記哪些輸出常被瘦身、哪些檔案一再重讀（專案外的檔案只記路徑雜湊）。你的糾正句預設存前 160 字（已遮罩），想更嚴格就 `/chutora observe privacy strict`，糾正與選擇都只記長度。檔案在 `~/.claude/chutora/projects/<專案 id>/`，超過 5 MB 自動輪替；不想要就 `/chutora observe off`。
 
 **Benchmark 的數字在哪？**
 還沒公布。`bench/run.py` 已經可以跑，但在實際跑完、核對過之前不放任何數字，見 README 的 [Benchmark](../README.md#benchmark)。
