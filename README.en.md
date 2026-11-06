@@ -292,7 +292,7 @@ Every new feature follows the same principle: **lightweight, manual, reversible*
 - [colbymchenry/codegraph](https://github.com/colbymchenry/codegraph): a single entry point and the benchmark approach (`/chutora`, `bench/`), and the reference for the planned code map
 - [rtk](https://github.com/rtk-ai/rtk): how to trim command output (noisy-output trimming)
 - [affaan-m/ECC](https://github.com/affaan-m/everything-claude-code): the confidence-score intuition of continuous-learning-v2 and its observation hook (the observation log)
-- Cloudflare [Clef](https://blog.cloudflare.com/clef-decision-models/) and [Laya](https://github.com/NandhaKishorM/laya): decision models' bounded choices, calibration and thresholds (multiple-choice clarify questions, the guard's ask / deny); only the method, these models are never called
+- Cloudflare [Clef](https://blog.cloudflare.com/clef-decision-models/) and [Laya](https://huggingface.co/convaiinnovations/laya): decision models' bounded choices, calibration and thresholds (multiple-choice clarify questions, the guard's ask / deny); only the method, these models are never called
 - Docker's collection of [AI coding agent incidents](https://www.docker.com/blog/ai-coding-agent-horror-stories/) (for example [the rm -rf incident](https://www.docker.com/blog/coding-agent-horror-stories-the-rm-rf-incident/)): the basis for the danger guard's rules
 
 Planned items also draw on [ruflo](https://github.com/ruvnet/ruflo).

@@ -292,7 +292,7 @@ ANTHROPIC_API_KEY=... python3 bench/run.py --runs 3 --model opus
 - [colbymchenry/codegraph](https://github.com/colbymchenry/codegraph)：單一入口與 benchmark 的做法（`/chutora`、`bench/`），也是規劃中「程式碼地圖」的參考
 - [rtk](https://github.com/rtk-ai/rtk)：指令輸出瘦身的做法（噪音輸出瘦身）
 - [affaan-m/ECC](https://github.com/affaan-m/everything-claude-code)：continuous-learning-v2 的信心分數直覺與觀察 hook（觀察紀錄）
-- Cloudflare [Clef](https://blog.cloudflare.com/clef-decision-models/) 與 [Laya](https://github.com/NandhaKishorM/laya)：決策模型的有限選項、校準與門檻（反問的選擇題、守門的 ask／deny）；只取方法論，不呼叫這些模型
+- Cloudflare [Clef](https://blog.cloudflare.com/clef-decision-models/) 與 [Laya](https://huggingface.co/convaiinnovations/laya)：決策模型的有限選項、校準與門檻（反問的選擇題、守門的 ask／deny）；只取方法論，不呼叫這些模型
 - Docker 整理的 [AI coding agent 事故](https://www.docker.com/blog/ai-coding-agent-horror-stories/)（例如 [rm -rf 事件](https://www.docker.com/blog/coding-agent-horror-stories-the-rm-rf-incident/)）：危險守門規則的依據
 
 規劃中的項目另外參考 [ruflo](https://github.com/ruvnet/ruflo)。
