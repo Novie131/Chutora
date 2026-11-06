@@ -6,6 +6,8 @@
                           "permissionDecisionReason": "<雙語原因>"}}
 - ask：交給 Claude Code 跳出確認（使用者看得到原因）；非互動（-p）沒有人能確認時，Claude Code 會當成拒絕。
 - deny：非常明確的災難（rm -rf ~、rm -rf /、清掉整顆磁碟），任何權限模式都擋，原因回給 Claude。
+  略過權限模式（permission_mode 為 bypassPermissions）下，確認視窗可能被跳過，所以備份不了的幾類
+  （BYPASS_DENY：force push、刪專案外／家目錄的東西、DROP／TRUNCATE、terraform destroy、kubectl delete）也改成 deny。
 沒命中就什麼都不輸出，照原本的權限流程走（守門只會收緊、不會放寬）。
 
 指令解析：自己寫的小型 shell 斷詞（引號、跳脫、heredoc、$(...)、sh -c、sudo/env 等前綴），
@@ -52,6 +54,10 @@ RULES = {
     "git-reset-hard": ("ask", "git reset --hard（未提交的修改會消失）", "git reset --hard (uncommitted changes are lost)"),
     "git-clean": ("ask", "git clean -f（刪掉未追蹤的檔案）", "git clean -f (deletes untracked files)"),
 }
+
+# 略過權限模式（permission_mode == "bypassPermissions"，即 --dangerously-skip-permissions）下，
+# 確認視窗可能被跳過；這幾類做了就沒有備份可以救回，所以由 ask 改成 deny。其他規則、其他模式不變。
+BYPASS_DENY = {"force-push", "rm-outside", "rm-home", "sql-drop", "terraform-destroy", "kubectl-delete"}
 
 WRAPPERS = {"sudo", "doas", "env", "time", "nohup", "nice", "ionice", "command", "builtin", "exec", "timeout",
             "stdbuf", "caffeinate", "xargs", "chronic", "unbuffer"}
@@ -599,6 +605,8 @@ def settings_target(path, root):
     if not path:
         return False
     p = os.path.normpath(os.path.expanduser(str(path)))
+    if base(p) == "apply_settings.py" and real(p) in own_apply_settings():
+        return True  # 守門不再問「跑這支腳本」，所以改寫這支腳本本身要問
     claude = os.path.join(HOME, ".claude")
     if p in (os.path.join(claude, "settings.json"), os.path.join(claude, "settings.local.json")):
         return True
@@ -611,6 +619,25 @@ def settings_target(path, root):
         if p in (os.path.join(pc, "settings.json"), os.path.join(pc, "settings.local.json")):
             return True
     return False
+
+
+def own_apply_settings():
+    """route-setup 自己的設定腳本（只認 Chutora 自己目錄裡的那一份）的實際路徑集合。
+    plugin／--plugin-dir／install.sh --link：<plugin 根目錄>/skills/route-setup/apply_settings.py；
+    install.sh 複製安裝（hooks 在 ~/.claude/hooks/chutora）：~/.claude/skills/route-setup/apply_settings.py。"""
+    here = real(HERE)
+    out = {real(os.path.join(os.path.dirname(here), "skills", "route-setup", "apply_settings.py"))}
+    if here == real(os.path.join(HOME, ".claude", "hooks", "chutora")):
+        out.add(real(os.path.join(HOME, ".claude", "skills", "route-setup", "apply_settings.py")))
+    return {p for p in out if os.path.isfile(p)}
+
+
+def is_own_apply(a, cwd):
+    """python3 <Chutora 自己的 apply_settings.py> …（同名、但不在 Chutora 目錄裡的腳本不算）。"""
+    if len(a) < 2 or base(a[0]) not in INTERPRETERS or base(a[1]) != "apply_settings.py":
+        return False
+    full, unresolved, globbed = resolve(a[1], cwd)
+    return not unresolved and not globbed and real(full) in own_apply_settings()
 
 
 def check_words(s, cwd, root, hits):
@@ -632,10 +659,14 @@ def check_words(s, cwd, root, hits):
         if args and args[0].lower() in ("guard", "observe") and any(x.lower() in ("off", "關", "關閉") for x in args[1:]):
             hits.append(("claude-settings", " ".join(a[:4])))
         return
-    if a and len(a) > 1 and base(a[1]) == "apply_settings.py" and any(x.startswith("--set") for x in a[2:]):
-        hits.append(("claude-settings", " ".join(a[:4])))
-        return
     targets = [t for op, t in s.redirs if op != "<" and settings_target(resolve(t, cwd)[0], root)]
+    own = is_own_apply(a, cwd) if a else False
+    if own or (a and len(a) > 1 and base(a[1]) == "apply_settings.py" and any(x.startswith("--set") for x in a[2:])):
+        # route-setup 已經逐項問過使用者，而且只會跑 Chutora 自己目錄裡的這支腳本：不再問第二次。
+        # 同名但在別處的腳本、或同一行另外重導向到設定檔，照樣要問。
+        if targets or not own:
+            hits.append(("claude-settings", " ".join(a[:4])))
+        return
     pos = [w for w in a[1:] if not w.startswith("-")]
     if prog in ("cp", "rsync", "install", "ln", "scp"):  # 只有最後一個參數（目的地）會被改
         pos = pos[-1:]
@@ -769,12 +800,34 @@ def decide(data):
     return ("deny" if deny else "ask"), uniq, user_hit
 
 
-def reason(decision, hits, user_hit, mode):
+def bypass_upgrade(decision, hits, mode):
+    """略過權限模式下，BYPASS_DENY 裡的規則由 ask 改成 deny。回傳 (決定, 是否因此改成 deny)。"""
+    if decision == "ask" and mode == "bypassPermissions" and any(h[0] in BYPASS_DENY for h in hits):
+        return "deny", True
+    return decision, False
+
+
+def reason(decision, hits, user_hit, mode, bypass=False):
     en = lang() == "en"
+    if bypass:  # 把被升級成 deny 的規則排在前面
+        hits = [h for h in hits if h[0] in BYPASS_DENY] + [h for h in hits if h[0] not in BYPASS_DENY]
     labels = [RULES[h[0]][2 if en else 1] + f" [{h[0]}]" for h in hits[:3]]
     labels += [("your rule: " if en else "你的規則：") + line for _, line in user_hit[:2]]
     what = "; ".join(labels) if en else "；".join(labels)
     unattended = mode in ("bypassPermissions", "dontAsk")
+    if bypass:
+        if en:
+            msg = (f"Chutora guard blocked this: {what}. The session is in bypass-permissions mode "
+                   "(--dangerously-skip-permissions), so a confirmation prompt may be skipped, and this kind of "
+                   "operation can't be undone from a backup, so it is blocked outright instead of asked. If it is "
+                   "really needed, tell the user exactly what you wanted to run and why: they can run it themselves "
+                   "in a terminal, or turn off bypass-permissions mode and try again. Don't look for a way around it.")
+            return msg + " Adjust the list in ~/.claude/chutora/always-ask; turn off with CHUTORA_GUARD=0."
+        msg = (f"Chutora 守門已擋下：{what}。因為目前是略過權限模式（--dangerously-skip-permissions），"
+               "確認視窗可能被跳過，而這類操作做了沒有備份可以救回，所以直接擋下、不再只是詢問。"
+               "真的要做的話，把你想執行的指令和原因告訴使用者：請使用者自己在終端機執行，"
+               "或關掉略過權限模式後再試一次。不要另找方法繞過。")
+        return msg + "調整清單：~/.claude/chutora/always-ask；關閉：CHUTORA_GUARD=0。"
     if en:
         if decision == "deny":
             msg = (f"Chutora guard blocked this: {what}. This is never run automatically. If it is really needed, "
@@ -795,7 +848,7 @@ def reason(decision, hits, user_hit, mode):
     return msg + "調整清單：~/.claude/chutora/always-ask；關閉：CHUTORA_GUARD=0。"
 
 
-def log_change(data, decision, hits, user_hit):
+def log_change(data, decision, hits, user_hit, bypass=False):
     try:
         import changes
         from projectid import project_data_dir
@@ -807,7 +860,7 @@ def log_change(data, decision, hits, user_hit):
             import observe
             observe.append({"ts": observe.now(), "session": data.get("session_id"), "agent": observe.agent_of(data),
                             "signal": "guard_" + decision, "tool": tool, "summary": observe.short(subj, 160),
-                            "rules": rules}, data.get("cwd"))
+                            "rules": rules, "bypass_deny": True if bypass else None}, data.get("cwd"))
         except Exception:
             pass
         rid = changes.record("guard_" + decision, f"{tool}: {subj}", notified=True, source="guard",
@@ -842,9 +895,11 @@ def process(data):
     if not r:
         return None
     decision, hits, user_hit = r
-    log_change(data, decision, hits, user_hit)
+    mode = data.get("permission_mode")
+    decision, bypass = bypass_upgrade(decision, hits, mode)
+    log_change(data, decision, hits, user_hit, bypass)
     return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": decision,
-                                   "permissionDecisionReason": reason(decision, hits, user_hit, data.get("permission_mode"))}}
+                                   "permissionDecisionReason": reason(decision, hits, user_hit, mode, bypass)}}
 
 
 def main():

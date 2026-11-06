@@ -7,7 +7,7 @@ disable-model-invocation: true
 
 chutora 裝完就能用；這個 skill 只是把「想要完整功能」要做的事一項一項帶你做完。**每一項都先說「做什麼 → 影響 → 怎麼還原」，一次只問一項，使用者可以略過任何一項。** 沒得到同意前不要動任何檔案。
 
-寫 `settings.json` 一律透過 `python3 "${CLAUDE_SKILL_DIR}/apply_settings.py"`，不要自己用 Edit 或 Write 改它。這支腳本只碰 `statusLine` 與 `autoCompactWindow`，已有值不覆蓋，壞掉的 JSON 不寫，寫入前自動備份成 `settings.json.bak-<時間>`。
+寫 `settings.json` 一律透過 `python3 "${CLAUDE_SKILL_DIR}/apply_settings.py"`，不要自己用 Edit 或 Write 改它。這支腳本只碰 `statusLine` 與 `autoCompactWindow`，已有值不覆蓋，壞掉的 JSON 不寫，寫入前自動備份成 `settings.json.bak-<時間>`。因為你已經逐項問過使用者，Chutora 的危險守門認得這支（Chutora 自己目錄裡的）腳本，不會再跳第二次確認；路徑要照寫 `${CLAUDE_SKILL_DIR}/apply_settings.py`，複製到別處或同一行再重導向到設定檔，守門就會照常詢問。
 
 **若工具呼叫被權限（例如 auto mode）擋下：不要重試、不要繞路。** 把完整指令交給使用者，請他在輸入框用 `! <指令>` 自己執行，並附還原方式（把 `~/.claude/settings.json.bak-<時間>` 改回 `settings.json`）。
 

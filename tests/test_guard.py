@@ -210,6 +210,91 @@ class GuardTest(unittest.TestCase):
         self.assertEqual(self.bash("rm -rf / 'oops")["permissionDecision"], "deny")
         self.assertIsNone(self.bash("echo 'oops"))
 
+    # ---------------------------------------------------------------- 略過權限模式：備份不了的改成直接擋
+    def test_bypass_mode_denies_unrecoverable(self):
+        cases = [
+            ("git push --force origin feat/x", "force-push"),
+            ("git push -f nowhere-remote-xyz feat/x", "force-push"),
+            ("rm /etc/hosts", "rm-outside"),
+            ("rm -rf ~/chutora-guard-test-missing", "rm-home"),
+            ("psql -c \"DROP TABLE users\"", "sql-drop"),
+            ("terraform destroy -auto-approve", "terraform-destroy"),
+            ("kubectl delete pod web-1", "kubectl-delete"),
+        ]
+        for cmd, rule in cases:
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.bash(cmd)["permissionDecision"], "ask")  # 一般模式：照舊問
+                out = self.bash(cmd, mode="bypassPermissions")
+                self.assertEqual(out["permissionDecision"], "deny")
+                self.assertIn(f"[{rule}]", out["permissionDecisionReason"])
+                self.assertIn("略過權限模式", out["permissionDecisionReason"])
+                self.assertIn("終端機", out["permissionDecisionReason"])
+        en = self.bash("git push --force origin feat/x", mode="bypassPermissions", env={"CHUTORA_LANG": "en"})
+        self.assertEqual(en["permissionDecision"], "deny")
+        for s in ("bypass-permissions mode", "confirmation prompt may be skipped", "terminal", "turn off bypass"):
+            self.assertIn(s, en["permissionDecisionReason"])
+
+    def test_bypass_mode_leaves_other_rules_and_modes_alone(self):
+        # 其他規則在略過權限模式仍是 ask
+        for cmd in ("git reset --hard HEAD~1", "git clean -fd", "cat .env", "rm -rf .git", "git push origin main",
+                    "rm -rf \"$CHUTORA_TEST_UNSET_VAR/\"", "echo '{}' > ~/.claude/settings.json"):
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.bash(cmd, mode="bypassPermissions")["permissionDecision"], "ask")
+        # 其他模式不變
+        for mode in ("default", "plan", "acceptEdits", "auto", "dontAsk"):
+            with self.subTest(mode=mode):
+                self.assertEqual(self.bash("git push --force origin feat/x", mode=mode)["permissionDecision"], "ask")
+        # 本來就 deny 的照舊 deny；一般指令照舊不攔
+        self.assertEqual(self.bash("rm -rf ~", mode="bypassPermissions")["permissionDecision"], "deny")
+        self.assertIsNone(self.bash("git push origin feat/x", mode="bypassPermissions"))
+        self.assertIsNone(self.bash("rm -rf node_modules", mode="bypassPermissions"))
+
+    def test_bypass_deny_logged(self):
+        self.bash("git push --force origin feat/x", mode="bypassPermissions", tool_use_id="toolu_b1")
+        lines = [json.loads(x) for x in (self.proj / "claude-memory" / "changes.jsonl").read_text().splitlines()]
+        self.assertEqual(lines[-1]["action"], "guard_deny")
+        self.assertEqual(lines[-1]["permission_mode"], "bypassPermissions")
+        obs = [json.loads(x) for f in (self.home / ".claude" / "chutora" / "projects").glob("*/observations.jsonl")
+               for x in f.read_text().splitlines()]
+        self.assertTrue(obs[-1].get("bypass_deny"))
+        self.assertFalse(list((self.home / ".claude" / "chutora" / "projects").glob("*/guard-pending.json")))
+
+    # ---------------------------------------------------------------- route-setup 只問一次
+    OWN = ROOT / "plugins" / "chutora" / "skills" / "route-setup" / "apply_settings.py"
+
+    def test_route_setup_own_script_not_asked_again(self):
+        own = str(self.OWN)
+        for cmd in (f'python3 "{own}" --set-autocompact 153000',
+                    f'python3 "{own}" --set-statusline "python3 ~/.claude/chutora/statusline/statusline.py"',
+                    f'python3 "{own}" --status',
+                    f'cd /tmp && python3 {own} --set-autocompact 153000'):
+            with self.subTest(cmd=cmd):
+                self.assertIsNone(self.bash(cmd))
+                self.assertIsNone(self.bash(cmd, mode="bypassPermissions"))
+
+    def test_route_setup_lookalikes_still_ask(self):
+        own = str(self.OWN)
+        fake = self.home / "evil" / "skills" / "route-setup" / "apply_settings.py"
+        fake.parent.mkdir(parents=True)
+        fake.write_text(self.OWN.read_text())
+        (self.proj / "apply_settings.py").write_text("print(1)\n")
+        for cmd in (f'python3 "{fake}" --set-autocompact 153000',             # 同名、不在 plugin 目錄
+                    "python3 apply_settings.py --set-statusline x",            # 專案裡的同名腳本
+                    "python3 skills/route-setup/apply_settings.py --set-autocompact 1",
+                    f'python3 "{own}" --set-autocompact 1 > ~/.claude/settings.json',  # 同一行另外改設定
+                    f'python3 "{own}" --set-autocompact 1 && cp x.json ~/.claude/settings.json',
+                    "python3 -c \"open('$HOME/.claude/settings.json','w').write('{}')\"",
+                    "sed -i 's/a/b/' ~/.claude/settings.json",
+                    f'cp /tmp/x.py "{own}"'):                                  # 改寫 plugin 自己的腳本
+            with self.subTest(cmd=cmd):
+                out = self.bash(cmd)
+                self.assertIsNotNone(out, cmd)
+                self.assertEqual(out["permissionDecision"], "ask")
+                self.assertIn("[claude-settings]", out["permissionDecisionReason"])
+        for tool in ("Write", "Edit"):
+            self.assertEqual(self.run_hook(tool, {"file_path": str(self.home / ".claude" / "settings.json")})["permissionDecision"], "ask")
+            self.assertEqual(self.run_hook(tool, {"file_path": own})["permissionDecision"], "ask")
+
 
 if __name__ == "__main__":
     unittest.main()
