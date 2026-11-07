@@ -165,5 +165,82 @@ class CliTest(unittest.TestCase):
         self.assertFalse(out["recoverable"])
 
 
+class RestoreTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.home = Path(self._tmp.name) / "home"
+        self.proj = self.home / "proj"
+        (self.proj / "claude-memory").mkdir(parents=True)
+        self.env = dict(os.environ, HOME=str(self.home), CLAUDE_PROJECT_DIR=str(self.proj), CHUTORA_LANG="zh",
+                        GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@e", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@e")
+
+    def sh(self, *cmd):
+        r = subprocess.run(list(cmd), capture_output=True, text=True, env=self.env, cwd=str(self.proj), timeout=30)
+        return r
+
+    def cli(self, *args):
+        return self.sh(sys.executable, str(DECIDE), *args)
+
+    def test_snapshot_and_undo_directory(self):
+        (self.proj / "build" / "sub").mkdir(parents=True)
+        (self.proj / "build" / "sub" / "a.txt").write_text("hello")
+        r = self.cli("snapshot", "--summary", "rm -rf build", "build")
+        self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+        cid = json.loads(r.stdout)["change_id"]
+        import shutil
+        shutil.rmtree(self.proj / "build")
+        r = self.cli("undo", cid)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual((self.proj / "build" / "sub" / "a.txt").read_text(), "hello")
+        r = self.cli("undo", cid)  # 第二次不能再復原
+        self.assertEqual(r.returncode, 1)
+        ch = [json.loads(x) for x in (self.proj / "claude-memory" / "changes.jsonl").read_text().splitlines()]
+        self.assertTrue(any(x.get("update", {}).get("user_response") == "undone" for x in ch))
+
+    def test_undo_moves_current_aside(self):
+        (self.proj / "conf.toml").write_text("old")
+        r = self.cli("snapshot", "--config", "conf.toml")
+        cid = json.loads(r.stdout)["change_id"]
+        rp = Path(json.loads(r.stdout)["restore_point"])
+        self.assertTrue(any(".2" in p.name for p in (rp / "files").iterdir()))  # 時間戳複本
+        (self.proj / "conf.toml").write_text("new")
+        self.assertEqual(self.cli("undo", cid).returncode, 0)
+        self.assertEqual((self.proj / "conf.toml").read_text(), "old")
+        self.assertTrue(list(rp.glob("replaced-*/*conf.toml")))
+
+    def test_too_big_fails(self):
+        (self.proj / "big").write_bytes(b"x" * 300000)
+        self.env["CHUTORA_BACKUP_MAX_MB"] = "0.1"
+        r = self.cli("snapshot", "big")
+        self.assertEqual(r.returncode, 1)
+        self.assertFalse((self.proj / "claude-memory" / "changes.jsonl").exists())
+
+    def test_git_reset_hard_restore(self):
+        self.sh("git", "init", "-q")
+        (self.proj / "f.txt").write_text("v1")
+        self.sh("git", "add", "f.txt")
+        self.sh("git", "commit", "-qm", "one")
+        (self.proj / "f.txt").write_text("v2")
+        self.sh("git", "commit", "-qam", "two")
+        (self.proj / "f.txt").write_text("v3 uncommitted")
+        sys.path.insert(0, str(HOOKS))
+        old = os.environ.get("HOME")
+        os.environ["HOME"] = str(self.home)
+        try:
+            man = decide.snapshot([], str(self.proj), git=True, kind="git-reset-hard")
+        finally:
+            os.environ["HOME"] = old
+        self.assertIsNotNone(man)
+        self.assertTrue(man["git"]["stash"])
+        self.assertEqual((self.proj / "f.txt").read_text(), "v3 uncommitted")  # stash create 不動工作區
+        self.sh("git", "reset", "--hard", "HEAD~1")
+        self.assertEqual((self.proj / "f.txt").read_text(), "v1")
+        ok, msgs = decide.restore(man)
+        self.assertTrue(ok, msgs)
+        self.assertEqual((self.proj / "f.txt").read_text(), "v3 uncommitted")
+        self.assertIn("two", self.sh("git", "log", "-1", "--format=%s").stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -384,6 +384,177 @@ def reversibility(paths, root):
     return dict(base, recoverable=None, impact=True, basis="needs backup")
 
 
+# ------------------------------------------------------------------ 復原點
+def max_bytes():
+    try:
+        return int(float(os.environ.get("CHUTORA_BACKUP_MAX_MB", "200")) * 1024 * 1024)
+    except ValueError:
+        return 200 * 1024 * 1024
+
+
+MAX_FILES = 20000
+
+
+def restore_root(pd=None):
+    from projectid import project_data_dir
+    return os.path.join(project_data_dir(pd), "restore")
+
+
+def _fits(paths):
+    total, files, limit = 0, 0, max_bytes()
+    for p in paths:
+        if os.path.islink(p) or os.path.isfile(p):
+            total += os.lstat(p).st_size
+            files += 1
+        elif os.path.isdir(p):
+            for r, ds, fs in os.walk(p):
+                files += len(fs) + len(ds)
+                for f in fs:
+                    try:
+                        total += os.lstat(os.path.join(r, f)).st_size
+                    except OSError:
+                        pass
+                if files > MAX_FILES or total > limit:
+                    return False
+        if files > MAX_FILES or total > limit:
+            return False
+    return True
+
+
+def git_point(groot, rid, kind=None):
+    """git stash create（不動工作區）存下目前未提交的修改，掛在 refs/chutora/restore/<rid> 免得被回收。"""
+    code, head = _git(groot, "rev-parse", "--verify", "HEAD")
+    if code != 0 or not head.strip():
+        return None
+    code, sha = _git(groot, "stash", "create")
+    if code != 0:
+        return None
+    sha = sha.strip() or None
+    ref = None
+    if sha:
+        ref = f"refs/chutora/restore/{rid}"
+        if _git(groot, "update-ref", ref, sha)[0] != 0:
+            return None
+    return {"root": groot, "head": head.strip(), "stash": sha, "ref": ref, "kind": kind}
+
+
+def snapshot(paths, pd=None, *, git=False, config=False, kind="files", label=""):
+    """建復原點：檔案／資料夾複本（設定檔加時間戳）、可選 git stash create。成功回傳 manifest，失敗回傳 None。"""
+    pd = os.path.abspath(pd or project_dir())
+    rid = new_id()
+    d = None
+    try:
+        d = os.path.join(restore_root(pd), rid)
+        full = [os.path.abspath(os.path.join(pd, os.path.expanduser(p))) for p in paths]
+        if not _fits([p for p in full if os.path.lexists(p)]):
+            return None
+        os.makedirs(os.path.join(d, "files"))
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        items = []
+        for i, p in enumerate(full):
+            if not os.path.lexists(p):
+                items.append({"src": p, "kind": "missing"})
+                continue
+            name = f"{i}-{os.path.basename(p.rstrip(os.sep)) or 'root'}" + (f".{stamp}" if config else "")
+            dst = os.path.join(d, "files", name)
+            if os.path.isdir(p) and not os.path.islink(p):
+                shutil.copytree(p, dst, symlinks=True)
+                items.append({"src": p, "kind": "dir", "copy": name})
+            else:
+                shutil.copy2(p, dst, follow_symlinks=False)
+                items.append({"src": p, "kind": "file", "copy": name})
+        g = None
+        if git:
+            groot = git_root_of(pd)
+            g = git_point(groot, rid, kind) if groot else None
+            if g is None:
+                raise RuntimeError("git restore point failed")
+        man = {"id": rid, "ts": now_iso(), "project": pd, "kind": kind, "label": label, "items": items, "git": g,
+               "dir": d}
+        with open(os.path.join(d, "manifest.json"), "w", encoding="utf-8") as f:
+            json.dump(man, f, ensure_ascii=False, indent=1)
+        return man
+    except Exception:
+        if d:
+            shutil.rmtree(d, ignore_errors=True)
+        return None
+
+
+def load_manifest(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            m = json.load(f)
+        return m if isinstance(m, dict) and m.get("items") is not None else None
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def restore(man):
+    """依復原點還原。現有的同名檔案先移到復原點的 replaced-<時間>/，不直接覆蓋。回傳 (成功, 訊息清單)。"""
+    msgs, ok = [], True
+    aside = os.path.join(man["dir"], "replaced-" + time.strftime("%Y%m%d-%H%M%S"))
+    g = man.get("git")
+    if g:
+        groot = g.get("root")
+        cur = _git(groot, "stash", "create")[1].strip()
+        if cur:  # 還原前的狀態也留一份
+            _git(groot, "update-ref", f"refs/chutora/restore/{man['id']}-before-undo", cur)
+            msgs.append(f"before-undo: {cur[:10]}")
+        if g.get("kind") == "git-reset-hard" and g.get("head"):
+            code, _ = _git(groot, "reset", "--hard", g["head"])
+            ok = ok and code == 0
+            msgs.append(f"HEAD → {g['head'][:10]}")
+        if g.get("stash"):
+            code, _ = _git(groot, "stash", "apply", g["stash"])
+            ok = ok and code == 0
+            msgs.append(f"stash apply {g['stash'][:10]}" + ("" if code == 0 else " FAILED"))
+    for i, it in enumerate(man.get("items") or []):
+        if it.get("kind") not in ("dir", "file"):
+            continue
+        src, cp = it["src"], os.path.join(man["dir"], "files", it["copy"])
+        try:
+            if os.path.lexists(src):
+                os.makedirs(aside, exist_ok=True)
+                shutil.move(src, os.path.join(aside, f"{i}-{os.path.basename(src)}"))
+            os.makedirs(os.path.dirname(src), exist_ok=True)
+            if it["kind"] == "dir":
+                shutil.copytree(cp, src, symlinks=True)
+            else:
+                shutil.copy2(cp, src, follow_symlinks=False)
+            msgs.append(src)
+        except Exception as e:  # noqa: BLE001
+            ok = False
+            msgs.append(f"{src}: {e}")
+    return ok, msgs
+
+
+def find_change(cid, pd=None, transcript=None):
+    return next((c for c in changes.read(project_dir=pd, transcript_path=transcript) if c.get("id") == cid), None)
+
+
+def undo(cid, pd=None, transcript=None):
+    """用變更紀錄的復原點還原，並當成強烈負面回饋。回傳 (成功, 訊息)。"""
+    pd = pd or project_dir()
+    ch = find_change(cid, pd, transcript)
+    if not ch:
+        return False, T(f"找不到變更 {cid}", f"change {cid} not found")
+    if ch.get("user_response") == "undone":
+        return False, T(f"{cid} 已經復原過了", f"{cid} was already undone")
+    man = load_manifest(ch.get("restore_point") or "")
+    if not man:
+        return False, T(f"{cid} 沒有可用的復原點", f"{cid} has no usable restore point")
+    ok, msgs = restore(man)
+    cp = changes.changes_path(pd, transcript)
+    changes.update(cid, path=cp, user_response="undone" if ok else "undo_failed", notified=True)
+    dp = decisions_path(pd, transcript)
+    ds = changes.read(path=dp)
+    for d in ds:
+        if d.get("change_id") == cid and d.get("type") == AUTO_TYPE:
+            resolve_decision(d["id"], "ask", feedback="undo", weight=UNDO_WEIGHT, path=dp, decisions=ds)
+    head = T("已復原", "Restored") if ok else T("部分復原失敗", "Restore partly failed")
+    return ok, f"{head} {cid}: " + "; ".join(msgs[:8])
+
+
 # ------------------------------------------------------------------ 命令列
 def _kv(items):
     out = {}
@@ -442,6 +613,29 @@ def cli_stats(a):
     return 0
 
 
+def cli_snapshot(a):
+    pd = project_dir()
+    man = snapshot(a.paths, pd, git=a.git, config=a.config, kind="config" if a.config else "files",
+                   label=a.summary or "")
+    if not man:
+        print(T("建立復原點失敗（太大、找不到 git 或寫入失敗）：不要自動執行。",
+                "Could not create a restore point (too big, no git, or write failed): do not run it automatically."))
+        return 1
+    cid = changes.record("auto_cli", a.summary or ("snapshot " + " ".join(a.paths)),
+                         restore_point=os.path.join(man["dir"], "manifest.json"), project_dir=pd, source="decide",
+                         decision_id=a.decision, category=a.category)
+    if a.decision and cid:
+        changes.update(a.decision, path=decisions_path(pd), change_id=cid, auto=True)
+    print(json.dumps({"change_id": cid, "restore_point": man["dir"]}, ensure_ascii=False))
+    return 0
+
+
+def cli_undo(a):
+    ok, msg = undo(a.id)
+    print(msg)
+    return 0 if ok else 1
+
+
 def main(argv):
     ap = argparse.ArgumentParser(prog="decide.py")
     sp = ap.add_subparsers(dest="cmd")
@@ -460,8 +654,17 @@ def main(argv):
     r.add_argument("id")
     r.add_argument("outcome")
     sp.add_parser("stats")
+    sn = sp.add_parser("snapshot")
+    sn.add_argument("paths", nargs="*")
+    sn.add_argument("--git", action="store_true")
+    sn.add_argument("--config", action="store_true")
+    sn.add_argument("--summary")
+    sn.add_argument("--decision")
+    sn.add_argument("--category")
+    u = sp.add_parser("undo")
+    u.add_argument("id")
     a = ap.parse_args(argv)
-    fn = {"score": cli_score, "record": cli_record, "stats": cli_stats}.get(a.cmd)
+    fn = {"score": cli_score, "record": cli_record, "stats": cli_stats, "snapshot": cli_snapshot, "undo": cli_undo}.get(a.cmd)
     if not fn:
         ap.print_help()
         return 2
