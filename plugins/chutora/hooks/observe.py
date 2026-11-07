@@ -324,6 +324,8 @@ def process(data):
         try:
             import decide
             decide.resolve_pending(data, ddir)
+            if data.get("tool_name") == "AskUserQuestion" and data.get("hook_event_name") == "PostToolUse":
+                decide.ask_learn(data)  # 記下使用者的答案，之後同類問題才算得出建議
         except Exception:
             pass
     if not enabled():

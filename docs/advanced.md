@@ -177,7 +177,13 @@ Claude Code 自 2.1.86 起內建類似機制（重複讀取未變更的檔案時
 - **回饋**：`/chutora ok <id|all> auto`（知道了，這類以後可以自動）、`/chutora ok <id|all> ask`（知道了，但下次先問我）、`/chutora undo <id>`（用復原點還原、記成強烈負面〔權重 3〕、24 小時內相似的不再自動）、`/chutora ok <id>`（只標成已讀，不計入學習）、`/chutora changes`（列出待確認）。你打的 `/chutora ok`／`undo` 由 UserPromptSubmit hook 直接處理；Claude 自己跑 `ok … auto` 或改寫 `decisions.jsonl` 會被守門當成 `self-grant` 攔下（略過權限模式直接擋）。永遠要問清單上的類型不能學成自動。
 - **給主對話用的命令列**：`decide.py score --type <題型> --options a,b [--claude a=0.7,b=0.3] [--path <路徑>] [--remote] [--unattended]`、`record <id> <答案>`、`snapshot [--config] [--git] --summary <說明> <路徑>…`、`undo <id>`、`pending`、`stats`。
 - **紀錄**：`claude-memory/decisions.jsonl`（沒有 `claude-memory/` 時與 `changes.jsonl` 同在 auto memory 目錄）：題型、選項、情境特徵、預測機率、實際結果、是否自動、可復原程度、Brier。
-- **token**：分工慣例多兩行，實測（`claude -p`、Sonnet、英文慣例）每個請求固定多約 320 個輸入 token；有待確認時每則訊息再多一段約 100～150 token 的提醒。
+- **說明按需帶入**：分工慣例裡沒有決策引擎的說明；只在下面幾種情況由 hook 帶入對應的短說明，其他時候一個字都不加：
+  - 有待確認的自動動作 → UserPromptSubmit 請 Claude 在回覆結尾附一行（見「通知」）。
+  - 你把決定交給 Claude（「你決定」「都可以」「你幫我選」「交給你」「you decide」「either is fine」「up to you」…）→ UserPromptSubmit 帶精簡用法（`decide.py score`／`snapshot`／`record`）。
+  - Claude 要用 AskUserQuestion 問你 → PreToolUse 依你在同一個專案、同一題型（header）過去選過的答案算建議；有相關紀錄、而且分得出高下才帶一行「依你過去偏好建議選 X（信心 0.xx）」，並在那個選項的說明後面附註，讓你在對話框裡就看得到。沒有紀錄就什麼都不帶。實測 Claude Code 2.1.319：PreToolUse 會在對話框出現前觸發，但 `additionalContext` 要等你回答後才隨工具結果送到 Claude，所以另外用 `updatedInput`（不帶 `permissionDecision`，對話框照常出現）改選項說明；選項的 label 不動。你的答案由 PostToolUse 記進 `decisions.jsonl`（自己打字的回答、多選題不記；嚴格隱私時只存雜湊）。
+  - 沒有人在場（排程或 headless）→ SessionStart 帶「沒人回應時怎麼自動選、什麼不能做」（`hooks/unattended.md`）。判斷依序：`CHUTORA_UNATTENDED=1`／`0` 強制；Claude Code 給 hook 的 `CLAUDE_CODE_SESSION_ATTENDED`（實測 2.1.319：`claude -p` 為 `0`、互動為 `1`；官方文件沒寫）；舊版沒有這個變數時，`CLAUDE_CODE_ENTRYPOINT=sdk-cli` 或 `CI`／`GITHUB_ACTIONS=true` 也算。SessionStart 的輸入沒有 `permission_mode`（實測），所以不看權限模式；略過權限模式的處理照舊在 PreToolUse。
+  - 守門放行學過的動作 → 原本的 PreToolUse 一行通知。
+- **token**：平常（互動、沒有待確認、沒把決定交給 Claude）和第 1 批一樣不多帶說明；實測（`claude -p`、Sonnet、`CHUTORA_UNATTENDED=0` 模擬互動）英文 41,895、改之前 42,184、第 1 批 41,864（多的 29 是 `/chutora` skill 說明多了 changes／ok／undo，固定在 skill 清單裡）。有一個待確認動作時每則訊息多約 240 token（中文）。`claude -p` 這類沒人在場的 session 會多帶無人值守說明（約 200 token，未實測）。
 - **開關**：`/chutora decide off`（寫入 `~/.claude/chutora/decide`）或 `CHUTORA_DECIDE=0`，只停掉自動判斷；守門關掉時引擎也不會自動。
 
 ---

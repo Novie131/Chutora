@@ -24,6 +24,11 @@
   decide.py snapshot [--config] [--git] [--summary 說明] <路徑>…   → 建復原點並記進 changes.jsonl
   decide.py undo <變更 id>
   decide.py pending | changes [N] | ok <id|all> [auto|ask] | stats
+hook（說明按需帶入，平常不加 token）：
+  decide.py notify   UserPromptSubmit：有待確認動作 → 請 Claude 回覆結尾附一行；使用者把決定交給 Claude
+                     （「你決定」「都可以」「up to you」…）→ 帶精簡用法
+  decide.py ask      PreToolUse(AskUserQuestion)：有相關的過去答案才帶一行建議，並在建議選項的說明後面附註
+  （記下 AskUserQuestion 的答案由 observe.py 在 PostToolUse 呼叫 ask_learn()）
 開關：CHUTORA_DECIDE=0，或 ~/.claude/chutora/decide 寫 off（只停掉 hook 的自動判斷；命令列照常可用）。
 """
 import argparse
@@ -568,6 +573,29 @@ def _summ(c, n=60):
     return short(re.sub(r"^Bash:\s*", "", str(c.get("summary") or "")), n)
 
 
+# 使用者把決定交給 Claude（只看這則訊息；誤判的代價只是多帶一段短說明）
+DELEGATE = re.compile(
+    r"(你(?:來|幫我|替我)?(?:決定|選|挑|判斷)(?:一個|一下)?(?:吧|就好|就行|就可以|好了)?(?=$|[\s，,。！!？?～~；;])|你看著辦|交給你(?:決定|選)?|照你的(?:判斷|意思|建議)|"
+    r"(?:^|[\s，,。！!；;])(?:都可以|都行|都好|隨便|哪個都(?:可以|行|好))(?=$|[\s，,。！!～~；;啦喔吧])|"
+    r"\byou (?:decide|choose|pick)\b|\b(?:it'?s |that'?s )?up to you\b|\byour call\b|"
+    r"\b(?:either|any|both) (?:one |option |way )?(?:is|are|works?|would be) (?:fine|ok(?:ay)?|good)\b|"
+    r"\bwhatever you (?:think|prefer|want|decide)\b|\bi don'?t (?:mind|care) (?:which|either)\b|\bdealer'?s choice\b)",
+    re.I)
+
+
+def delegate_text():
+    cmd = f'python3 "{HERE}/decide.py"'
+    return T(f"Chutora 決策引擎：使用者把決定交給你。在有限選項中選擇前先跑 `{cmd} score --type <題型> --options a,b "
+             f"[--claude a=0.7,b=0.3] [--path <路徑>] [--remote]`：`action` 是 auto 就照 `best` 做（動到檔案先 "
+             f"`decide.py snapshot --summary \"<做什麼>\" <路徑>`，失敗就不做）；是 ask 時，可復原的選 `best` 並在回覆說明理由，"
+             f"不可復原的（--remote、刪除、對外）先確認再做。事後知道答案：`decide.py record <id> <答案>`。",
+             f"Chutora decision engine: the user left the decision to you. Before choosing among bounded options, run `{cmd} score "
+             f"--type <kind> --options a,b [--claude a=0.7,b=0.3] [--path <paths>] [--remote]`: if `action` is auto, do `best` "
+             f"(when it touches files, first `decide.py snapshot --summary \"<what>\" <paths>`; if that fails, don't); if it is ask, "
+             f"pick `best` when it is recoverable and say why in your reply, and confirm first when it is not (--remote, deleting, "
+             f"outside effects). Once the answer is known: `decide.py record <id> <answer>`.")
+
+
 def notify_text(items):
     n = len(items)
     lst = "；".join(f"{c['id']} {_summ(c)}" for c in items[:3]) + ("…" if n > 3 else "")
@@ -576,15 +604,16 @@ def notify_text(items):
     who = "ok " + (ids if n == 1 else "all")
     return T(f"Chutora：有 {n} 個動作還沒確認（自動執行、或你剛允許的；{lst}）。請在這次回覆的最後附上剛好一行（多個合併成一行）："
              f"「Chutora 自動做了 {n} 件：<簡述>。回 /chutora {who} auto（這類以後可自動）、/chutora {who} ask（下次先問我）"
-             f"或 /chutora undo {ids}（復原）」。使用者回應前，每次都會再提醒。",
+             f"或 /chutora undo {ids}（復原）」。使用者回應前，每次都會再提醒；ok … auto 只能由使用者本人回覆。",
              f"Chutora: {n} action(s) not confirmed yet (run automatically or just allowed by you; {lst_en}). End this reply with exactly one line "
              f"(merge them into one): \"Chutora did {n} thing(s) automatically: <summary>. Reply /chutora {who} auto "
              f"(this kind may be automatic), /chutora {who} ask (ask me next time) or /chutora undo {ids} (restore).\" "
-             f"This reminder repeats until the user responds.")
+             f"This reminder repeats until the user responds; only the user may answer ok … auto.")
 
 
 def notify(data):
-    """UserPromptSubmit：有待確認的自動動作時，請 Claude 在回覆結尾附一行。沒有就不輸出（不加 token）。"""
+    """UserPromptSubmit：有待確認的自動動作時，請 Claude 在回覆結尾附一行；使用者把決定交給 Claude 時帶精簡用法。
+    兩者都沒有就不輸出（不加 token）。"""
     if not isinstance(data, dict):
         return None
     prompt = str(data.get("prompt") or "")
@@ -601,10 +630,15 @@ def notify(data):
             f"Chutora already handled this message from the user (do not run chutora.py ok/undo again; just tell the user the result):\n{text}")}}
     if re.match(r"\s*/(?:chutora:)?chutora\b", prompt):
         return None  # 使用者正在查看，不必再提醒
+    parts = []
     items = pending(project_dir(data), data.get("transcript_path"))
-    if not items:
+    if items:
+        parts.append(notify_text(items))
+    if engine_enabled() and DELEGATE.search(prompt):
+        parts.append(delegate_text())
+    if not parts:
         return None
-    return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": notify_text(items)}}
+    return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "\n".join(parts)}}
 
 
 def feedback(target, verdict="ack", pd=None, transcript=None):
@@ -948,6 +982,130 @@ def resolve_pending(data, ddir=None):
         pass
 
 
+# ------------------------------------------------------------------ AskUserQuestion：依過去答案建議、記下答案
+# 實測 Claude Code 2.1.319：PreToolUse 會在問題顯示前觸發，但 additionalContext 要等使用者回答後才隨工具結果送到 Claude；
+# 所以另外用 updatedInput（不帶 permissionDecision，問題照常顯示）在建議選項的說明後面附註，使用者選的當下就看得到。
+# PostToolUse 的 tool_response 有 answers（{問題文字: 選項 label}），由 observe.py 呼叫 ask_learn() 記下。
+ASK_PREFIX = "ask:"
+_RECOMMENDED = re.compile(r"\s*[（(]\s*(?:recommended|suggested|建議|推薦|建議選項)\s*[)）]\s*$", re.I)
+
+
+def _label(s):
+    return _RECOMMENDED.sub("", str(s or "")).strip()
+
+
+def _strict():
+    try:
+        from observe import strict
+        return strict()
+    except Exception:
+        return False
+
+
+def _key(text, limit, strict):
+    """存進 decisions.jsonl 的寫法：一般存前 limit 字（遮罩金鑰，和 observe 的「選擇存前 40 字」一致）；
+    嚴格隱私（/chutora observe privacy strict）只存 sha256 前 12 字元，照樣比得出同一個選項。"""
+    import hashlib
+    from redact import short
+    t = re.sub(r"\s+", " ", str(text or "")).strip()
+    return "h:" + hashlib.sha256(t.encode("utf-8")).hexdigest()[:12] if strict else short(t, limit)
+
+
+def _qtype(q, strict=False):
+    """題型：header（沒有就用問題前 60 字），小寫、壓空白。"""
+    h = str(q.get("header") or "").strip() or str(q.get("question") or "")[:60]
+    return ASK_PREFIX + _key(h.lower(), 60, strict)
+
+
+def _qopts(q, strict=False):
+    """回傳 {存檔用的鍵: 原本的 label}（保持順序、去掉「（建議）」「(Recommended)」字尾）。"""
+    out = {}
+    for o in q.get("options") or []:
+        lab = _label(o.get("label") if isinstance(o, dict) else o)
+        if lab:
+            out.setdefault(_key(lab, 40, strict), lab)
+    return out
+
+
+def _ask_feats(data):
+    try:
+        from projectid import project_id
+        return {"project": project_id(project_dir(data))}
+    except Exception:
+        return {}
+
+
+def _ask_history(data):
+    ds = changes.read(path=decisions_path(project_dir(data), data.get("transcript_path")))
+    return [d for d in ds if str(d.get("type") or "").startswith(ASK_PREFIX) and d.get("outcome") is not None]
+
+
+def ask_suggest(data):
+    """PreToolUse(AskUserQuestion)：同專案、同題型有過去答案、而且算得出偏好時，帶一行建議；否則回傳 None（不加 token）。"""
+    if not engine_enabled() or not isinstance(data, dict) or data.get("tool_name") != "AskUserQuestion":
+        return None
+    ti = data.get("tool_input")
+    qs = ti.get("questions") if isinstance(ti, dict) else None
+    if not isinstance(qs, list) or not qs:
+        return None
+    ds = _ask_history(data)
+    if not ds:
+        return None
+    feats, lines, new, st = _ask_feats(data), [], json.loads(json.dumps(ti)), _strict()
+    for i, q in enumerate(qs):
+        if not isinstance(q, dict) or q.get("multiSelect"):
+            continue
+        opts = _qopts(q, st)
+        if len(opts) < 2:
+            continue
+        res = score(_qtype(q, st), list(opts), feats, None, None, True, ds)
+        ps = sorted(res["probs"].values(), reverse=True)
+        if res["n"] <= 0 or ps[0] - ps[1] < 0.01:
+            continue  # 沒有相關紀錄，或分不出高下
+        best, p = opts[res["best"]], res["probs"][res["best"]]
+        head = str(q.get("header") or q.get("question") or "")[:40]
+        lines.append(T(f"「{head}」依你過去偏好建議選「{best}」（信心 {p:.2f}，{res['n']:.0f} 筆相似紀錄）",
+                       f"'{head}': based on the user's past picks, suggest '{best}' (confidence {p:.2f}, {res['n']:.0f} similar records)"))
+        for o in new["questions"][i].get("options") or []:
+            if isinstance(o, dict) and _label(o.get("label")) == best:
+                o["description"] = (str(o.get("description") or "") + T(f"（Chutora：依你過去的選擇建議，信心 {p:.2f}）",
+                                                                         f" (Chutora: suggested from your past picks, {p:.2f})")).strip()
+                break
+    if not lines:
+        return None
+    ctx = T("Chutora：" + "；".join(lines) + "。使用者的回答優先。",
+            "Chutora: " + "; ".join(lines) + ". The user's answer wins.")
+    return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": ctx, "updatedInput": new}}
+
+
+def ask_learn(data):
+    """PostToolUse(AskUserQuestion)：每題記一筆已有結果的決策（自己打字的回答、多選題不記）。回傳記了幾筆。"""
+    if not engine_enabled() or not isinstance(data, dict) or data.get("tool_name") != "AskUserQuestion":
+        return 0
+    ti = data.get("tool_input") if isinstance(data.get("tool_input"), dict) else {}
+    resp = data.get("tool_response") if isinstance(data.get("tool_response"), dict) else {}
+    answers = resp.get("answers") or ti.get("answers")
+    qs = resp.get("questions") or ti.get("questions")
+    if not isinstance(answers, dict) or not isinstance(qs, list):
+        return 0
+    p = decisions_path(project_dir(data), data.get("transcript_path"))
+    ds = [d for d in changes.read(path=p) if str(d.get("type") or "").startswith(ASK_PREFIX)]
+    feats, n, st = _ask_feats(data), 0, _strict()
+    for q in qs:
+        if not isinstance(q, dict) or q.get("multiSelect"):
+            continue
+        opts, ans = _qopts(q, st), _label(answers.get(q.get("question")))
+        key = next((k for k, lab in opts.items() if lab == ans), None)
+        if len(opts) < 2 or key is None:
+            continue
+        res = score(_qtype(q, st), list(opts), feats, None, None, True, ds)
+        if record_decision(res, path=p, outcome=key, feedback="answer", weight=1.0, source="ask",
+                           brier=round(brier(res["probs"], key), 4), resolved_ts=time.time(),
+                           tool_use_id=data.get("tool_use_id")):
+            n += 1
+    return n
+
+
 # ------------------------------------------------------------------ 命令列
 def _kv(items):
     out = {}
@@ -1063,6 +1221,16 @@ def cli_notify(a):
     return 0
 
 
+def cli_ask(a):
+    try:
+        out = ask_suggest(json.load(sys.stdin))
+    except Exception:
+        return 0
+    if out:
+        sys.stdout.write(json.dumps(out, ensure_ascii=False))
+    return 0
+
+
 def main(argv):
     ap = argparse.ArgumentParser(prog="decide.py")
     sp = ap.add_subparsers(dest="cmd")
@@ -1097,9 +1265,11 @@ def main(argv):
     o.add_argument("target")
     o.add_argument("verdict", nargs="?")
     sp.add_parser("notify")
+    sp.add_parser("ask")
     a = ap.parse_args(argv)
     fn = {"score": cli_score, "record": cli_record, "stats": cli_stats, "snapshot": cli_snapshot, "undo": cli_undo,
-          "pending": cli_pending, "changes": cli_changes, "ok": cli_ok, "notify": cli_notify}.get(a.cmd)
+          "pending": cli_pending, "changes": cli_changes, "ok": cli_ok, "notify": cli_notify,
+          "ask": cli_ask}.get(a.cmd)
     if not fn:
         ap.print_help()
         return 2

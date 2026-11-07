@@ -102,12 +102,30 @@ if [ ! -d "$MEM" ]; then
   fi
 fi
 
+# 沒人在場（排程、headless）：只有這時才帶「沒人回應時怎麼自動選、什麼不能做」（unattended*.md），平常不帶。
+# 訊號依序：決策引擎關掉（CHUTORA_DECIDE=0 或 ~/.claude/chutora/decide 寫 off）→ 不帶；CHUTORA_UNATTENDED=1／0 強制；
+# Claude Code 給 hook 的 CLAUDE_CODE_SESSION_ATTENDED（實測 2.1.319：claude -p 為 0、互動為 1；未公開文件）；
+# 舊版沒有這個變數時，CLAUDE_CODE_ENTRYPOINT=sdk-cli（claude -p）或 CI／GITHUB_ACTIONS=true 也算沒人在場。
+# SessionStart 的輸入沒有 permission_mode（實測），所以這裡不看權限模式。
+unattended() {
+  [ "${CHUTORA_DECIDE:-}" = 0 ] && return 1
+  [ "$(head -c 16 "$CONF/decide" 2>/dev/null | tr -cd 'a-zA-Z' | tr 'A-Z' 'a-z')" = off ] && return 1
+  case "${CHUTORA_UNATTENDED:-}" in 1|true|yes|on) return 0 ;; 0|false|no|off) return 1 ;; esac
+  case "${CLAUDE_CODE_SESSION_ATTENDED:-}" in 0) return 0 ;; 1) return 1 ;; esac
+  [ "${CLAUDE_CODE_ENTRYPOINT:-}" = sdk-cli ] && return 0
+  [ "${CI:-}" = true ] || [ "${GITHUB_ACTIONS:-}" = true ]
+}
+
 body() {
-  # {{HOOKS}} 換成 hooks 目錄的實際路徑（慣例裡要用 Bash 呼叫 decide.py）
+  # {{HOOKS}} 換成 hooks 目錄的實際路徑（無人值守說明裡要用 Bash 呼叫 decide.py）
   HD=$(cd "$HERE" 2>/dev/null && pwd || echo "$HERE")
   if [ "$L" = en ] && [ -f "$HERE/guide.en.md" ]; then G="$HERE/guide.en.md"; else G="$HERE/guide.md"; fi
   sed "s|{{HOOKS}}|$HD|g" "$G" 2>/dev/null
   [ -f "$HERE/modes/$MODE.$L.md" ] && { printf '\n'; cat "$HERE/modes/$MODE.$L.md"; }
+  if unattended; then
+    if [ "$L" = en ] && [ -f "$HERE/unattended.en.md" ]; then U="$HERE/unattended.en.md"; else U="$HERE/unattended.md"; fi
+    [ -f "$U" ] && { printf '\n'; sed "s|{{HOOKS}}|$HD|g" "$U" 2>/dev/null; }
+  fi
   if [ "$L" = en ]; then H_IDX='Memory index'; H_HO='Handoff note left by the previous conversation'
   else H_IDX='記憶索引'; H_HO='上一個對話留下的交接筆記'; fi
   if [ -f "$MEM/MEMORY.md" ]; then

@@ -233,8 +233,13 @@ class SessionStartBase(unittest.TestCase):
         self.data = self.tmp / "data"
         self.first_line = GUIDE.read_text().strip().splitlines()[0]
 
-    def run_hook(self, script=SESSION_START, data="default", plugin_root=None, stdin=None):
+    def run_hook(self, script=SESSION_START, data="default", plugin_root=None, stdin=None, **extra):
         env = os.environ.copy()
+        # 「沒人在場」的訊號由外層環境決定（例如在 claude -p 裡跑測試時是 0）：先清掉，需要時由 extra 指定
+        for k in ("CLAUDE_CODE_SESSION_ATTENDED", "CLAUDE_CODE_ENTRYPOINT", "CI", "GITHUB_ACTIONS",
+                  "CHUTORA_UNATTENDED", "CHUTORA_DECIDE"):
+            env.pop(k, None)
+        env.update(extra)
         env["HOME"] = str(self.home)
         env["CLAUDE_PROJECT_DIR"] = str(self.proj)
         env.pop("CLAUDE_PLUGIN_ROOT", None)

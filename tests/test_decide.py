@@ -414,7 +414,9 @@ class PreToolUseTest(unittest.TestCase):
         self.build()
         out = self.pre("rm -rf build/")
         self.assertEqual(out["permissionDecision"], "allow")
-        self.assertIn("/chutora undo", out["additionalContext"])
+        self.assertIn("/chutora undo", out["additionalContext"])  # 觸發 5：PreToolUse 一行通知照舊
+        self.assertIn("在這次回覆最後附一行即可", out["additionalContext"])
+        self.assertEqual(len(out["additionalContext"].splitlines()), 1)
         auto = [c for c in self.changes() if c["action"] == "auto_allow"][-1]
         self.assertTrue(auto["restore_point"])
         self.assertTrue(auto.get("quiet"))  # 同一類、使用者已同意：通知簡化
@@ -490,6 +492,186 @@ class PreToolUseTest(unittest.TestCase):
         r = self.sh(sys.executable, str(DECIDE), "ok", cid, "auto")
         self.assertIn("不能學成自動", r.stdout)
         self.assertEqual(self.pre("git push --force origin feat/x")["permissionDecision"], "ask")
+
+
+class OnDemandTest(unittest.TestCase):
+    """決策引擎的說明按需帶入：五種觸發各自帶對應的短說明，平常什麼都不帶。"""
+    SIGNALS = ("CLAUDE_CODE_SESSION_ATTENDED", "CLAUDE_CODE_ENTRYPOINT", "CI", "GITHUB_ACTIONS", "CHUTORA_UNATTENDED",
+               "CHUTORA_DECIDE", "CHUTORA_MODE", "CHUTORA_OBSERVE_PRIVACY", "CLAUDE_PLUGIN_ROOT")
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.home = Path(self._tmp.name).resolve() / "home"
+        self.proj = self.home / "proj"
+        (self.proj / "claude-memory").mkdir(parents=True)
+        self.data = self.home / "plugin-data"
+        self.data.mkdir()
+        (self.data / ".route-setup-done").touch()  # 純文字輸出，方便比對
+        self.env = {k: v for k, v in os.environ.items() if k not in self.SIGNALS}
+        self.env.update(HOME=str(self.home), CLAUDE_PROJECT_DIR=str(self.proj), CHUTORA_LANG="zh",
+                        CLAUDE_PLUGIN_DATA=str(self.data), CHUTORA_WEEKLY="0")
+        self.n = 0
+
+    def py(self, *args, stdin="", **env):
+        r = subprocess.run([sys.executable] + [str(x) for x in args], input=stdin, capture_output=True, text=True,
+                           env=dict(self.env, **env), cwd=str(self.proj), timeout=30)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r.stdout
+
+    # ---- UserPromptSubmit
+    def prompt(self, text, **env):
+        out = self.py(DECIDE, "notify", stdin=json.dumps({"prompt": text, "cwd": str(self.proj)}), **env)
+        return json.loads(out)["hookSpecificOutput"]["additionalContext"] if out.strip() else ""
+
+    def test_1_pending_action_adds_one_line_request(self):
+        import changes
+        self.assertEqual(self.prompt("幫我看一下 README"), "")
+        cid = changes.record("auto_allow", "Bash: rm -rf build", project_dir=str(self.proj), restore_point="x")
+        ctx = self.prompt("幫我看一下 README")
+        self.assertIn(cid, ctx)
+        self.assertIn("回覆的最後附上剛好一行", ctx)
+        self.assertIn("只能由使用者本人回覆", ctx)
+        self.assertNotIn("decide.py\" score", ctx)  # 只帶通知，不帶用法
+
+    def test_3_delegation_phrases_bring_usage(self):
+        for text in ("你決定就好", "這兩個方案你幫我選", "你幫我選一個吧", "都可以", "A 或 B 都可以，你看著辦", "交給你決定",
+                     "you decide", "Either is fine.", "It's up to you", "your call", "whatever you think"):
+            with self.subTest(text=text):
+                ctx = self.prompt(text)
+                self.assertIn(f'python3 "{HOOKS}/decide.py" score', ctx)
+                self.assertIn("decide.py record", ctx)
+
+    def test_3_english_text(self):
+        ctx = self.prompt("either works fine", CHUTORA_LANG="en")
+        self.assertIn("left the decision to you", ctx)
+
+    def test_normal_prompts_bring_nothing(self):
+        for text in ("幫我修這個 bug", "這些檔案都可以刪掉嗎", "你選擇的方案有問題", "你判斷錯了", "你決定的那個參數", "我不確定要不要做", "decide the API shape later",
+                     "is it up to the server?", "/chutora", "hello"):
+            with self.subTest(text=text):
+                self.assertEqual(self.prompt(text), "")
+
+    def test_3_off_switch(self):
+        self.assertEqual(self.prompt("你決定", CHUTORA_DECIDE="0"), "")
+
+    def test_3_and_1_combined(self):
+        import changes
+        cid = changes.record("auto_allow", "Bash: rm -rf build", project_dir=str(self.proj), restore_point="x")
+        ctx = self.prompt("you decide")
+        self.assertIn(cid, ctx)
+        self.assertIn("decide.py\" score", ctx)
+
+    # ---- PreToolUse／PostToolUse：AskUserQuestion
+    def question(self, labels=("Red", "Blue"), header="Color", multi=False, q="What color do you prefer?"):
+        return {"questions": [{"question": q, "header": header, "multiSelect": multi,
+                               "options": [{"label": x, "description": "pick " + x} for x in labels]}]}
+
+    def pre_ask(self, ti, **env):
+        self.n += 1
+        data = {"hook_event_name": "PreToolUse", "tool_name": "AskUserQuestion", "tool_input": ti,
+                "tool_use_id": f"toolu_a{self.n}", "cwd": str(self.proj), "permission_mode": "default"}
+        out = self.py(DECIDE, "ask", stdin=json.dumps(data), **env)
+        return json.loads(out)["hookSpecificOutput"] if out.strip() else None
+
+    def answer(self, ti, label, **env):
+        """模擬 PostToolUse：tool_response 的格式照實測（answers：{問題文字: label}）。"""
+        self.n += 1
+        resp = dict(ti, answers={ti["questions"][0]["question"]: label}, annotations={})
+        data = {"hook_event_name": "PostToolUse", "tool_name": "AskUserQuestion", "tool_input": resp,
+                "tool_response": resp, "tool_use_id": f"toolu_b{self.n}", "cwd": str(self.proj), "session_id": "s"}
+        self.py(HOOKS / "observe.py", stdin=json.dumps(data), **env)
+
+    def test_2_ask_suggestion_only_with_history(self):
+        ti = self.question()
+        self.assertIsNone(self.pre_ask(ti))  # 沒有紀錄：什麼都不帶
+        self.answer(ti, "Blue")
+        self.answer(self.question(("Red (Recommended)", "Blue")), "Blue")  # 「(Recommended)」字尾不影響比對
+        out = self.pre_ask(ti)
+        self.assertIn("建議選「Blue」", out["additionalContext"])
+        self.assertRegex(out["additionalContext"], r"信心 0\.\d\d")
+        self.assertEqual(len(out["additionalContext"].splitlines()), 1)
+        opts = out["updatedInput"]["questions"][0]["options"]
+        self.assertIn("Chutora", opts[1]["description"])   # 使用者在對話框裡看得到
+        self.assertEqual(opts[0]["description"], "pick Red")
+        self.assertEqual([o["label"] for o in opts], ["Red", "Blue"])  # label 不動，答案照常比對
+        ds = [d for d in decide.load_decisions(str(self.proj)) if d.get("source") == "ask"]
+        self.assertEqual([d["outcome"] for d in ds], ["Blue", "Blue"])
+        self.assertTrue(all(d.get("brier") is not None for d in ds))
+
+    def test_2_unrelated_or_unsupported_questions_bring_nothing(self):
+        self.answer(self.question(), "Blue")
+        self.assertIsNone(self.pre_ask(self.question(header="Scope", labels=("Small", "Full"))))  # 不同題型
+        self.assertIsNone(self.pre_ask(self.question(labels=("Green", "Yellow"))))  # 選項都沒選過
+        self.assertIsNone(self.pre_ask(self.question(multi=True)))  # 多選題不建議
+        self.answer(self.question(), "我自己打的答案")  # 自己打字的回答不記
+        self.assertEqual(len([d for d in decide.load_decisions(str(self.proj)) if d.get("source") == "ask"]), 1)
+        self.assertIsNone(self.pre_ask(self.question(), CHUTORA_DECIDE="0"))
+
+    def test_2_tie_brings_nothing(self):
+        self.answer(self.question(), "Blue")
+        self.answer(self.question(), "Red")
+        self.assertIsNone(self.pre_ask(self.question()))
+
+    def test_2_strict_privacy_stores_hashes_only(self):
+        ti = self.question(labels=("秘密方案甲", "方案乙"), header="方案")
+        self.answer(ti, "秘密方案甲", CHUTORA_OBSERVE_PRIVACY="strict")
+        raw = (self.proj / "claude-memory" / "decisions.jsonl").read_text()
+        self.assertNotIn("秘密方案甲", raw)
+        self.assertNotIn("方案", raw)
+        out = self.pre_ask(ti, CHUTORA_OBSERVE_PRIVACY="strict")
+        self.assertIn("建議選「秘密方案甲」", out["additionalContext"])
+
+    def test_2_hooks_json_wires_ask(self):
+        hooks = json.loads((HOOKS / "hooks.json").read_text())["hooks"]
+        pre = [h for h in hooks["PreToolUse"] if h.get("matcher") == "AskUserQuestion"]
+        self.assertEqual(len(pre), 1)
+        self.assertTrue(pre[0]["hooks"][0]["command"].endswith('decide.py" ask'))
+
+    # ---- SessionStart：沒人在場
+    def session_start(self, **env):
+        r = subprocess.run(["sh", str(HOOKS / "session-start.sh")], capture_output=True, text=True,
+                           env=dict(self.env, **env), cwd=str(self.proj), stdin=subprocess.DEVNULL, timeout=30)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r.stdout
+
+    def test_4_unattended_signals(self):
+        for env in ({"CLAUDE_CODE_SESSION_ATTENDED": "0"}, {"CHUTORA_UNATTENDED": "1"},
+                    {"CLAUDE_CODE_ENTRYPOINT": "sdk-cli"}, {"CI": "true"}, {"GITHUB_ACTIONS": "true"}):
+            with self.subTest(env=env):
+                out = self.session_start(**env)
+                self.assertIn("沒有人在場", out)
+                self.assertIn(f'python3 "{HOOKS}/decide.py" score', out)
+                self.assertIn("--unattended", out)
+                self.assertIn("不可復原或對外有影響的動作一律不做", out)
+                self.assertNotIn("{{HOOKS}}", out)
+
+    def test_4_english(self):
+        out = self.session_start(CLAUDE_CODE_SESSION_ATTENDED="0", CHUTORA_LANG="en")
+        self.assertIn("nobody is present", out)
+        self.assertNotIn("沒有人在場", out)
+
+    def test_4_attended_or_off_brings_nothing(self):
+        for env in ({}, {"CLAUDE_CODE_SESSION_ATTENDED": "1"}, {"CLAUDE_CODE_ENTRYPOINT": "cli"},
+                    {"CLAUDE_CODE_SESSION_ATTENDED": "1", "CLAUDE_CODE_ENTRYPOINT": "sdk-cli"},  # 新訊號優先
+                    {"CLAUDE_CODE_SESSION_ATTENDED": "0", "CHUTORA_UNATTENDED": "0"},
+                    {"CLAUDE_CODE_SESSION_ATTENDED": "0", "CHUTORA_DECIDE": "0"}):
+            with self.subTest(env=env):
+                out = self.session_start(**env)
+                self.assertIn("本 session 的分工慣例", out)
+                self.assertNotIn("沒有人在場", out)
+                self.assertNotIn("decide.py", out)
+        (self.home / ".claude" / "chutora").mkdir(parents=True)
+        (self.home / ".claude" / "chutora" / "decide").write_text("off\n")
+        self.assertNotIn("沒有人在場", self.session_start(CLAUDE_CODE_SESSION_ATTENDED="0"))
+
+    def test_guide_has_no_engine_text(self):
+        for name in ("guide.md", "guide.en.md"):
+            text = (HOOKS / name).read_text(encoding="utf-8")
+            with self.subTest(name=name):
+                self.assertNotIn("decide.py", text)
+                self.assertNotIn("決策引擎", text)
+                self.assertNotIn("Decision engine", text)
 
 
 if __name__ == "__main__":
