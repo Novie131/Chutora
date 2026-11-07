@@ -179,7 +179,8 @@ hook 不會自動啟用:本腳本不改你的 settings.json。要啟用請把下
         "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/context-check.py" }] },
     { "hooks": [{ "type": "command",
         "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/ask.py" }] },
-    { "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/observe.py" }] }
+    { "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/observe.py" }] },
+    { "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/decide.py notify" }] }
   ],
   "PostToolUse": [
     { "hooks": [{ "type": "command",

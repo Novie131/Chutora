@@ -52,12 +52,13 @@ RULES = {
     "kubectl-delete": ("ask", "kubectl delete（刪掉叢集資源）", "kubectl delete (deletes cluster resources)"),
     "claude-settings": ("ask", "修改 Claude Code 設定（settings.json）或 Chutora 設定", "changing Claude Code settings (settings.json) or Chutora settings"),
     "git-reset-hard": ("ask", "git reset --hard（未提交的修改會消失）", "git reset --hard (uncommitted changes are lost)"),
+    "self-grant": ("ask", "替自己開自動權限：/chutora ok … auto 或改寫 decisions.jsonl（要由使用者本人回覆）", "granting itself automatic permission: /chutora ok … auto or editing decisions.jsonl (the user must answer this personally)"),
     "git-clean": ("ask", "git clean -f（刪掉未追蹤的檔案）", "git clean -f (deletes untracked files)"),
 }
 
 # 略過權限模式（permission_mode == "bypassPermissions"，即 --dangerously-skip-permissions）下，
 # 確認視窗可能被跳過；這幾類做了就沒有備份可以救回，所以由 ask 改成 deny。其他規則、其他模式不變。
-BYPASS_DENY = {"force-push", "rm-outside", "rm-home", "sql-drop", "terraform-destroy", "kubectl-delete"}
+BYPASS_DENY = {"force-push", "rm-outside", "rm-home", "sql-drop", "terraform-destroy", "kubectl-delete", "self-grant"}
 
 WRAPPERS = {"sudo", "doas", "env", "time", "nohup", "nice", "ionice", "command", "builtin", "exec", "timeout",
             "stdbuf", "caffeinate", "xargs", "chronic", "unbuffer"}
@@ -653,10 +654,20 @@ def check_words(s, cwd, root, hits):
         else:
             continue
         break
+    # 決策引擎的回饋要由使用者本人給：Claude 自己跑 ok … auto 或改寫 decisions.jsonl 都要問
+    if any(base(t) == "decisions.jsonl" for _, t in s.redirs if _ != "<") or (
+            prog not in READERS and prog not in ("git",) and any(base(w) == "decisions.jsonl" for w in a[1:])) or (
+            prog in INTERPRETERS and any("decisions.jsonl" in w for w in a[1:])):
+        hits.append(("self-grant", "decisions.jsonl"))
+    for script in ("chutora.py", "decide.py"):
+        if prog == script or (a and len(a) > 1 and base(a[1]) == script):
+            args = [x.lower() for x in (a[2:] if prog != script else a[1:])]
+            if args[:1] == ["ok"] and any(x in ("auto", "自動") for x in args[2:]):
+                hits.append(("self-grant", " ".join(a[:5])))
     # 設定檔：寫入類動作才問
     if prog == "chutora.py" or (a and len(a) > 1 and base(a[1]) == "chutora.py"):
         args = a[2:] if base(a[0]) != "chutora.py" else a[1:]
-        if args and args[0].lower() in ("guard", "observe") and any(x.lower() in ("off", "關", "關閉") for x in args[1:]):
+        if args and args[0].lower() in ("guard", "observe", "decide") and any(x.lower() in ("off", "關", "關閉") for x in args[1:]):
             hits.append(("claude-settings", " ".join(a[:4])))
         return
     targets = [t for op, t in s.redirs if op != "<" and settings_target(resolve(t, cwd)[0], root)]
@@ -763,6 +774,8 @@ def check_path_tool(tool, inp, data):
         hits.append(("secret-file", path))
     if tool != "Read" and settings_target(path, root):
         hits.append(("claude-settings", path))
+    if tool != "Read" and base(str(path)) == "decisions.jsonl":
+        hits.append(("self-grant", path))
     return hits
 
 

@@ -4,6 +4,7 @@
 用法：chutora.py [status] | doctor | mode [economy|balanced|quality] | lang [zh|en|auto]
       | trim|dedup|mcp-trim [on|off] | mcp-trim exclude|include <server> | mcp-trim text on|off
       | ask [on|off] | guard [on|off|rules] | observe [on|off] | observe privacy [strict|normal]
+      | changes [N] | ok <id|all> [auto|ask] | undo <id> | decide [on|off|stats]
 status 與 doctor 唯讀；其他子指令只寫 ~/.claude/chutora/ 底下自己的設定檔。
 """
 import glob
@@ -181,6 +182,7 @@ TOGGLES = {  # 子指令 → (設定檔名, 環境變數, 中文名, 英文名)
     "ask": ("ask", "CHUTORA_ASK", "反問提醒", "Clarify reminders"),
     "guard": ("guard", "CHUTORA_GUARD", "危險守門", "Danger guard"),
     "observe": ("observe", "CHUTORA_OBSERVE", "觀察紀錄", "Observation log"),
+    "decide": ("decide", "CHUTORA_DECIDE", "決策引擎自動執行", "Decision engine auto-run"),
 }
 ASK_MAX = {"economy": 3, "balanced": 4, "quality": 5}
 
@@ -695,6 +697,35 @@ def guard_rules():
     return 0
 
 
+def decide_cmd(sub, args):
+    """決策引擎：changes（列出待確認）、ok <id|all> [auto|ask]、undo <id>、stats。"""
+    d = hook_mod("decide")
+    if not d:
+        print(T("找不到 decide.py（hooks 版本太舊？先跑 /chutora doctor）。", "decide.py not found (old hooks? run /chutora doctor)."))
+        return 1
+    if sub == "changes":
+        n = int(args[0]) if args and args[0].isdigit() else 10
+        print(d.list_changes(n, project_dir()))
+        return 0
+    if sub == "ok":
+        if not args:
+            print(T("用法：/chutora ok <id|all> [auto|ask]", "Usage: /chutora ok <id|all> [auto|ask]"))
+            return 2
+        done, msgs = d.feedback(args[0], args[1] if len(args) > 1 else "", project_dir())
+        print("\n".join(msgs))
+        return 0 if done else 1
+    if sub == "undo":
+        if not args:
+            print(T("用法：/chutora undo <id>（id 見 /chutora changes）", "Usage: /chutora undo <id> (ids: /chutora changes)"))
+            return 2
+        ok, msg = d.undo(args[0], project_dir())
+        print(msg)
+        return 0 if ok else 1
+    st = d.stats(d.load_decisions(project_dir()))
+    print(json.dumps(st, ensure_ascii=False))
+    return 0
+
+
 def main(argv):
     sub = argv[0].lower() if argv else "status"
     rest = argv[1] if len(argv) > 1 else ""
@@ -723,10 +754,20 @@ def main(argv):
         return toggle("observe", rest)
     if sub in ("ask", "反問", "先問我"):
         return ask(rest)
+    if sub in ("changes", "變更", "待確認"):
+        return decide_cmd("changes", argv[1:])
+    if sub in ("ok", "好"):
+        return decide_cmd("ok", argv[1:])
+    if sub in ("undo", "復原"):
+        return decide_cmd("undo", argv[1:])
+    if sub in ("decide", "決策"):
+        if rest.lower() in ("stats", "統計"):
+            return decide_cmd("stats", [])
+        return toggle("decide", rest)
     if sub in ("lang", "language", "語言"):
         return set_lang(rest)
-    print(T(f"不認得的指令：{sub}。可用：status、doctor、mode、trim、dedup、mcp-trim、ask、guard、observe、lang。",
-            f"Unknown command: {sub}. Available: status, doctor, mode, trim, dedup, mcp-trim, ask, guard, observe, lang."))
+    print(T(f"不認得的指令：{sub}。可用：status、doctor、mode、trim、dedup、mcp-trim、ask、guard、observe、changes、ok、undo、decide、lang。",
+            f"Unknown command: {sub}. Available: status, doctor, mode, trim, dedup, mcp-trim, ask, guard, observe, changes, ok, undo, decide, lang."))
     return 2
 
 

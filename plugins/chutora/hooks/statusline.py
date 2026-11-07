@@ -6,6 +6,7 @@
 
 - 目前動作來自 activity.py 寫的 ~/.claude/chutora/activity/<session_id>.json；沒有就只顯示閒置版。
 - 本次 token：transcript 的 usage 精確加總（input＋cache 寫入＋output，不含 cache 讀取），主對話＋子 agent。
+- 待確認：決策引擎自動做了、使用者還沒回應的動作數（/chutora changes）。
 - 瘦身省：噪音瘦身、讀檔去重、MCP 瘦身擋在 context 外的字元數 ÷4，標「≈」表示估算。
 - ctx 用 total_input_tokens（缺時加總 current_usage），不用 used_percentage；8 萬以下綠、提醒門檻以下黃、以上紅。
 - 寬度：CHUTORA_STATUS_WIDTH 或 COLUMNS（預設 120）；放不下時依重要性丟掉後面的欄位，再截短動作描述。
@@ -123,6 +124,15 @@ def main():
                 extra.append((4, f"{'瘦身省' if zh else 'trimmed'}≈{ktok(saved)}"))
     except Exception:
         extra, running = [], []
+
+    try:  # 決策引擎：自動做了、還沒確認的動作數（狀態列資料夾沒有 decide.py 時略過）
+        import decide
+        pd = (data.get("workspace") or {}).get("project_dir") or data.get("cwd")
+        k = len(decide.pending(pd, data.get("transcript_path"))) if pd else 0
+        if k:
+            extra.insert(0, (1, f"{ORANGE}{'待確認' if zh else 'to confirm'} {k}{RESET}"))
+    except Exception:
+        pass
 
     try:
         if running:

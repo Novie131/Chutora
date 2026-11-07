@@ -1,6 +1,6 @@
 ---
 name: chutora
-description: Chutora 的單一入口。使用者輸入 /chutora、問「Chutora 有什麼功能」「現在狀態如何」、要健檢安裝（doctor）、切換省錢／平衡／品質模式、開關噪音輸出瘦身／讀檔去重／MCP 瘦身、危險守門、觀察紀錄、要求「先問我」（ask）、或切換提醒語言時使用。Single entry point for Chutora: status, what it can do, install check (doctor), mode, output trimming / read dedup / MCP trimming switches, danger guard, observation log, clarify-first (ask) and language switching.
+description: Chutora 的單一入口。使用者輸入 /chutora、問「Chutora 有什麼功能」「現在狀態如何」、要健檢安裝（doctor）、切換省錢／平衡／品質模式、開關噪音輸出瘦身／讀檔去重／MCP 瘦身、危險守門、觀察紀錄、決策引擎的自動動作（changes／ok／undo）、要求「先問我」（ask）、或切換提醒語言時使用。Single entry point for Chutora: status, what it can do, install check (doctor), mode, output trimming / read dedup / MCP trimming switches, danger guard, observation log, decision-engine auto actions (changes / ok / undo), clarify-first (ask) and language switching.
 ---
 # /chutora
 
@@ -15,6 +15,7 @@ description: Chutora 的單一入口。使用者輸入 /chutora、問「Chutora 
 - `guard [on|off|rules]`（或「守門」）→ 危險守門（實驗中）：查看、開關、列出規則
 - `observe [on|off]`（或「觀察」）→ 觀察紀錄（實驗中）：查看或開關；`observe privacy [strict|normal]` 查看或切換隱私（strict 時你的糾正與選擇只記長度）
 - `ask`（或「先問我」）→ 印出反問步驟，接著**照步驟用 AskUserQuestion 反問使用者**；`ask on|off` 開關自動反問提醒
+- `changes` → 決策引擎（實驗中）自動做了、還沒確認的動作；`ok <id|all> [auto|ask]` 回饋（auto：這類以後可自動；ask：下次先問我；不加：只標成已讀）；`undo <id>` 用復原點還原；`decide [on|off|stats]` 開關自動執行、看校準統計
 - `lang [zh|en|auto]` → 查看或切換提醒訊息語言
 
 ## 怎麼回報
@@ -23,5 +24,6 @@ description: Chutora 的單一入口。使用者輸入 /chutora、問「Chutora 
 - doctor：先講結果那一行，再列出「要修」的項目與修法；「選用」項目簡短帶過。不要自動執行修法，問使用者要不要做。
 - mode：切換後，這個對話剩下的部分也照新模式做（新模式的規則在 `../../hooks/modes/` 或 `~/.claude/hooks/chutora/modes/` 的對應檔案，讀一次即可）；新對話開始時 hook 會自動帶入。
 - ask：腳本只印步驟；你接著真的去問（用 AskUserQuestion，題數照腳本寫的上限），問完把答案寫成任務說明，再繼續原本的工作。只有主對話能反問，子 agent 不行。
-- guard／observe off：危險守門會把「關掉守門或觀察」當成要問的動作，跳出確認是正常的，由使用者決定；不要換別的方法繞過。
-- 腳本只讀紀錄、只寫 `~/.claude/chutora/` 底下自己的設定檔（`mode`、`lang`、`trim`、`dedup`、`mcp-trim`、`mcp-trim-exclude`、`mcp-trim-text`、`ask`、`guard`、`observe`、`observe-privacy`），不碰 settings.json。
+- ok／undo：上方若已有「Chutora 已依使用者這則訊息處理」的提示，代表 hook 已經處理好，直接轉告結果，不要再執行腳本。`ok … auto` 只能由使用者本人回覆，你自己跑會被守門攔下（正常，不要繞過）。
+- guard／observe／decide off：危險守門會把「關掉守門或觀察」當成要問的動作，跳出確認是正常的，由使用者決定；不要換別的方法繞過。
+- 腳本只讀紀錄、只寫 `~/.claude/chutora/` 底下自己的設定檔（`mode`、`lang`、`trim`、`dedup`、`mcp-trim`、`mcp-trim-exclude`、`mcp-trim-text`、`ask`、`guard`、`observe`、`observe-privacy`、`decide`），不碰 settings.json；`ok`／`undo` 會寫決策與變更紀錄、`undo` 會還原檔案。

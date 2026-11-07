@@ -242,5 +242,117 @@ class RestoreTest(unittest.TestCase):
         self.assertIn("two", self.sh("git", "log", "-1", "--format=%s").stdout)
 
 
+class NotifyFeedbackTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.home = Path(self._tmp.name) / "home"
+        self.proj = self.home / "proj"
+        (self.proj / "claude-memory").mkdir(parents=True)
+        self.env = dict(os.environ, HOME=str(self.home), CLAUDE_PROJECT_DIR=str(self.proj), CHUTORA_LANG="zh")
+        self.old = {k: os.environ.get(k) for k in ("HOME", "CLAUDE_PROJECT_DIR", "CHUTORA_LANG")}
+        os.environ.update(HOME=str(self.home), CLAUDE_PROJECT_DIR=str(self.proj), CHUTORA_LANG="zh")
+        self.addCleanup(self.restore_env)
+
+    def restore_env(self):
+        for k, v in self.old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+    def run_py(self, script, *args, stdin=""):
+        r = subprocess.run([sys.executable, str(script)] + list(args), input=stdin, capture_output=True, text=True,
+                           env=self.env, cwd=str(self.proj), timeout=30)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r.stdout
+
+    def auto_action(self, category="rm-in-project"):
+        import changes
+        feats = {"category": category, "path": "build", "action": "rm -r"}
+        res = decide.score(decide.AUTO_TYPE, ["auto", "ask"], feats, None, True, False, [], "balanced")
+        (self.proj / "build").mkdir(exist_ok=True)
+        man = decide.snapshot(["build"], str(self.proj))
+        cid = changes.record("auto_allow", "Bash: rm -rf build", project_dir=str(self.proj),
+                             restore_point=os.path.join(man["dir"], "manifest.json"), category=category)
+        decide.record_decision(res, pd=str(self.proj), change_id=cid, auto=True)
+        return cid
+
+    def prompt(self, text):
+        out = self.run_py(DECIDE, "notify", stdin=json.dumps({"prompt": text, "cwd": str(self.proj)}))
+        return json.loads(out)["hookSpecificOutput"]["additionalContext"] if out.strip() else ""
+
+    def test_notify_until_response(self):
+        self.assertEqual(self.prompt("hello"), "")  # 沒有待確認：不輸出、不加 token
+        cid = self.auto_action()
+        ctx = self.prompt("hello")
+        self.assertIn(cid, ctx)
+        self.assertIn("一行", ctx)
+        self.assertIn(cid, self.prompt("next"))  # 沒回應就持續提醒
+        ctx = self.prompt(f"/chutora ok {cid} auto")  # 使用者本人回覆：由 hook 直接處理
+        self.assertIn("已依使用者這則訊息處理", ctx)
+        self.assertEqual(self.prompt("after"), "")
+        ds = decide.load_decisions(str(self.proj))
+        d = [x for x in ds if x.get("change_id") == cid][0]
+        self.assertEqual((d["outcome"], d["feedback"]), ("auto", "auto"))
+        self.assertIsNotNone(d.get("brier"))
+
+    def test_ok_ask_and_all(self):
+        a, b = self.auto_action(), self.auto_action()
+        done, msgs = decide.feedback("all", "ask", str(self.proj))
+        self.assertEqual(done, 2)
+        self.assertEqual(decide.pending(str(self.proj)), [])
+        ds = decide.load_decisions(str(self.proj))
+        self.assertEqual({x["outcome"] for x in ds if x.get("change_id") in (a, b)}, {"ask"})
+
+    def test_hard_category_cannot_be_learned(self):
+        cid = self.auto_action(category="force-push")
+        done, msgs = decide.feedback(cid, "auto", str(self.proj))
+        self.assertIn("不能學成自動", msgs[0])
+        ds = decide.load_decisions(str(self.proj))
+        self.assertIsNone([x for x in ds if x.get("change_id") == cid][0].get("outcome"))
+
+    def test_undo_via_prompt_and_hub(self):
+        cid = self.auto_action()
+        (self.proj / "build" / "x").write_text("1")
+        cid2 = self.auto_action()  # 這次的復原點含 x
+        import shutil
+        shutil.rmtree(self.proj / "build")
+        ctx = self.prompt(f"/chutora undo {cid2}")
+        self.assertIn("已復原", ctx)
+        self.assertTrue((self.proj / "build" / "x").exists())
+        hub = ROOT / "plugins" / "chutora" / "skills" / "chutora-hub" / "chutora.py"
+        out = self.run_py(hub, "changes")
+        self.assertIn("待確認 1", out)
+        self.assertIn(cid, out)
+        out = self.run_py(hub, "ok", cid)
+        self.assertIn("已讀", out)
+        self.assertIn("待確認 0", self.run_py(hub, "changes"))
+
+    def test_record_refuses_auto_decisions(self):
+        cid = self.auto_action()
+        d = [x for x in decide.load_decisions(str(self.proj)) if x.get("change_id") == cid][0]
+        r = subprocess.run([sys.executable, str(DECIDE), "record", d["id"], "auto"], capture_output=True, text=True,
+                           env=self.env, cwd=str(self.proj), timeout=30)
+        self.assertEqual(r.returncode, 1)
+
+    def test_statusline_count(self):
+        self.auto_action()
+        data = {"session_id": "s", "model": {"display_name": "Opus"}, "cwd": str(self.proj),
+                "workspace": {"project_dir": str(self.proj)}, "context_window": {"total_input_tokens": 1000}}
+        out = self.run_py(HOOKS / "statusline.py", stdin=json.dumps(data))
+        self.assertIn("待確認 1", out)
+
+    def test_guard_blocks_self_grant(self):
+        import guard
+        for cmd in ("python3 skills/chutora-hub/chutora.py ok all auto", "python3 hooks/decide.py ok x auto",
+                    "echo '{}' >> claude-memory/decisions.jsonl"):
+            r = guard.explain(cmd, str(self.proj))
+            self.assertTrue(r and any(h[0] == "self-grant" for h in r[1]), cmd)
+        for cmd in ("python3 hooks/decide.py ok x ask", "python3 hooks/decide.py undo x", "cat claude-memory/decisions.jsonl"):
+            self.assertIsNone(guard.explain(cmd, str(self.proj)), cmd)
+        self.assertIn("self-grant", guard.BYPASS_DENY)
+
+
 if __name__ == "__main__":
     unittest.main()

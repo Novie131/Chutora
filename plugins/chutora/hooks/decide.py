@@ -555,6 +555,121 @@ def undo(cid, pd=None, transcript=None):
     return ok, f"{head} {cid}: " + "; ".join(msgs[:8])
 
 
+# ------------------------------------------------------------------ 通知與回饋
+def pending(pd=None, transcript=None):
+    """待確認：Chutora 自動做（或代你在略過權限模式下做）、還沒回應的動作。"""
+    return [c for c in changes.read(project_dir=pd, transcript_path=transcript)
+            if c.get("action") in PENDING_ACTIONS and not c.get("user_response") and not c.get("quiet")]
+
+
+def _summ(c, n=60):
+    from redact import short
+    return short(re.sub(r"^Bash:\s*", "", str(c.get("summary") or "")), n)
+
+
+def notify_text(items):
+    n = len(items)
+    lst = "；".join(f"{c['id']} {_summ(c)}" for c in items[:3]) + ("…" if n > 3 else "")
+    lst_en = "; ".join(f"{c['id']} {_summ(c)}" for c in items[:3]) + ("…" if n > 3 else "")
+    ids = items[0]["id"] if n == 1 else "<id>"
+    who = "ok " + (ids if n == 1 else "all")
+    return T(f"Chutora：有 {n} 個自動執行的動作還沒確認（{lst}）。請在這次回覆的最後附上剛好一行（多個合併成一行）："
+             f"「Chutora 自動做了 {n} 件：<簡述>。回 /chutora {who} auto（這類以後可自動）、/chutora {who} ask（下次先問我）"
+             f"或 /chutora undo {ids}（復原）」。使用者回應前，每次都會再提醒。",
+             f"Chutora: {n} automatic action(s) not confirmed yet ({lst_en}). End this reply with exactly one line "
+             f"(merge them into one): \"Chutora did {n} thing(s) automatically: <summary>. Reply /chutora {who} auto "
+             f"(this kind may be automatic), /chutora {who} ask (ask me next time) or /chutora undo {ids} (restore).\" "
+             f"This reminder repeats until the user responds.")
+
+
+def notify(data):
+    """UserPromptSubmit：有待確認的自動動作時，請 Claude 在回覆結尾附一行。沒有就不輸出（不加 token）。"""
+    if not isinstance(data, dict):
+        return None
+    prompt = str(data.get("prompt") or "")
+    m = re.match(r"\s*/(?:chutora:)?chutora\s+(ok|undo|好|復原)\s+(\S+)(?:\s+(\S+))?\s*$", prompt)
+    if m:  # 使用者本人打的回饋：在這裡直接處理（Claude 自己跑 ok … auto 會被守門攔下）
+        pd = project_dir(data)
+        if m.group(1) in ("ok", "好"):
+            _, msgs = feedback(m.group(2), m.group(3) or "", pd, data.get("transcript_path"))
+            text = "\n".join(msgs)
+        else:
+            _, text = undo(m.group(2), pd, data.get("transcript_path"))
+        return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": T(
+            f"Chutora 已依使用者這則訊息處理完畢（不要再執行 chutora.py ok／undo，直接把結果告訴使用者）：\n{text}",
+            f"Chutora already handled this message from the user (do not run chutora.py ok/undo again; just tell the user the result):\n{text}")}}
+    if re.match(r"\s*/(?:chutora:)?chutora\b", prompt):
+        return None  # 使用者正在查看，不必再提醒
+    items = pending(project_dir(data), data.get("transcript_path"))
+    if not items:
+        return None
+    return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": notify_text(items)}}
+
+
+def feedback(target, verdict="ack", pd=None, transcript=None):
+    """回饋：auto（這類以後可以自動）、ask（下次先問我）、ack（只是知道了，不計入學習）。回傳 (成功數, 訊息清單)。"""
+    pd = pd or project_dir()
+    verdict = {"": "ack", "ok": "ack", "auto": "auto", "ask": "ask", "自動": "auto", "問": "ask", "先問": "ask"}.get(
+        (verdict or "").strip().lower(), None)
+    if verdict is None:
+        return 0, [T("回饋只能是 auto、ask，或不加（只標成已讀）", "Feedback must be auto, ask, or nothing (just mark as seen)")]
+    items = pending(pd, transcript) if target == "all" else [find_change(target, pd, transcript)]
+    if target == "all" and not items:
+        return 0, [T("沒有待確認的自動動作", "Nothing waiting for confirmation")]
+    dp = decisions_path(pd, transcript)
+    ds = changes.read(path=dp)
+    cp = changes.changes_path(pd, transcript)
+    done, msgs = 0, []
+    for ch in items:
+        if not ch:
+            msgs.append(T(f"找不到變更 {target}", f"change {target} not found"))
+            continue
+        want = {"auto": "ok_auto", "ask": "ok_ask", "ack": "ack"}[verdict]
+        if ch.get("user_response") == want:
+            msgs.append(T(f"{ch['id']}：先前已記錄過", f"{ch['id']}: already recorded"))
+            done += 1
+            continue
+        linked = [d for d in ds if d.get("change_id") == ch["id"] and d.get("outcome") is None]
+        learn = [d for d in linked if d.get("type") != AUTO_TYPE or (d.get("features") or {}).get("category") in LEARNABLE]
+        if verdict in ("auto", "ask") and not learn:
+            msgs.append(T(f"{ch['id']}：這類在永遠要問清單上或不可復原，不能學成自動；只標成已讀",
+                          f"{ch['id']}: this kind is on the always-ask list or not recoverable, so it can't be learned; marked as seen"))
+            changes.update(ch["id"], path=cp, user_response="ack", notified=True)
+            done += 1
+            continue
+        if verdict in ("auto", "ask"):
+            for d in learn:
+                if d.get("type") == AUTO_TYPE:
+                    resolve_decision(d["id"], verdict, feedback=verdict, path=dp, decisions=ds)
+                elif verdict == "auto" and d.get("best"):
+                    resolve_decision(d["id"], d["best"], feedback="auto", path=dp, decisions=ds)
+        changes.update(ch["id"], path=cp, user_response={"auto": "ok_auto", "ask": "ok_ask", "ack": "ack"}[verdict],
+                       notified=True)
+        done += 1
+        msgs.append(f"{ch['id']}: " + {"auto": T("記下了，這類以後可以自動", "noted: this kind may run automatically"),
+                                        "ask": T("記下了，下次先問你", "noted: will ask you first next time"),
+                                        "ack": T("已讀（不計入學習）", "seen (not used for learning)")}[verdict])
+    return done, msgs
+
+
+def list_changes(n=10, pd=None, transcript=None):
+    pd = pd or project_dir()
+    pend = pending(pd, transcript)
+    out = [T(f"待確認 {len(pend)} 個", f"{len(pend)} waiting for confirmation") + (T("：", ":") if pend else T("。", "."))]
+    for c in pend:
+        rp = T("有復原點", "restore point") if c.get("restore_point") else T("無復原點", "no restore point")
+        out.append(f"- {c['id']}  {c.get('ts', '')[:16]}  {c.get('action')}  {_summ(c, 100)}  [{rp}]")
+    recent = [c for c in changes.read(project_dir=pd, transcript_path=transcript)
+              if c.get("action") in PENDING_ACTIONS and c not in pend][-n:]
+    if recent:
+        out.append(T("最近已處理：", "Recently handled:"))
+        for c in recent:
+            out.append(f"- {c['id']}  {c.get('action')}  {_summ(c, 80)}  → {c.get('user_response') or ('quiet' if c.get('quiet') else '')}")
+    out.append(T("回應：/chutora ok <id|all> auto（這類以後可自動）｜ask（下次先問我）；/chutora undo <id> 復原",
+                 "Respond: /chutora ok <id|all> auto (may be automatic) | ask (ask me next time); /chutora undo <id> to restore"))
+    return "\n".join(out)
+
+
 # ------------------------------------------------------------------ 命令列
 def _kv(items):
     out = {}
@@ -600,6 +715,11 @@ def cli_score(a):
 
 
 def cli_record(a):
+    d = next((x for x in load_decisions(project_dir()) if x.get("id") == a.id), None)
+    if d and d.get("type") == AUTO_TYPE:  # 「能不能自動」只能由使用者用 /chutora ok／undo 回答
+        print(T("這筆是自動執行的決策，要由使用者用 /chutora ok 或 /chutora undo 回應。",
+                "This is an auto-run decision; only the user can answer it with /chutora ok or /chutora undo."))
+        return 1
     b = resolve_decision(a.id, a.outcome, pd=project_dir())
     if b is None:
         print(T(f"找不到決策 {a.id}", f"decision {a.id} not found"))
@@ -636,6 +756,35 @@ def cli_undo(a):
     return 0 if ok else 1
 
 
+def cli_pending(a):
+    items = pending()
+    print(json.dumps({"count": len(items), "items": [{"id": c["id"], "action": c.get("action"), "summary": _summ(c, 120),
+                                                      "restore_point": bool(c.get("restore_point"))} for c in items]},
+                     ensure_ascii=False))
+    return 0
+
+
+def cli_changes(a):
+    print(list_changes(a.n))
+    return 0
+
+
+def cli_ok(a):
+    done, msgs = feedback(a.target, a.verdict or "")
+    print("\n".join(msgs))
+    return 0 if done else 1
+
+
+def cli_notify(a):
+    try:
+        out = notify(json.load(sys.stdin))
+    except Exception:
+        return 0
+    if out:
+        sys.stdout.write(json.dumps(out, ensure_ascii=False))
+    return 0
+
+
 def main(argv):
     ap = argparse.ArgumentParser(prog="decide.py")
     sp = ap.add_subparsers(dest="cmd")
@@ -663,8 +812,16 @@ def main(argv):
     sn.add_argument("--category")
     u = sp.add_parser("undo")
     u.add_argument("id")
+    sp.add_parser("pending")
+    c = sp.add_parser("changes")
+    c.add_argument("n", nargs="?", type=int, default=10)
+    o = sp.add_parser("ok")
+    o.add_argument("target")
+    o.add_argument("verdict", nargs="?")
+    sp.add_parser("notify")
     a = ap.parse_args(argv)
-    fn = {"score": cli_score, "record": cli_record, "stats": cli_stats, "snapshot": cli_snapshot, "undo": cli_undo}.get(a.cmd)
+    fn = {"score": cli_score, "record": cli_record, "stats": cli_stats, "snapshot": cli_snapshot, "undo": cli_undo,
+          "pending": cli_pending, "changes": cli_changes, "ok": cli_ok, "notify": cli_notify}.get(a.cmd)
     if not fn:
         ap.print_help()
         return 2
