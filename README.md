@@ -179,6 +179,8 @@
 
 （Claude Code 2.1.275 以前：先 `/plugin marketplace add Novie131/chutora`，再 `/plugin install chutora@chutora`。不想用 marketplace，見[其他安裝方式](docs/advanced.md#install)。主對話建議用 Opus，plugin 不會自動幫你改。）
 
+> **版本需求**：決策引擎的兩項功能，也就是「在選擇題旁附上依你過去偏好的建議」和「判斷沒人在場」，是在 Claude Code **2.1.319** 上驗證的。更舊的版本可能不支援這兩項；不會出錯，只是少了建議，或沒辦法判斷沒人在場。其他功能不受影響。建議更新到 2.1.319 以上。
+
 **2. 輸入 `/chutora`**
 
 這是唯一要記的指令。它會顯示目前狀態：版本、模式、context 用量、有沒有卡在同一個錯誤，再列出能做的事，回覆編號就好。交接、用量報表、健檢、切換模式和語言、完整設定都在裡面。

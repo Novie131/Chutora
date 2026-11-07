@@ -179,6 +179,8 @@ Misunderstanding the task and redoing it is the biggest token waste of all. A li
 
 (Claude Code 2.1.275 and earlier: first `/plugin marketplace add Novie131/chutora`, then `/plugin install chutora@chutora`. To install without the marketplace, see [Other ways to install](docs/advanced.en.md#install). Opus is recommended for the main conversation; the plugin never changes it for you.)
 
+> **Version requirement**: two decision-engine features, the suggestion added next to a multiple-choice question based on your past choices and the "nobody is watching" detection, were verified on Claude Code **2.1.319**. Older versions may not support them; nothing breaks, you just get no suggestion, or unattended runs are not detected. Everything else works as before. Updating to 2.1.319 or later is recommended.
+
 **2. Type `/chutora`**
 
 It's the only command you need to remember. It shows the current status — version, mode, context usage, whether you're stuck on a repeating error — and lists what you can do; just reply with a number. Handoff, usage report, install check, mode and language switching, and full setup are all in there.
