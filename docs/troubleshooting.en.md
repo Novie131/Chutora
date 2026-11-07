@@ -101,6 +101,14 @@ mkdir -p /tmp/chutora-guard-test && cd /tmp/chutora-guard-test && git init -q &&
 4. Check the record: `/chutora` shows "N stopped in the last 7 days"; `tail ~/.claude/chutora/projects/*/observations.jsonl` shows `guard_ask` and `guard_deny`, and the ones blocked because of bypass-permissions mode carry `"bypass_deny": true`.
 5. Delete `/tmp/chutora-guard-test` when done. Results (step 3 especially) are welcome as an issue, with `claude --version`.
 
+### The decision engine doesn't run something automatically
+
+Check in order: `/chutora` shows "Decision engine (experimental): on" and the danger guard is on too; you answered `/chutora ok <id> auto` (`ok_auto` shows under "Recently handled" in `/chutora changes`); this command is close enough to that one (a different path pattern doesn't count — agreeing to `build/` doesn't cover `dist/`); the command is only the delete (adding `&& npm run build` means it won't be automatic); nothing similar was undone in the last 24 hours; what is deleted is under 200 MB / 20,000 files (`CHUTORA_BACKUP_MAX_MB`) and `~/.claude/chutora/projects/` is writable (`/chutora doctor` checks this). A call blocked by `permissions.deny` in settings can't be approved by the engine either; that is how Claude Code works.
+
+### The "Chutora did … automatically" line keeps showing up at the end of replies
+
+It is the reminder for actions waiting for you, and it stops once you respond: `/chutora ok all auto`, `/chutora ok all ask`, or, to clear it without teaching anything, `/chutora ok all`.
+
 ### Nothing is written to the observation log
 
 Check that `/chutora` shows "Observation log (experimental): on". For an install.sh install, merge the new hooks snippet into `settings.json` (`observe.py` on PostToolUse, PostToolUseFailure, SubagentStop and UserPromptSubmit, plus `guard.py` on PreToolUse); `/chutora doctor` checks this.

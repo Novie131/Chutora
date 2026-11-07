@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/Novie131/chutora/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Novie131/chutora/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="version 0.16.0-beta.2" src="https://img.shields.io/badge/version-0.16.0--beta.2-FF6A26">
+  <img alt="version 0.16.0-beta.3" src="https://img.shields.io/badge/version-0.16.0--beta.3-FF6A26">
   <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-1B2D52">
   <img alt="VS Code supported" src="https://img.shields.io/badge/VS%20Code-supported-1B2D52">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-2EA043"></a>
@@ -128,7 +128,7 @@
 | `research` | 派工／指令 | 查官方文件、API 用法、版本差異等可能已變動的資訊，回答附來源，官方資料存進 `web/` |
 | `harvester`（Sonnet） | 只在你明確要求時 | 把過去的對話紀錄挖成知識庫筆記。成本較高，偶爾跑一次 |
 | micro-skills | 內建範本 | `MEMORY.md` 範本與分工慣例裡的寫法：把專案的固定指令與事實寫成短小的條件式記憶，用到才讀，少走回頭路 |
-| 變更紀錄（實驗中） | 自動 | `claude-memory/changes.jsonl` 記下做了什麼、復原點在哪、有沒有告訴你、你怎麼回應；目前由危險守門寫入，給之後會改設定的功能用 |
+| 變更紀錄（實驗中） | 自動 | `claude-memory/changes.jsonl` 記下做了什麼、復原點在哪、有沒有告訴你、你怎麼回應；由危險守門與決策引擎寫入；決策另記在 `claude-memory/decisions.jsonl` |
 | 記憶身分資料（實驗中） | 新寫入時 | 新的記憶檔開頭帶 id、建立與最後使用時間、可信度、來源、依據的檔案與指紋、版本、取代關係與狀態；既有記憶檔不改寫。格式見[進階說明](docs/advanced.md#memory) |
 
 ### 7. 分析品質與資安
@@ -139,6 +139,7 @@
 | `security-review`（Sonnet） | 派工 | 靜態審查：對照 OWASP 類別，找不安全寫法、金鑰或 token 外洩。只讀不改，回報附證據、嚴重度與修補建議。只用於你自己或已授權的程式碼 |
 | `security-test`（Sonnet） | 派工 | 動態測試：實際打你已授權且隔離的 dev／測試環境，驗證漏洞。開工前一定先確認授權範圍，不碰 production、不外送資料 |
 | 危險守門（實驗中） | 自動 | 工具執行前檢查「永遠要問清單」：force push、推到 main、刪專案外的檔案、碰 `.env` 或金鑰檔、`DROP TABLE`、`terraform destroy`、`kubectl delete`、改 Claude Code 或 Chutora 設定、`git reset --hard`、`git clean -f` 先問你；`rm -rf ~`、`rm -rf /` 這類直接擋。略過權限模式（`--dangerously-skip-permissions`）下確認視窗可能被跳過，所以備份不了的 force push、刪專案外／家目錄的東西、`DROP TABLE`、`terraform destroy`、`kubectl delete` 改成直接擋。`/chutora:route-setup` 已經逐項問過你，跑它自己的設定腳本時不再問第二次。`git push origin feat/x`、`rm -rf node_modules` 不攔。清單可在 `~/.claude/chutora/always-ask` 增減；`/chutora guard off` 或 `CHUTORA_GUARD=0` 關閉 |
+| 決策引擎（實驗中） | 自動 | 你說過「這類以後可以自動」、而且可以復原（在專案裡、復原點建立成功）時，先建復原點再自動做，回覆結尾附一行通知、狀態列顯示待確認數，直到你回 `/chutora ok <id> auto｜ask` 或 `/chutora undo <id>`；信心分數自己算（相似紀錄＋平滑＋校準），不呼叫模型。永遠要問清單、你的規則與略過權限模式的 deny 不會被放寬，推送遠端永不自動；`/chutora decide off` 或 `CHUTORA_DECIDE=0` 關閉 |
 
 ### 8. 自我強化：越用越順手
 
@@ -154,6 +155,7 @@
 |---|---|---|
 | `/chutora` | 指令 | 單一入口：狀態總覽（版本、模式、context、loop guard、各開關與累計省下的量）加上功能選單，回覆編號就能執行 |
 | `/chutora doctor` | 指令 | 唯讀安裝健檢：python3、hooks、狀態列、記憶庫、自動壓縮、Haiku Explore、舊版殘留、危險守門自訂規則、觀察紀錄，要修的項目附修法 |
+| `/chutora changes`／`ok`／`undo` | 指令 | 決策引擎（實驗中）：列出自動做了、還沒確認的動作；`ok <id|all> auto`（這類以後可自動）／`ask`（下次先問我）；`undo <id>` 用復原點還原 |
 | 三種模式 | 指令 | `/chutora mode economy`／`balanced`／`quality`：改變 session 開始時帶入的派工慣例、瘦身門檻與反問題數，不改各 agent 的模型 |
 | 中英雙語 | 自動 | 提醒訊息、狀態列、`/chutora` 依系統語言切換；`/chutora lang zh`／`en`／`auto` 可固定 |
 | 駕駛艙狀態列 | 自動（設好狀態列後） | Claude 工作時狀態列即時顯示目前動作：`▶ worker·Sonnet 跑測試 npm test · 12s │ 本次 42k tok │ 瘦身省≈8k │ ctx 95k/120k`；閒置時維持原本的精簡版。只用官方狀態列與標準 hooks，`CHUTORA_ACTIVITY=0` 關閉 |
@@ -276,6 +278,7 @@ ANTHROPIC_API_KEY=... python3 bench/run.py --runs 3 --model opus
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 程式碼地圖與影響範圍 | 產生精簡的符號索引存進記憶，改函式前先列出會受影響的地方；檔案改了會提醒索引過期 |
 | <img src="assets/icons/eyes.svg" width="18" height="18" alt=""> 實驗中：feat/v2-batch1 | 危險操作守門 | force push、推到 main、刪專案外的檔案、碰 `.env`、`DROP TABLE` 這類操作先問你，`rm -rf ~` 這類直接擋；略過權限模式下備份不了的改成直接擋；清單可自訂 |
 | <img src="assets/icons/eyes.svg" width="18" height="18" alt=""> 實驗中：feat/v2-batch1 | 學習的地基 | 不花 token 的觀察紀錄（含被瘦身、重讀訊號與嚴格隱私開關）、變更紀錄、記憶身分資料；MCP 瘦身不再砍純文字說明 |
+| <img src="assets/icons/eyes.svg" width="18" height="18" alt=""> 實驗中：feat/v2-batch2 | 決策引擎 | 有限選項的信心分數自己算（相似紀錄、平滑、冷啟動、分桶校準、Brier）；你同意過、可復原的動作先建復原點再自動做並持續通知，`/chutora ok`／`undo` 回饋；安全規則不放寬 |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 路由從結果學習 | 記下每次派工的結果，整理成委派表的修正建議，你確認才改 |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 卡關救援 | AI 反覆失敗、越修越亂時一鍵救援：收集證據、停損、給你兩三條脫困路線、把教訓記下來 |
 | <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 規劃中 | 專案健檢 | 在 `/chutora doctor` 的安裝健檢之外，再一次檢查測試缺口、過期記憶、沒用到的工具、安全快掃 |
@@ -292,7 +295,7 @@ ANTHROPIC_API_KEY=... python3 bench/run.py --runs 3 --model opus
 - [colbymchenry/codegraph](https://github.com/colbymchenry/codegraph)：單一入口與 benchmark 的做法（`/chutora`、`bench/`），也是規劃中「程式碼地圖」的參考
 - [rtk](https://github.com/rtk-ai/rtk)：指令輸出瘦身的做法（噪音輸出瘦身）
 - [affaan-m/ECC](https://github.com/affaan-m/everything-claude-code)：continuous-learning-v2 的信心分數直覺與觀察 hook（觀察紀錄）
-- Cloudflare [Clef](https://blog.cloudflare.com/clef-decision-models/) 與 [Laya](https://huggingface.co/convaiinnovations/laya)：決策模型的有限選項、校準與門檻（反問的選擇題、守門的 ask／deny）；只取方法論，不呼叫這些模型
+- Cloudflare [Clef](https://blog.cloudflare.com/clef-decision-models/) 與 [Laya](https://huggingface.co/convaiinnovations/laya)：決策模型的有限選項、校準與門檻（反問的選擇題、守門的 ask／deny、決策引擎的信心分數與自動化門檻）；只取方法論，不呼叫這些模型
 - Docker 整理的 [AI coding agent 事故](https://www.docker.com/blog/ai-coding-agent-horror-stories/)（例如 [rm -rf 事件](https://www.docker.com/blog/coding-agent-horror-stories-the-rm-rf-incident/)）：危險守門規則的依據
 
 規劃中的項目另外參考 [ruflo](https://github.com/ruvnet/ruflo)。
@@ -317,7 +320,7 @@ ANTHROPIC_API_KEY=... python3 bench/run.py --runs 3 --model opus
 
 ## <img src="assets/icons/pin.svg" width="26" height="26" alt=""> 狀態
 
-**v0.16.0-beta.2 — 早期版本（實驗中：feat/v2-batch1-finish）。** 0.10.0 以前叫 smart-agent-route、0.7.0 以前叫 tiered-agents，升級請先移除舊版（見 [docs/部署安裝.md](docs/部署安裝.md#從-smart-agent-route0100-以前升級)）。 context 提醒 hook、handoff、bulk、Explore 覆蓋版移植自作者的個人設定：hook 已在真實對話中觸發、Explore 與 bulk 已確認跑在 Haiku，但都還在驗證期。worker-hard 升級鏈、research skill 與 plugin 形式的 hook 尚未實際使用。agent-board 與 reply-detail 已在 VS Code 擴充 2.1.301 實測過看板；常駐模式、看板裡的按鈕與回覆格式注入還在驗證。0.12 新增的 `/chutora`、doctor、三種模式、中英雙語與每週回顧已有單元測試，還沒在真實對話中長期驗證。0.13 的噪音輸出瘦身與 0.14 的讀檔去重、MCP 輸出瘦身、反問都有單元測試，但替換工具輸出的格式是依 Claude Code 型別定義與官方文件推斷，還沒在真實對話中確認。0.16 的危險守門、觀察紀錄與 MCP 瘦身修正有單元測試，並用 `claude -p`（Claude Code 2.1.319）實測過：守門在預設模式與 `--dangerously-skip-permissions` 下都把要問的指令攔下沒有執行、一般指令照常執行；觀察紀錄不增加 token；長篇純文字的 MCP 輸出完整保留、長 JSON 陣列照常瘦身。0.16.0-beta.2 的略過權限模式直接擋、route-setup 只問一次、觀察紀錄隱私開關與被瘦身／重讀訊號有單元測試，並用 `claude -p --dangerously-skip-permissions`（Claude Code 2.1.319）實測：hook 收到的 `permission_mode` 是 `bypassPermissions`，force push 到不存在的 remote 被直接擋下、訊息正確，`git reset --hard` 仍是「先問你」（非互動沒人確認所以沒執行），一般指令照常；觀察紀錄出現 `trimmed` 與 `reread`。互動模式下守門跳出的確認畫面還沒實測，可照[疑難排解](docs/troubleshooting.md#在你自己的互動式-claude-code-驗證危險守門)自己驗證。
+**v0.16.0-beta.3 — 早期版本（實驗中：feat/v2-batch2）。** 0.10.0 以前叫 smart-agent-route、0.7.0 以前叫 tiered-agents，升級請先移除舊版（見 [docs/部署安裝.md](docs/部署安裝.md#從-smart-agent-route0100-以前升級)）。 context 提醒 hook、handoff、bulk、Explore 覆蓋版移植自作者的個人設定：hook 已在真實對話中觸發、Explore 與 bulk 已確認跑在 Haiku，但都還在驗證期。worker-hard 升級鏈、research skill 與 plugin 形式的 hook 尚未實際使用。agent-board 與 reply-detail 已在 VS Code 擴充 2.1.301 實測過看板；常駐模式、看板裡的按鈕與回覆格式注入還在驗證。0.12 新增的 `/chutora`、doctor、三種模式、中英雙語與每週回顧已有單元測試，還沒在真實對話中長期驗證。0.13 的噪音輸出瘦身與 0.14 的讀檔去重、MCP 輸出瘦身、反問都有單元測試，但替換工具輸出的格式是依 Claude Code 型別定義與官方文件推斷，還沒在真實對話中確認。0.16 的危險守門、觀察紀錄與 MCP 瘦身修正有單元測試，並用 `claude -p`（Claude Code 2.1.319）實測過：守門在預設模式與 `--dangerously-skip-permissions` 下都把要問的指令攔下沒有執行、一般指令照常執行；觀察紀錄不增加 token；長篇純文字的 MCP 輸出完整保留、長 JSON 陣列照常瘦身。0.16.0-beta.2 的略過權限模式直接擋、route-setup 只問一次、觀察紀錄隱私開關與被瘦身／重讀訊號有單元測試，並用 `claude -p --dangerously-skip-permissions`（Claude Code 2.1.319）實測：hook 收到的 `permission_mode` 是 `bypassPermissions`，force push 到不存在的 remote 被直接擋下、訊息正確，`git reset --hard` 仍是「先問你」（非互動沒人確認所以沒執行），一般指令照常；觀察紀錄出現 `trimmed` 與 `reread`。互動模式下守門跳出的確認畫面還沒實測，可照[疑難排解](docs/troubleshooting.md#在你自己的互動式-claude-code-驗證危險守門)自己驗證。 0.16.0-beta.3 的決策引擎有單元測試（公式、平滑、冷啟動、相似度、校準、門檻與模式、復原點與 undo、通知與回饋、守門整合），並用 `claude -p`（Claude Code 2.1.319、Sonnet）實測：暫存專案裡 `rm -rf build/` 第一次在略過權限模式下照常執行、先建復原點並在回覆結尾附一行；回 `/chutora:chutora ok <id> auto`（由 UserPromptSubmit hook 直接處理）後，預設權限模式的 `claude -p` 也自動執行了同一個指令並通知，換成 `rm -rf dist/` 就沒有自動（被拒）；`/chutora:chutora undo <id>` 把 `build/` 還原；force push 到不存在的 remote 在略過權限模式下直接擋、預設模式先問，回 `ok … auto` 也學不成自動；settings 的 `permissions.deny` 仍然優先於 hook 的 allow。一般流程每個請求固定多約 320 個輸入 token（分工慣例多兩行）。互動模式下的通知與回饋還沒實測。
 
 已知會需要調整的地方：
 

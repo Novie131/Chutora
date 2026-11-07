@@ -137,11 +137,11 @@ Claude Code 自 2.1.86 起內建類似機制（重複讀取未變更的檔案時
 
 `hooks/guard.py`（PreToolUse，`Bash|Write|Edit|MultiEdit|NotebookEdit|Read`）在工具執行前檢查「永遠要問清單」，命中時回傳標準的 `hookSpecificOutput.permissionDecision` 與雙語的 `permissionDecisionReason`：
 
-- **先問你（ask）**：force push（`--force`、`-f`、`--force-with-lease`、`+分支`）；推到 main／master（含沒寫分支、但目前就在 main）；`rm -rf` 或刪除專案外的檔案（暫存目錄底下除外）；刪掉整個專案或它的 `.git`；刪除路徑含無法確認的變數；讀寫 `.env`（`.env.example` 這類範本除外）與金鑰檔（`id_rsa`、`*.pem`、`*.key`、`.netrc`…）；`DROP TABLE`／`DROP DATABASE`／`TRUNCATE`；`terraform destroy`；`kubectl delete`；修改 `~/.claude/settings.json`、專案的 `.claude/settings.json` 或 Chutora 設定（含 `/chutora guard off`；`/chutora:route-setup` 執行 Chutora 自己目錄裡的 `apply_settings.py` 除外，因為它已經逐項問過你。同名但在別處的腳本、同一行另外重導向到設定檔、或改寫這支腳本本身，照樣要問）；`git reset --hard`；`git clean -f`。
+- **先問你（ask）**：force push（`--force`、`-f`、`--force-with-lease`、`+分支`）；推到 main／master（含沒寫分支、但目前就在 main）；`rm -rf` 或刪除專案外的檔案（暫存目錄底下除外）；刪掉整個專案或它的 `.git`；刪除路徑含無法確認的變數；讀寫 `.env`（`.env.example` 這類範本除外）與金鑰檔（`id_rsa`、`*.pem`、`*.key`、`.netrc`…）；`DROP TABLE`／`DROP DATABASE`／`TRUNCATE`；`terraform destroy`；`kubectl delete`；修改 `~/.claude/settings.json`、專案的 `.claude/settings.json` 或 Chutora 設定（含 `/chutora guard off`；`/chutora:route-setup` 執行 Chutora 自己目錄裡的 `apply_settings.py` 除外，因為它已經逐項問過你。同名但在別處的腳本、同一行另外重導向到設定檔、或改寫這支腳本本身，照樣要問）；`git reset --hard`；`git clean -f`；Claude 自己替自己開自動權限（跑 `/chutora ok … auto` 或改寫 `decisions.jsonl`，規則 `self-grant`，略過權限模式下直接擋）。
 - **直接擋（deny）**：非常明確的災難：`rm -rf /`、`rm -rf ~`、刪除系統目錄、`mkfs`、`dd of=/dev/<磁碟>`。原因回給 Claude，請你自己決定要不要在終端機執行。
 - **不誤攔**：指令先經過一個小型 shell 斷詞（引號、heredoc、`$(...)`、`sh -c`、`sudo`／`env` 前綴、`cd` 之後的路徑），所以 commit 訊息、`echo`、`grep` 裡「提到」這些字不會被攔；`git push origin feat/x`、`rm -rf node_modules`、`rm -rf build/` 都照常執行。解析不了（例如引號沒關）時退回保守的整段比對。這是盡力而為的檢查，不是沙盒。
 - **權限模式**：PreToolUse hook 在任何權限模式下都會先執行。官方文件寫明 `deny` 在 bypassPermissions／`--dangerously-skip-permissions` 下仍然有效；`ask` 在 bypass 下怎麼處理文件沒寫，所以實測了 Claude Code 2.1.319 的 `claude -p`：預設模式、`--allowedTools Bash`（allow 規則）與 `--dangerously-skip-permissions` 下，被要求確認的指令都沒有執行（沒有人可以確認，記在 `permission_denials`），原因回給 Claude。互動模式下的確認畫面，以及互動式 bypass 模式的行為還沒實測（驗證步驟見[疑難排解](troubleshooting.md#在你自己的互動式-claude-code-驗證危險守門)）。在 bypassPermissions／dontAsk 模式下，原因會另外告訴 Claude「這次沒有執行，請向你說明、不要繞路」。
-- **略過權限模式直接擋**：hook 輸入的 `permission_mode`（官方文件列出的值：`default`、`plan`、`acceptEdits`、`auto`、`dontAsk`、`bypassPermissions`）是 `bypassPermissions` 時，確認視窗可能被跳過，所以備份不了的六條規則 `force-push`、`rm-outside`、`rm-home`、`sql-drop`、`terraform-destroy`、`kubectl-delete` 由 ask 改成 deny，原因會說明是因為略過權限模式，並請你自己在終端機執行或關掉略過權限模式後重試。其他規則與其他模式完全不變；`claude -p --dangerously-skip-permissions` 實測 hook 收到的值就是 `bypassPermissions`。
+- **略過權限模式直接擋**：hook 輸入的 `permission_mode`（官方文件列出的值：`default`、`plan`、`acceptEdits`、`auto`、`dontAsk`、`bypassPermissions`）是 `bypassPermissions` 時，確認視窗可能被跳過，所以備份不了的六條規則 `force-push`、`rm-outside`、`rm-home`、`sql-drop`、`terraform-destroy`、`kubectl-delete`，加上 `self-grant`，由 ask 改成 deny，原因會說明是因為略過權限模式，並請你自己在終端機執行或關掉略過權限模式後重試。其他規則與其他模式完全不變；`claude -p --dangerously-skip-permissions` 實測 hook 收到的值就是 `bypassPermissions`。
 - **自訂**：`~/.claude/chutora/always-ask` 一行一條：`<regex>` 額外要問（比對 Bash 指令全文，或檔案工具的路徑）、`deny: <regex>` 額外直接擋、`!<規則 id>` 移除一條預設規則（`/chutora guard rules` 列出 id）、`#` 開頭是註解。壞掉的 regex 會被略過，`/chutora doctor` 會列出來。
 - **紀錄**：每次攔下都寫一筆到變更紀錄（見[記憶](#memory)）與觀察紀錄；之後同一個呼叫真的執行了（你按了允許），會補記 `user_response: approved`。
 - **開關**：`/chutora guard off`（寫入 `~/.claude/chutora/guard`；這個指令本身也會先問你）或 `CHUTORA_GUARD=0`。
@@ -158,6 +158,27 @@ Claude Code 自 2.1.86 起內建類似機制（重複讀取未變更的檔案時
 - **隱私**：預設糾正句存前 160 字（已遮罩）、選擇存前 40 字。`/chutora observe privacy strict`（寫入 `~/.claude/chutora/observe-privacy`）或 `CHUTORA_OBSERVE_PRIVACY=strict` 時，糾正與選擇（含 AskUserQuestion 的答案）只記長度，不存你打的任何字；`/chutora observe privacy normal` 改回。環境變數優先於檔案，`/chutora` 與 doctor 會顯示目前設定。
 - **輪替**：超過 5 MB 移到同一層的 `archive/`，最多留 5 份（`CHUTORA_OBSERVE_MAX_MB` 可調）。
 - **開關**：`/chutora observe off`（寫入 `~/.claude/chutora/observe`）或 `CHUTORA_OBSERVE=0`。
+
+
+### 決策引擎（實驗中）
+
+`hooks/decide.py` 幫有限選項的決定（是非、多選一、等級）算信心分數，並決定能不能不問你就做。不呼叫任何模型，也不接 Laya／Clef，只取它們的方法論。
+
+- **信心分數**：`p_i = w·(n_i+α)/(N+kα) + (1−w)·c_i`，`w = N/(N+m)`。`n_i` 是相似紀錄裡選過 i 的次數（每筆乘上相似度），`N` 總和，`k` 選項數，`c_i` 是 Claude 自己的估計（沒給就平均分配），`α=1`、`m=5`。你明確說過「這類以後可以自動／下次先問我」時，最近一次相似度 ≥0.8 的那句話當 `c`（給該選項 0.9），因為你的話比 Claude 的猜測準。
+- **相似度**：規則式加權比對情境特徵（決定類型必須相同；類別、動作、路徑樣式、git 分支、檔案是否被追蹤、是不是可重新產生、專案），只採相似度 ≥0.6 的紀錄，不用向量資料庫。
+- **校準**：每次事後知道答案就記一筆、算 Brier 分數；同類型的預測依 0.1 分桶，樣本 ≥5 的桶照實際命中率往回修（預測 0.7 那桶實際只對六成，就往下修）。`/chutora decide stats` 看平均 Brier 與各桶。
+- **可復原（客觀檢查）**：在專案資料夾內是必要條件；git 追蹤且已 commit → 可復原；快取、build 產物這類可重新產生的 → 無影響；其他要靠自動備份成功才算可復原；推送遠端、寫外部服務 → 不可復原。
+- **門檻**：可復原且無影響 ≥0.70 自動；可復原但有影響 ≥0.85 自動；不可復原且有影響永不自動。省錢模式 −0.05、品質模式 +0.05；沒有相似歷史時 +0.10；24 小時內復原過的相似情境不自動。
+- **沒空選**（`--unattended`：你沒回、說「你決定」、排程無人）：選機率最高者並記理由；不可復原且有影響、或最高 <0.5 且不可復原 → 不做，記成待辦（`decision_todo`）。
+- **自動之前一律建復原點**：檔案／資料夾複本（設定檔用 `--config` 加時間戳）、`git stash create`（不動工作區，掛在 `refs/chutora/restore/<id>`）。超過 200 MB 或 2 萬個檔案（`CHUTORA_BACKUP_MAX_MB` 可調）或寫入失敗 → 不自動。復原點在 `~/.claude/chutora/projects/<專案 id>/restore/`。
+- **接上守門**：只在「守門沒命中」或「只命中 `git-reset-hard`／`git-clean`」時才看；整段指令必須只有這件事（專案內的 `rm`／`rmdir`／`unlink`，可加 `cd`；或單獨一個 `git reset --hard`／`git clean`），有管線、重導向、`$`、反引號、`sudo` 或其他指令一律不放行。其他守門規則、你的 `always-ask` 規則、略過權限模式的 deny 都照守門，引擎碰不到。學到你同意這類可以自動、而且復原點建立成功，才回 `permissionDecision: "allow"`。實測 Claude Code 2.1.319：`allow` 會略過確認，但 settings 的 `permissions.deny` 仍然優先；所以自動放行要等 PostToolUse 確認真的執行了，才列入「待確認」。
+- **怎麼開始學**：第一次遇到、你在確認畫面允許後，Chutora 問一次要不要以後自動；略過權限模式下，專案內刪除照常執行，但先建復原點、事後通知；守門問你 `git reset --hard`／`git clean` 時，原因後面會附 `/chutora ok <id> auto`。
+- **通知**：每個自動動作寫進 `changes.jsonl`；當下由 PreToolUse 的 `additionalContext` 請 Claude 在回覆結尾附一行；之後每次你送出訊息，UserPromptSubmit 都會再請 Claude 附一行（多個合併成一行），直到你回應；狀態列顯示「待確認 N」。你已同意、而且情境幾乎相同（相似度 ≥0.95）的，只提醒當下那一次。沒有待確認時不輸出任何東西。
+- **回饋**：`/chutora ok <id|all> auto`（知道了，這類以後可以自動）、`/chutora ok <id|all> ask`（知道了，但下次先問我）、`/chutora undo <id>`（用復原點還原、記成強烈負面〔權重 3〕、24 小時內相似的不再自動）、`/chutora ok <id>`（只標成已讀，不計入學習）、`/chutora changes`（列出待確認）。你打的 `/chutora ok`／`undo` 由 UserPromptSubmit hook 直接處理；Claude 自己跑 `ok … auto` 或改寫 `decisions.jsonl` 會被守門當成 `self-grant` 攔下（略過權限模式直接擋）。永遠要問清單上的類型不能學成自動。
+- **給主對話用的命令列**：`decide.py score --type <題型> --options a,b [--claude a=0.7,b=0.3] [--path <路徑>] [--remote] [--unattended]`、`record <id> <答案>`、`snapshot [--config] [--git] --summary <說明> <路徑>…`、`undo <id>`、`pending`、`stats`。
+- **紀錄**：`claude-memory/decisions.jsonl`（沒有 `claude-memory/` 時與 `changes.jsonl` 同在 auto memory 目錄）：題型、選項、情境特徵、預測機率、實際結果、是否自動、可復原程度、Brier。
+- **token**：分工慣例多兩行，實測（`claude -p`、Sonnet、英文慣例）每個請求固定多約 320 個輸入 token；有待確認時每則訊息再多一段約 100～150 token 的提醒。
+- **開關**：`/chutora decide off`（寫入 `~/.claude/chutora/decide`）或 `CHUTORA_DECIDE=0`，只停掉自動判斷；守門關掉時引擎也不會自動。
 
 ---
 
@@ -264,7 +285,7 @@ agent-board 的設定（plugin 的 userConfig，預設都開）：`autoOpen` 子
 
 ### 變更紀錄與記憶身分資料（實驗中）
 
-**變更紀錄** `claude-memory/changes.jsonl`（沒有 claude-memory 時放 auto memory 目錄）：每行一筆 JSON，只追加、不改寫。欄位：`id`、`ts`、`action`（動作代號，例如 `guard_ask`）、`summary`（已遮罩、截短）、`restore_point`（復原點位置，例如備份檔或 git commit；沒有就是 `null`）、`notified`（是否已告知你）、`user_response`（`null`、`approved`、`rejected`、`undone`…）、`source`、`session`。之後的更新另外追加一行 `{"id": …, "update": {…}}`，讀取時合併。這一批只有危險守門會寫；讀寫模組是 `hooks/changes.py`（`python3 changes.py list` 看最近幾筆），給之後會改設定的功能記「改了什麼、怎麼復原、你怎麼回應」。
+**變更紀錄** `claude-memory/changes.jsonl`（沒有 claude-memory 時放 auto memory 目錄）：每行一筆 JSON，只追加、不改寫。欄位：`id`、`ts`、`action`（動作代號，例如 `guard_ask`）、`summary`（已遮罩、截短）、`restore_point`（復原點位置，例如備份檔或 git commit；沒有就是 `null`）、`notified`（是否已告知你）、`user_response`（`null`、`approved`、`rejected`、`undone`…）、`source`、`session`。之後的更新另外追加一行 `{"id": …, "update": {…}}`，讀取時合併。危險守門與決策引擎會寫（決策引擎另加 `auto_allow`／`unattended_run`／`approved_run`／`auto_cli`／`decision_todo` 這幾種動作、`category`、`ran`、`quiet` 欄位，`user_response` 多了 `ok_auto`、`ok_ask`、`ack`）；讀寫模組是 `hooks/changes.py`（`python3 changes.py list` 看最近幾筆），給之後會改設定的功能記「改了什麼、怎麼復原、你怎麼回應」。
 
 **記憶身分資料**：新寫入的記憶檔最上面可以帶一段 YAML（工具模組 `hooks/memmeta.py`）：
 
@@ -365,7 +386,7 @@ chutora/
 │   ├── .claude-plugin/plugin.json
 │   ├── agents/                       ← worker / worker-hard / bulk / librarian / harvester / security-review / security-test
 │   ├── skills/                       ← handoff / research / usage-stats / route-setup / evidence-analysis / security-review / security-test / toolprune / harness-tune / chutora-hub
-│   ├── hooks/                        ← SessionStart 帶入、context 長度提醒、loop guard、modes/（三種模式）、weekly.py（每週回顧）、trim.py（噪音輸出瘦身）、dedup.py（讀檔去重）、mcptrim.py（MCP 輸出瘦身）、ask.py（反問提醒）、guard.py（危險守門）、observe.py（觀察紀錄）、changes.py（變更紀錄）、memmeta.py（記憶身分資料）、projectid.py、redact.py
+│   ├── hooks/                        ← SessionStart 帶入、context 長度提醒、loop guard、modes/（三種模式）、weekly.py（每週回顧）、trim.py（噪音輸出瘦身）、dedup.py（讀檔去重）、mcptrim.py（MCP 輸出瘦身）、ask.py（反問提醒）、guard.py（危險守門）、observe.py（觀察紀錄）、decide.py（決策引擎）、changes.py（變更紀錄）、memmeta.py（記憶身分資料）、projectid.py、redact.py
 │   （範本在 skills/route-setup/templates/：MEMORY.md、知識庫說明、Explore、Haiku 層範本）
 ├── plugins/agent-board/              ← 子 agent 看板 mod（選裝）
 ├── plugins/reply-detail/             ← 回覆格式 mod（選裝）

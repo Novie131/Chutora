@@ -101,6 +101,14 @@ mkdir -p /tmp/chutora-guard-test && cd /tmp/chutora-guard-test && git init -q &&
 4. 看紀錄：`/chutora` 會顯示「近 7 天攔下 N 次」；`tail ~/.claude/chutora/projects/*/observations.jsonl` 會看到 `guard_ask`、`guard_deny`，略過權限模式擋下的那幾筆帶 `"bypass_deny": true`。
 5. 驗證完刪掉 `/tmp/chutora-guard-test`。結果（特別是第 3 步）歡迎開 issue 回報，附上 `claude --version`。
 
+### 決策引擎沒有自動執行
+
+依序檢查：`/chutora` 顯示「決策引擎（實驗中）：開啟」、危險守門也開著；你回過 `/chutora ok <id> auto`（`/chutora changes` 的「最近已處理」看得到 `ok_auto`）；這次的指令和那次夠像（路徑樣式不同就不算，例如 `build/` 同意過不代表 `dist/`）；整段指令只有刪除這件事（接了 `&& npm run build` 就不會自動）；24 小時內沒有復原過相似的；要刪的東西不超過 200 MB／2 萬個檔案（`CHUTORA_BACKUP_MAX_MB`），而且 `~/.claude/chutora/projects/` 可以寫入（`/chutora doctor` 會檢查）。settings 的 `permissions.deny` 擋下的，引擎也放不行，這是 Claude Code 的設計。
+
+### 回覆結尾一直出現「Chutora 自動做了…」那一行
+
+那是待確認的提醒，回應之後就停：`/chutora ok all auto`、`/chutora ok all ask`，或只想清掉不想讓它學：`/chutora ok all`。
+
 ### 觀察紀錄沒有寫入
 
 先看 `/chutora` 是否顯示「觀察紀錄（實驗中）：開啟」。install.sh 安裝的要把新版 hooks 片段（PostToolUse、PostToolUseFailure、SubagentStop、UserPromptSubmit 的 `observe.py`，以及 PreToolUse 的 `guard.py`）合併進 `settings.json`；`/chutora doctor` 會檢查這一項。

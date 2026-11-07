@@ -62,6 +62,12 @@ No. It asks you about each item first and then calls the `apply_settings.py` ins
 **Does the observation log cost tokens? What does it keep?**
 No tokens: it prints nothing, and in testing the same task used the same input tokens with and without it, apart from the few every run varies by. It keeps short summaries only (command, path, tool name, output size), never tool output; ordinary prompts only record their length and common key formats are masked. It also notes which output keeps getting trimmed and which files keep being re-read (files outside the project only as a path hash). Your corrections keep their first 160 characters by default (masked); for stricter privacy, `/chutora observe privacy strict` keeps only the length of corrections and choices. The files are in `~/.claude/chutora/projects/<project id>/` and rotate past 5 MB; turn it off with `/chutora observe off`.
 
+**Can the decision engine do something dangerous on its own?**
+No. It only acts automatically when you have explicitly said "this kind may be automatic" and the action is recoverable (inside the project, restore point saved), and the whole command must be just that one thing. Anything on the always-ask list — force push, deleting outside the project, `DROP TABLE` — and the rules you added in `always-ask` are out of its reach; pushing to a remote or writing to outside services is never automatic. Claude can't grant itself permission either: running `/chutora ok … auto` itself is stopped by the guard.
+
+**How do I make a kind of action automatic, or stop it?**
+When the line appears at the end of a reply, answer `/chutora ok <id> auto` (may be automatic from now on) or `/chutora ok <id> ask` (ask me next time); if it got something wrong, `/chutora undo <id>` restores it from the restore point and similar actions stay manual for 24 hours. `/chutora changes` lists what is still waiting; `/chutora decide off` turns automatic runs off entirely.
+
 **Where are the benchmark numbers?**
 Not published yet. `bench/run.py` works, but no numbers go up until a real run has been done and checked; see [Benchmark](../README.en.md#benchmark) in the README.
 

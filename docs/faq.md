@@ -62,6 +62,12 @@ hooks 只讀寫本機檔案。只有你要查外部資料時（research）才會
 **觀察紀錄會不會花 token？存了什麼？**
 不花：它不輸出任何東西，實測有沒有它，同一個任務的輸入 token 只差每次執行本來就有的幾個。它只存精簡摘要（指令、路徑、工具名、輸出大小），不存工具輸出內容，一般提示只記長度，常見金鑰格式會遮罩；也記哪些輸出常被瘦身、哪些檔案一再重讀（專案外的檔案只記路徑雜湊）。你的糾正句預設存前 160 字（已遮罩），想更嚴格就 `/chutora observe privacy strict`，糾正與選擇都只記長度。檔案在 `~/.claude/chutora/projects/<專案 id>/`，超過 5 MB 自動輪替；不想要就 `/chutora observe off`。
 
+**決策引擎會不會自己做危險的事？**
+不會。它只在你明確說過「這類以後可以自動」、而且可以復原（在專案裡、復原點建立成功）時才自動，而且整段指令只能有那一件事。force push、刪專案外的東西、`DROP TABLE` 這類永遠要問清單上的，和你自己在 `always-ask` 加的規則，引擎完全碰不到；推送遠端、寫外部服務永遠不自動。Claude 也不能替自己開權限：它自己跑 `/chutora ok … auto` 會被守門攔下。
+
+**怎麼讓某類動作以後自動、或不要再自動？**
+看到回覆結尾那一行時回 `/chutora ok <id> auto`（以後可以自動）或 `/chutora ok <id> ask`（下次先問我）；做錯了就 `/chutora undo <id>`，會用復原點還原，24 小時內相似的不再自動。`/chutora changes` 列出還沒確認的；`/chutora decide off` 整個停掉自動。
+
 **Benchmark 的數字在哪？**
 還沒公布。`bench/run.py` 已經可以跑，但在實際跑完、核對過之前不放任何數字，見 README 的 [Benchmark](../README.md#benchmark)。
 
