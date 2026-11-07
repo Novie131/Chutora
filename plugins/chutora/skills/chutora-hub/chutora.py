@@ -255,6 +255,22 @@ def observe_info():
     return p, (os.path.getsize(p) if os.path.isfile(p) else None)
 
 
+def decide_info():
+    """決策引擎：待確認數、決策筆數、平均 Brier、復原點目錄；唯讀，不建立目錄。"""
+    d = hook_mod("decide")
+    pid = hook_mod("projectid")
+    if not d or not pid:
+        return None
+    try:
+        pd = project_dir()
+        st = d.stats(d.load_decisions(pd))
+        rr = os.path.join(pid.project_data_dir(pd, create=False), "restore")
+        return {"pending": len(d.pending(pd)), "decisions": st["decisions"], "resolved": st["resolved"],
+                "brier": st["brier"], "restore_dir": rr}
+    except Exception:
+        return None
+
+
 def observe_privacy():
     """回傳 ("strict"|"normal", 來源)。和 hooks/observe.py 的 privacy() 同一套規則。"""
     v = os.environ.get("CHUTORA_OBSERVE_PRIVACY", "").strip().lower()
@@ -346,6 +362,14 @@ def status():
     pv_txt = privacy_label(pv) + (f" [{pv_why}]" if pv_why else "")
     print(T(f"- 觀察紀錄（實驗中）：{'開啟' if on5 else '關閉（' + why5 + '）'}（不花 token，記在 {where}{size}；隱私：{pv_txt}）",
             f"- Observation log (experimental): {'on' if on5 else 'off (' + why5 + ')'} (costs no tokens; kept in {where}{size}; privacy: {pv_txt})"))
+    on6, why6 = toggle_state("decide")
+    di = decide_info()
+    dx = ""
+    if di:
+        dx = T(f"；待確認 {di['pending']} 個、決策 {di['decisions']} 筆", f"; {di['pending']} to confirm, {di['decisions']} decisions") + (
+            f"、Brier {di['brier']}" if di.get("brier") is not None else "")
+    print(T(f"- 決策引擎（實驗中）：{'開啟' if on6 else '關閉（' + why6 + '）'}（你說過「這類以後可以自動」且可復原時，先建復原點再自動做並通知；/chutora changes 查看）{dx}",
+            f"- Decision engine (experimental): {'on' if on6 else 'off (' + why6 + ')'} (when you said a kind may be automatic and it is recoverable, it saves a restore point, does it and tells you; see /chutora changes){dx}"))
     print()
     print(T("可以做的事（直接回覆編號或名稱）：", "What you can do (reply with a number or name):"))
     items = [
@@ -482,6 +506,18 @@ def doctor():
             + T(f"；隱私：{privacy_label(observe_privacy()[0])}", f"; privacy: {privacy_label(observe_privacy()[0])}"),
             "" if writable and not big else (T(f"{probe} 不能寫入", f"{probe} is not writable") if not writable
                                               else T("超過 5 MB 卻沒有輪替；確認 observe.py 是新版", "Over 5 MB without rotating; check observe.py is up to date")))
+
+    di = decide_info()
+    if not di:
+        add(FIX, T("決策引擎", "decision engine"), T("找不到 decide.py", "decide.py not found"),
+            T("hooks 版本太舊：重新安裝或更新 plugin", "hooks are out of date: reinstall or update the plugin"))
+    else:
+        rr = di["restore_dir"]
+        ok_w = os.access(rr if os.path.isdir(rr) else (os.path.dirname(rr) if os.path.isdir(os.path.dirname(rr)) else CLAUDE), os.W_OK)
+        add(OK if ok_w else FIX, T("決策引擎", "decision engine"),
+            T(f"待確認 {di['pending']} 個、決策 {di['decisions']} 筆（已知結果 {di['resolved']}）", f"{di['pending']} to confirm, {di['decisions']} decisions ({di['resolved']} resolved)")
+            + (f"、Brier {di['brier']}" if di.get("brier") is not None else "") + T(f"；復原點在 {rr.replace(HOME, '~')}", f"; restore points in {rr.replace(HOME, '~')}"),
+            "" if ok_w else T(f"{rr} 不能寫入：自動執行會因為建不了復原點而停用", f"{rr} is not writable: auto-run stays off because restore points can't be saved"))
 
     add(OK, T("版本", "version"), f"{version()} ({kind})")
 

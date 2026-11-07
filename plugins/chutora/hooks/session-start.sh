@@ -103,7 +103,10 @@ if [ ! -d "$MEM" ]; then
 fi
 
 body() {
-  if [ "$L" = en ] && [ -f "$HERE/guide.en.md" ]; then cat "$HERE/guide.en.md"; else cat "$HERE/guide.md" 2>/dev/null; fi
+  # {{HOOKS}} 換成 hooks 目錄的實際路徑（慣例裡要用 Bash 呼叫 decide.py）
+  HD=$(cd "$HERE" 2>/dev/null && pwd || echo "$HERE")
+  if [ "$L" = en ] && [ -f "$HERE/guide.en.md" ]; then G="$HERE/guide.en.md"; else G="$HERE/guide.md"; fi
+  sed "s|{{HOOKS}}|$HD|g" "$G" 2>/dev/null
   [ -f "$HERE/modes/$MODE.$L.md" ] && { printf '\n'; cat "$HERE/modes/$MODE.$L.md"; }
   if [ "$L" = en ]; then H_IDX='Memory index'; H_HO='Handoff note left by the previous conversation'
   else H_IDX='記憶索引'; H_HO='上一個對話留下的交接筆記'; fi

@@ -378,8 +378,9 @@ class SessionStartTest(SessionStartBase):
         d = json.loads(r.stdout)
         self.assertEqual(d["hookSpecificOutput"]["hookEventName"], "SessionStart")
         mode_block = (HOOKS / "modes" / "balanced.zh.md").read_text().strip()
-        self.assertEqual(d["hookSpecificOutput"]["additionalContext"].strip(),
-                         GUIDE.read_text().strip() + "\n\n" + mode_block)
+        guide = GUIDE.read_text().strip().replace("{{HOOKS}}", str(HOOKS.resolve()))  # 換成 hooks 目錄的實際路徑
+        self.assertEqual(d["hookSpecificOutput"]["additionalContext"].strip(), guide + "\n\n" + mode_block)
+        self.assertNotIn("{{HOOKS}}", d["hookSpecificOutput"]["additionalContext"])
         self.assertIn("/route-setup", d["systemMessage"])
         self.assertNotIn("chutora:route-setup", d["systemMessage"])
         self.assertEqual(self.shown(), "1")

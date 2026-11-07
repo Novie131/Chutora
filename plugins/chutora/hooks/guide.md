@@ -41,3 +41,5 @@
 - 讀檔去重與 MCP 瘦身：看到「Chutora 去重」提示，代表同一段對話先前讀過、檔案沒變，直接參考那次的結果；看到「Chutora MCP 瘦身」提示，需要被略過的內容時用 Read 讀提示裡的原文路徑。
 - loop guard：PostToolUse hook 會偵測同一個錯誤反覆出現，並注入一句提醒換方向；看到這類提醒就認真考慮改路、退一步或回報使用者，別用同樣方式硬重試。
 - 專案有 `claude-memory/` 時，下方會附上它的記憶索引；有 `handoff.md` 時也會附上，那是上一個對話留下的進度。沒有 `claude-memory/` 時記憶在 auto memory（Claude Code 自己會帶入它的 MEMORY.md；handoff.md 則由本 hook 帶入）。
+- 決策引擎（實驗中）：自己做有限選項的決定前，跑 `python3 "{{HOOKS}}/decide.py" score --type <題型> --options a,b [--claude a=0.7,b=0.3] [--path <路徑>] [--remote] [--unattended]`；`action` 是 auto 才做（先 `decide.py snapshot --summary "<做什麼>" <路徑>`，失敗就不做），ask 就問，skip-todo 記成待辦。事後知道答案：`decide.py record <id> <答案>`。
+- 有「Chutora 自動…」提示就在回覆結尾附它要的那一行；`/chutora ok … auto` 只能由使用者回覆。
