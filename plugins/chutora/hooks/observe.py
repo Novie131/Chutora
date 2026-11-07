@@ -320,6 +320,11 @@ def process(data):
     ddir = project_data_dir(data.get("cwd"), create=False)
     if data.get("hook_event_name") == "PostToolUse":
         resolve_guard(data, ddir)
+        try:
+            import decide
+            decide.resolve_pending(data, ddir)
+        except Exception:
+            pass
     if not enabled():
         return
     ddir = project_data_dir(data.get("cwd"))

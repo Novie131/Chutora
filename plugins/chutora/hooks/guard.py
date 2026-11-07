@@ -9,6 +9,9 @@
   略過權限模式（permission_mode 為 bypassPermissions）下，確認視窗可能被跳過，所以備份不了的幾類
   （BYPASS_DENY：force push、刪專案外／家目錄的東西、DROP／TRUNCATE、terraform destroy、kubectl delete）也改成 deny。
 沒命中就什麼都不輸出，照原本的權限流程走（守門只會收緊、不會放寬）。
+唯一的例外是決策引擎（decide.py）：只在「守門沒命中」或「只命中可學的 git-reset-hard／git-clean」、
+使用者明確說過這類以後可以自動、可復原且復原點建立成功時，才回 allow；其他規則、使用者規則與
+略過權限模式的 deny 一律照守門，引擎碰不到。
 
 指令解析：自己寫的小型 shell 斷詞（引號、跳脫、heredoc、$(...)、sh -c、sudo/env 等前綴），
 所以 commit 訊息或 echo 裡「提到」危險指令不會被攔；解析不了時退回保守的整段比對。
@@ -897,22 +900,51 @@ def log_change(data, decision, hits, user_hit, bypass=False):
             with open(tmp, "w") as f:
                 json.dump(pend, f)
             os.replace(tmp, p)
+        return rid
     except Exception:
-        pass
+        return None
+
+
+# 決策引擎可以學的規則（可復原：git stash create／快照）。其他規則、使用者規則、略過權限模式的 deny 永遠照守門。
+LEARNABLE_RULES = {"git-reset-hard", "git-clean"}
+
+
+def engine():
+    try:
+        import decide as d
+        return d
+    except Exception:
+        return None
 
 
 def process(data):
     if not enabled() or not isinstance(data, dict):
         return None
     r = decide(data)
-    if not r:
-        return None
-    decision, hits, user_hit = r
     mode = data.get("permission_mode")
+    if not r:
+        eng = engine()  # 守門沒命中：決策引擎看是不是已學會可自動的類型（例如專案內刪除）
+        try:
+            return eng.pretool(data, None) if eng else None
+        except Exception:
+            return None
+    decision, hits, user_hit = r
     decision, bypass = bypass_upgrade(decision, hits, mode)
-    log_change(data, decision, hits, user_hit, bypass)
+    learnable = decision == "ask" and not bypass and not user_hit and hits and all(h[0] in LEARNABLE_RULES for h in hits)
+    eng = engine() if learnable else None
+    if eng:
+        try:
+            out = eng.pretool(data, hits)
+            if out:
+                return out
+        except Exception:
+            pass
+    rid = log_change(data, decision, hits, user_hit, bypass)
+    why = reason(decision, hits, user_hit, mode, bypass)
+    if eng and rid:
+        why += eng.note_ask(data, hits, rid)
     return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": decision,
-                                   "permissionDecisionReason": reason(decision, hits, user_hit, mode, bypass)}}
+                                   "permissionDecisionReason": why}}
 
 
 def main():

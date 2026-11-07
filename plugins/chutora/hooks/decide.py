@@ -573,10 +573,10 @@ def notify_text(items):
     lst_en = "; ".join(f"{c['id']} {_summ(c)}" for c in items[:3]) + ("…" if n > 3 else "")
     ids = items[0]["id"] if n == 1 else "<id>"
     who = "ok " + (ids if n == 1 else "all")
-    return T(f"Chutora：有 {n} 個自動執行的動作還沒確認（{lst}）。請在這次回覆的最後附上剛好一行（多個合併成一行）："
+    return T(f"Chutora：有 {n} 個動作還沒確認（自動執行、或你剛允許的；{lst}）。請在這次回覆的最後附上剛好一行（多個合併成一行）："
              f"「Chutora 自動做了 {n} 件：<簡述>。回 /chutora {who} auto（這類以後可自動）、/chutora {who} ask（下次先問我）"
              f"或 /chutora undo {ids}（復原）」。使用者回應前，每次都會再提醒。",
-             f"Chutora: {n} automatic action(s) not confirmed yet ({lst_en}). End this reply with exactly one line "
+             f"Chutora: {n} action(s) not confirmed yet (run automatically or just allowed by you; {lst_en}). End this reply with exactly one line "
              f"(merge them into one): \"Chutora did {n} thing(s) automatically: <summary>. Reply /chutora {who} auto "
              f"(this kind may be automatic), /chutora {who} ask (ask me next time) or /chutora undo {ids} (restore).\" "
              f"This reminder repeats until the user responds.")
@@ -668,6 +668,270 @@ def list_changes(n=10, pd=None, transcript=None):
     out.append(T("回應：/chutora ok <id|all> auto（這類以後可自動）｜ask（下次先問我）；/chutora undo <id> 復原",
                  "Respond: /chutora ok <id|all> auto (may be automatic) | ask (ask me next time); /chutora undo <id> to restore"))
     return "\n".join(out)
+
+
+# ------------------------------------------------------------------ PreToolUse 整合（由 guard.py 呼叫）
+def _real(p):
+    try:
+        return os.path.realpath(p)
+    except OSError:
+        return p
+
+
+def _features(category, action, rels, root, cwd, tracked):
+    try:
+        import guard as g
+        branch = g.current_branch(cwd)
+    except Exception:
+        branch = None
+    try:
+        from projectid import project_id
+        proj = project_id(root)
+    except Exception:
+        proj = None
+    return {"category": category, "action": action, "path": path_pattern(rels) if rels else "*", "branch": branch,
+            "tracked": tracked, "regen": bool(rels) and all(is_regen(r) for r in rels), "project": proj}
+
+
+def _clean_list(cwd, args):
+    """git clean 會刪掉哪些檔案：用同樣的選項跑 git clean -n。"""
+    flags = []
+    for x in args:
+        if x in ("-f", "--force", "-i", "--interactive", "-q", "--quiet"):
+            continue
+        if re.match(r"^-[a-zA-Z]+$", x):
+            x = "-" + x[1:].replace("f", "").replace("i", "").replace("q", "")
+            if x == "-":
+                continue
+        flags.append(x)
+    code, out = _git(cwd, "clean", "-n", *flags)
+    if code != 0:
+        return None
+    return [os.path.normpath(os.path.join(cwd, m.group(1))) for m in
+            (re.match(r"^Would remove (.+?)/?$", ln) for ln in out.splitlines()) if m]
+
+
+def classify(data, hits=None):
+    """這個 Bash 呼叫是不是可以學的類型？回傳候選 dict 或 None。
+    只接受「整段指令就只有這件事」：rm／rmdir／unlink 專案內的路徑（可加 cd），或單獨一個 git reset --hard／git clean；
+    有管線、重導向、$(...)、反引號、變數、其他指令或 sudo 之類前綴，一律不算（避免連帶放行別的東西）。"""
+    import guard as g
+    cmd = (data.get("tool_input") or {}).get("command")
+    if not isinstance(cmd, str) or not cmd.strip() or "`" in cmd or "$" in cmd or "\n" in cmd.strip():
+        return None
+    rules = {h[0] for h in hits} if hits else set()
+    if hits and not rules <= {"git-reset-hard", "git-clean"}:
+        return None
+    root = os.path.normpath(os.environ.get("CLAUDE_PROJECT_DIR") or data.get("cwd") or os.getcwd())
+    rroot = _real(root)
+    cwd = os.path.normpath(data.get("cwd") or root)
+    try:
+        segs = g.tokenize(cmd)
+    except Exception:
+        return None
+    work = []
+    for s in segs or []:
+        a = s.argv
+        if s.redirs or not a:
+            return None
+        if a[0] == "cd" and len(a) == 2:
+            full, unres, globbed = g.resolve(a[1], cwd)
+            if unres or globbed or not under(_real(full), rroot):
+                return None
+            cwd = full
+            continue
+        work.append(a)
+    if not work:
+        return None
+    if hits:
+        a = work[0]
+        if len(work) != 1 or a[0] != "git" or len(a) < 2:
+            return None
+        sub, args, cdir = g.git_parts(a)
+        if cdir or a[1] != sub:
+            return None
+        if sub == "reset" and "--hard" in args and "git-reset-hard" in rules:
+            return {"category": "git-reset-hard", "paths": [], "git": True, "impact": True, "basis": "git stash create",
+                    "summary": cmd, "features": _features("git-reset-hard", "git reset --hard", [], root, cwd, "yes")}
+        if sub == "clean" and "git-clean" in rules:
+            paths = _clean_list(cwd, args)
+            if paths is None or any(not under(_real(p), rroot) or _real(p) == rroot for p in paths):
+                return None
+            rels = [os.path.relpath(_real(p), rroot) for p in paths]
+            return {"category": "git-clean", "paths": paths, "git": False,
+                    "impact": not (rels and all(is_regen(r) for r in rels)), "basis": "snapshot untracked",
+                    "summary": cmd, "features": _features("git-clean", "git clean", rels, root, cwd, "no")}
+        return None
+    targets, rec = [], False
+    for a in work:
+        if a[0] not in ("rm", "rmdir", "unlink"):
+            return None
+        r = g.rm_targets(a)
+        if not r or not r[1]:
+            return None
+        rec = rec or r[0]
+        for t in r[1]:
+            if t.startswith("~"):
+                return None
+            p = os.path.join(cwd, t)
+            targets += globmod.glob(p) if re.search(r"[*?\[]", t) else [os.path.normpath(p)]
+    rels = []
+    for f in targets:
+        for c in (os.path.normpath(f), _real(f)):
+            if not (under(c, root) or under(c, rroot)) or c in (root, rroot):
+                return None
+        rel = os.path.relpath(_real(f), rroot)
+        if rel.split(os.sep)[0] == ".git" or g.is_secret(f):
+            return None
+        rels.append(rel)
+    rv = reversibility(rels, rroot) if rels else {"recoverable": True, "impact": False, "basis": "nothing to delete",
+                                                  "tracked": "no"}
+    if rv["recoverable"] is False:
+        return None
+    return {"category": "rm-in-project", "paths": targets, "git": False, "impact": rv["impact"], "basis": rv["basis"],
+            "summary": cmd, "features": _features("rm-in-project", "rm -r" if rec else "rm", rels, root, cwd,
+                                                  rv.get("tracked", "nogit"))}
+
+
+def _hook(decision=None, reason=None, ctx=None):
+    o = {"hookEventName": "PreToolUse"}
+    if decision:
+        o["permissionDecision"] = decision
+        o["permissionDecisionReason"] = reason
+    if ctx:
+        o["additionalContext"] = ctx
+    return {"hookSpecificOutput": o}
+
+
+def _pending_file(cwd):
+    from projectid import project_data_dir
+    return os.path.join(project_data_dir(cwd), "decide-pending.json")
+
+
+def _score_cand(cand, decisions):
+    return score(AUTO_TYPE, ["auto", "ask"], cand["features"], None, True, cand["impact"], decisions)
+
+
+def pretool(data, hits=None):
+    """guard.py 在「沒命中」或「只命中可學的 ask 規則」時呼叫。回傳 hook 輸出，或 None（照原本流程）。
+    永遠要問清單的其他規則、使用者規則、略過權限模式的 deny 都不會走到這裡，所以不會被放寬。"""
+    if not engine_enabled() or data.get("tool_name") != "Bash":
+        return None
+    cand = classify(data, hits)
+    if not cand:
+        return None
+    pd, tp = project_dir(data), data.get("transcript_path")
+    dpath = decisions_path(pd, tp)
+    ds = changes.read(path=dpath)
+    res = _score_cand(cand, ds)
+    res["basis"] = cand["basis"]
+    pmode = data.get("permission_mode")
+    summary = "Bash: " + cand["summary"]
+    cat = cand["category"]
+
+    def restore_point():
+        man = snapshot(cand["paths"], pd, git=cand["git"], kind=cat, label=cand["summary"][:120])
+        return os.path.join(man["dir"], "manifest.json") if man else None
+
+    if res["action"] == "auto" and res["best"] == "auto":
+        rp = restore_point()
+        if rp:  # 備份成功才自動
+            cid = changes.record("auto_allow", summary, restore_point=rp, notified=True, source="decide",
+                                 session=data.get("session_id"), project_dir=pd, transcript_path=tp, category=cat,
+                                 quiet=bool(res["simple"]) or None, p_auto=res["probs"]["auto"],
+                                 tool_use_id=data.get("tool_use_id"))
+            record_decision(res, path=dpath, change_id=cid, auto=True, category=cat)
+            short_cmd = cand["summary"][:80]
+            reason = T(f"Chutora 決策引擎自動允許（你先前同意這類可自動；已建復原點，/chutora undo {cid} 可還原）：{short_cmd}",
+                       f"Chutora decision engine auto-approved this (you said this kind may be automatic; restore point saved, /chutora undo {cid} restores it): {short_cmd}")
+            if res["simple"]:
+                ctx = T(f"Chutora 自動允許了 `{short_cmd}`（已建復原點）。在這次回覆最後附一行即可：「Chutora 自動：{short_cmd}（/chutora undo {cid} 可復原）」，之後不再提醒。",
+                        f"Chutora auto-approved `{short_cmd}` (restore point saved). Just end this reply with one line: \"Chutora auto: {short_cmd} (/chutora undo {cid} restores)\"; no further reminders.")
+            else:
+                ctx = T(f"Chutora 自動允許了 `{short_cmd}`（已建復原點，變更 {cid}）。在這次回覆最後附一行：「Chutora 自動做了：{short_cmd} — /chutora ok {cid} auto｜ask，或 /chutora undo {cid}」。",
+                        f"Chutora auto-approved `{short_cmd}` (restore point saved, change {cid}). End this reply with one line: \"Chutora did automatically: {short_cmd} — /chutora ok {cid} auto|ask, or /chutora undo {cid}\".")
+            return _hook("allow", reason, ctx)
+    if hits:
+        return None  # 守門照樣問；guard.py 之後呼叫 note_ask() 把這次記下來
+    if res["n"] > 0 and res["best"] == "ask" and (str(res.get("prior")) == "user:ask" or res["cooldown"]):
+        return _hook("ask", T(f"Chutora：你先前要求這類動作先問你（或最近復原過）：{cand['summary'][:80]}。確認是你要的再允許。",
+                              f"Chutora: you asked to be asked first for this kind of action (or undid one recently): {cand['summary'][:80]}. Allow it only if this is what you want."))
+    if pmode == "bypassPermissions":
+        rp = restore_point()  # 沒人確認、會直接執行：先留復原點、事後通知
+        if rp:
+            cid = changes.record("unattended_run", summary, restore_point=rp, notified=False, source="decide",
+                                 session=data.get("session_id"), project_dir=pd, transcript_path=tp, category=cat,
+                                 tool_use_id=data.get("tool_use_id"))
+            record_decision(res, path=dpath, change_id=cid, auto=True, by="bypassPermissions", category=cat)
+            return _hook(ctx=T(f"Chutora：略過權限模式下會直接執行 `{cand['summary'][:80]}`，已先建復原點（變更 {cid}）。在這次回覆最後附一行：「Chutora 已建復原點：{cand['summary'][:60]} — /chutora ok {cid} auto｜ask，或 /chutora undo {cid}」。",
+                               f"Chutora: in bypass-permissions mode `{cand['summary'][:80]}` runs without a prompt, so a restore point was saved first (change {cid}). End this reply with one line: \"Chutora saved a restore point: {cand['summary'][:60]} — /chutora ok {cid} auto|ask, or /chutora undo {cid}\"."))
+        return None
+    if res["cold"] and data.get("tool_use_id"):  # 第一次遇到：使用者允許執行後，問要不要以後自動
+        try:
+            p = _pending_file(data.get("cwd"))
+            try:
+                with open(p) as f:
+                    pend = json.load(f)
+            except (OSError, ValueError):
+                pend = {}
+            pend[data["tool_use_id"]] = {"summary": summary, "category": cat, "res": res, "ts": time.time(),
+                                         "session": data.get("session_id"), "pd": pd, "tp": tp}
+            for k in list(pend)[:-20]:
+                pend.pop(k, None)
+            with open(p + ".tmp", "w") as f:
+                json.dump(pend, f, ensure_ascii=False)
+            os.replace(p + ".tmp", p)
+        except Exception:
+            pass
+    return None
+
+
+def note_ask(data, hits, change_id):
+    """守門判 ask、而且只命中可學的規則時：記一筆待定決策，回傳附在原因後面的提示（不是可學的就回傳空字串）。"""
+    try:
+        if not engine_enabled() or not change_id or data.get("tool_name") != "Bash":
+            return ""
+        cand = classify(data, hits)
+        if not cand:
+            return ""
+        pd, tp = project_dir(data), data.get("transcript_path")
+        dpath = decisions_path(pd, tp)
+        res = _score_cand(cand, changes.read(path=dpath))
+        res["basis"] = cand["basis"]
+        record_decision(res, path=dpath, change_id=change_id, auto=False, category=cand["category"])
+        return T(f"（Chutora 決策引擎：這類可以學。允許後若希望以後自動〔先建復原點〕，請回 /chutora ok {change_id} auto。）",
+                 f" (Chutora decision engine: this kind can be learned. If it should be automatic from now on [with a restore point first], reply /chutora ok {change_id} auto.)")
+    except Exception:
+        return ""
+
+
+def resolve_pending(data, ddir=None):
+    """PostToolUse：第一次遇到、使用者自己允許後真的執行了 → 記一筆 approved_run，問要不要以後自動。"""
+    tid = data.get("tool_use_id")
+    if not tid:
+        return
+    try:
+        p = os.path.join(ddir, "decide-pending.json") if ddir else _pending_file(data.get("cwd"))
+        if not os.path.exists(p):
+            return
+        with open(p) as f:
+            pend = json.load(f)
+        item = pend.pop(tid, None)
+        with open(p + ".tmp", "w") as f:
+            json.dump(pend, f, ensure_ascii=False)
+        os.replace(p + ".tmp", p)
+        if not item or time.time() - item.get("ts", 0) > 3600:
+            return
+        pd, tp = item.get("pd"), item.get("tp")
+        if any(c.get("category") == item["category"] and c.get("action") == "approved_run"
+               for c in pending(pd, tp)):
+            return  # 同類已經在問了
+        cid = changes.record("approved_run", item["summary"], restore_point=None, notified=False, source="decide",
+                             session=item.get("session"), project_dir=pd, transcript_path=tp, category=item["category"])
+        record_decision(item["res"], path=decisions_path(pd, tp), change_id=cid, auto=False, by="user",
+                        category=item["category"])
+    except Exception:
+        pass
 
 
 # ------------------------------------------------------------------ 命令列

@@ -247,7 +247,8 @@ class GuardTest(unittest.TestCase):
         # 本來就 deny 的照舊 deny；一般指令照舊不攔
         self.assertEqual(self.bash("rm -rf ~", mode="bypassPermissions")["permissionDecision"], "deny")
         self.assertIsNone(self.bash("git push origin feat/x", mode="bypassPermissions"))
-        self.assertIsNone(self.bash("rm -rf node_modules", mode="bypassPermissions"))
+        out = self.bash("rm -rf node_modules", mode="bypassPermissions")  # 不攔；決策引擎只先建復原點、補一行通知
+        self.assertTrue(out is None or "permissionDecision" not in out)
 
     def test_bypass_deny_logged(self):
         self.bash("git push --force origin feat/x", mode="bypassPermissions", tool_use_id="toolu_b1")
