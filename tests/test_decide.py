@@ -455,8 +455,12 @@ class PreToolUseTest(unittest.TestCase):
         out = self.pre("rm -rf build", mode="bypassPermissions")
         self.assertNotIn("permissionDecision", out)
         self.assertIn("復原點", out["additionalContext"])
+        sys.path.insert(0, str(HOOKS))
+        self.assertEqual(decide.pending(str(self.proj)), [])  # 還沒確認真的執行：不提醒
+        self.post("rm -rf build")
         ch = [c for c in self.changes() if c["action"] == "unattended_run"]
         self.assertEqual(len(ch), 1)
+        self.assertTrue(ch[0]["ran"])
         self.assertTrue(Path(ch[0]["restore_point"]).exists())
         r = self.sh(sys.executable, str(DECIDE), "ok", ch[0]["id"], "ask")
         out = self.pre("rm -rf build", mode="bypassPermissions")

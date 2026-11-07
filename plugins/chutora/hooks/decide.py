@@ -559,7 +559,8 @@ def undo(cid, pd=None, transcript=None):
 def pending(pd=None, transcript=None):
     """待確認：Chutora 自動做（或代你在略過權限模式下做）、還沒回應的動作。"""
     return [c for c in changes.read(project_dir=pd, transcript_path=transcript)
-            if c.get("action") in PENDING_ACTIONS and not c.get("user_response") and not c.get("quiet")]
+            if c.get("action") in PENDING_ACTIONS and not c.get("user_response") and not c.get("quiet")
+            and c.get("ran") is not False]  # ran=False：hook 放行了但沒真的執行（例如被 settings 的 deny 規則擋下）
 
 
 def _summ(c, n=60):
@@ -808,6 +809,27 @@ def _pending_file(cwd):
     return os.path.join(project_data_dir(cwd), "decide-pending.json")
 
 
+def _remember(data, item):
+    """記下這個 tool_use_id，PostToolUse 時用來確認真的執行了，或問要不要以後自動。"""
+    if not data.get("tool_use_id"):
+        return
+    try:
+        p = _pending_file(data.get("cwd"))
+        try:
+            with open(p) as f:
+                pend = json.load(f)
+        except (OSError, ValueError):
+            pend = {}
+        pend[data["tool_use_id"]] = dict(item, ts=time.time())
+        for k in list(pend)[:-20]:
+            pend.pop(k, None)
+        with open(p + ".tmp", "w") as f:
+            json.dump(pend, f, ensure_ascii=False)
+        os.replace(p + ".tmp", p)
+    except Exception:
+        pass
+
+
 def _score_cand(cand, decisions):
     return score(AUTO_TYPE, ["auto", "ask"], cand["features"], None, True, cand["impact"], decisions)
 
@@ -839,8 +861,9 @@ def pretool(data, hits=None):
             cid = changes.record("auto_allow", summary, restore_point=rp, notified=True, source="decide",
                                  session=data.get("session_id"), project_dir=pd, transcript_path=tp, category=cat,
                                  quiet=bool(res["simple"]) or None, p_auto=res["probs"]["auto"],
-                                 tool_use_id=data.get("tool_use_id"))
+                                 tool_use_id=data.get("tool_use_id"), ran=False)
             record_decision(res, path=dpath, change_id=cid, auto=True, category=cat)
+            _remember(data, {"confirm": cid, "pd": pd, "tp": tp})
             short_cmd = cand["summary"][:80]
             reason = T(f"Chutora 決策引擎自動允許（你先前同意這類可自動；已建復原點，/chutora undo {cid} 可還原）：{short_cmd}",
                        f"Chutora decision engine auto-approved this (you said this kind may be automatic; restore point saved, /chutora undo {cid} restores it): {short_cmd}")
@@ -861,28 +884,15 @@ def pretool(data, hits=None):
         if rp:
             cid = changes.record("unattended_run", summary, restore_point=rp, notified=False, source="decide",
                                  session=data.get("session_id"), project_dir=pd, transcript_path=tp, category=cat,
-                                 tool_use_id=data.get("tool_use_id"))
+                                 tool_use_id=data.get("tool_use_id"), ran=False)
             record_decision(res, path=dpath, change_id=cid, auto=True, by="bypassPermissions", category=cat)
+            _remember(data, {"confirm": cid, "pd": pd, "tp": tp})
             return _hook(ctx=T(f"Chutora：略過權限模式下會直接執行 `{cand['summary'][:80]}`，已先建復原點（變更 {cid}）。在這次回覆最後附一行：「Chutora 已建復原點：{cand['summary'][:60]} — /chutora ok {cid} auto｜ask，或 /chutora undo {cid}」。",
                                f"Chutora: in bypass-permissions mode `{cand['summary'][:80]}` runs without a prompt, so a restore point was saved first (change {cid}). End this reply with one line: \"Chutora saved a restore point: {cand['summary'][:60]} — /chutora ok {cid} auto|ask, or /chutora undo {cid}\"."))
         return None
-    if res["cold"] and data.get("tool_use_id"):  # 第一次遇到：使用者允許執行後，問要不要以後自動
-        try:
-            p = _pending_file(data.get("cwd"))
-            try:
-                with open(p) as f:
-                    pend = json.load(f)
-            except (OSError, ValueError):
-                pend = {}
-            pend[data["tool_use_id"]] = {"summary": summary, "category": cat, "res": res, "ts": time.time(),
-                                         "session": data.get("session_id"), "pd": pd, "tp": tp}
-            for k in list(pend)[:-20]:
-                pend.pop(k, None)
-            with open(p + ".tmp", "w") as f:
-                json.dump(pend, f, ensure_ascii=False)
-            os.replace(p + ".tmp", p)
-        except Exception:
-            pass
+    if res["cold"]:  # 第一次遇到：使用者允許執行後，問要不要以後自動
+        _remember(data, {"summary": summary, "category": cat, "res": res, "session": data.get("session_id"),
+                         "pd": pd, "tp": tp})
     return None
 
 
@@ -906,7 +916,8 @@ def note_ask(data, hits, change_id):
 
 
 def resolve_pending(data, ddir=None):
-    """PostToolUse：第一次遇到、使用者自己允許後真的執行了 → 記一筆 approved_run，問要不要以後自動。"""
+    """PostToolUse／PostToolUseFailure：自動放行的那次標成 ran；第一次遇到、使用者自己允許後真的執行了
+    → 記一筆 approved_run，問要不要以後自動。"""
     tid = data.get("tool_use_id")
     if not tid:
         return
@@ -923,6 +934,9 @@ def resolve_pending(data, ddir=None):
         if not item or time.time() - item.get("ts", 0) > 3600:
             return
         pd, tp = item.get("pd"), item.get("tp")
+        if item.get("confirm"):  # 自動放行的那次真的執行了
+            changes.update(item["confirm"], path=changes.changes_path(pd, tp), ran=True)
+            return
         if any(c.get("category") == item["category"] and c.get("action") == "approved_run"
                for c in pending(pd, tp)):
             return  # 同類已經在問了
