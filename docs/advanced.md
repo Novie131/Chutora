@@ -113,6 +113,8 @@ Claude Code 自 2.1.86 起內建類似機制（重複讀取未變更的檔案時
 
 開關：`/chutora dedup off`（寫入 `~/.claude/chutora/dedup`）或 `CHUTORA_DEDUP=0`。省下的量記在 `trim-stats.json` 的 `dedup` 欄，換算 token 是估算。
 
+Cowork 的 `device_bash`（使用者電腦上的 shell）也會去重：指令是只讀（`cat`、`head`、`grep`、`ls`、不帶 `-exec` 的 `find` 等，沒有寫檔的重導向），而且「同一指令、完全相同的輸出」先前在這條對話鏈上出現過、之後沒被壓縮，輸出就換成一行說明（附上次時間）。輸出不到 400 字元不處理。這一步在 `mcptrim.py` 裡先於瘦身執行，同一個開關。
+
 ### MCP 輸出瘦身
 
 `hooks/mcptrim.py`（PostToolUse，`mcp__.*`）處理 MCP 工具回傳的大坨資料，用 `updatedMCPToolOutput` 替換：

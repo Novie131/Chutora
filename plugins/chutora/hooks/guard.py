@@ -786,6 +786,30 @@ def check_segment(s, cwd, root, data, hits, local_vars=None):
                         break
 
 
+def is_read_only_command(cmd):
+    """這條 shell 指令只讀嗎？每個指令段的程式都屬 READERS（或 cd）或沒有 -exec／-delete 的 find，
+    且沒有寫檔的重導向（/dev/null 除外）。單一指令段、管線、&& 串接都可以。解析不了就當作不是只讀。"""
+    try:
+        segs = expand_segments(cmd)
+    except Exception:
+        return False
+    if not segs:
+        return False
+    for s in segs:
+        if any(op != "<" and t != "/dev/null" for op, t in s.redirs):
+            return False
+        a = s.argv
+        if not a:
+            continue
+        if all(re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", x) for x in a):
+            return False
+        p = base(a[0])
+        if p == "cd" or p in READERS or read_only_find(a):
+            continue
+        return False
+    return any(s.argv for s in segs)
+
+
 def check_bash(cmd, data, root=None, cwd=None):
     root = os.path.normpath(root or os.environ.get("CLAUDE_PROJECT_DIR") or data.get("cwd") or os.getcwd())
     cwd = os.path.normpath(cwd or data.get("cwd") or root)

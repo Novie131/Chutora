@@ -230,6 +230,13 @@ def process(data):
     if shape is None:
         return None
     if DEVICE_SHELL.match(tool):
+        try:  # 先去重：重複的只讀指令命中就直接換成說明，不必再瘦身
+            import dedup
+            out = dedup.process_device(data)
+            if out:
+                return out
+        except Exception:
+            pass
         return process_device(data, resp, shape, blocks)
     md = mode()
     total_before = len(json.dumps(resp, ensure_ascii=False))

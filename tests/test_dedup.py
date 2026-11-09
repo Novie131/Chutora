@@ -138,5 +138,78 @@ class DedupTest(unittest.TestCase):
         self.assertEqual(r.stdout, "")
 
 
+MCPTRIM = ROOT / "plugins" / "chutora" / "hooks" / "mcptrim.py"
+DEV = "mcp__remote-devices__device_bash"
+DEV_OUT = "\n".join(f"-rw-r--r--  1 user staff {i * 113} Nov  9 10:00 report-{i}.txt" for i in range(30))
+
+
+class DeviceDedupTest(DedupTest):
+    # 繼承 DedupTest 只為了共用 setUp 與假 transcript 的輔助函式；下面把繼承來的 Read 測試關掉
+
+    """Cowork 的 device_bash：同一只讀指令＋完全相同輸出 → 換成說明（經 mcptrim.py，先去重再瘦身）。"""
+
+    for _n in [n for n in dir(DedupTest) if n.startswith("test_")]:
+        locals()[_n] = None
+    del _n
+
+    def run_dev(self, tool_use_id, cmd="ls -l $HOME/mnt/proj", out=DEV_OUT, script=MCPTRIM, shape="list", env=None):
+        resp = [{"type": "text", "text": out}] if shape == "list" else out
+        data = {"hook_event_name": "PostToolUse", "tool_name": DEV, "tool_use_id": tool_use_id,
+                "session_id": "sess1", "transcript_path": str(self.tp),
+                "tool_input": {"command": cmd}, "tool_response": resp}
+        e = dict(os.environ, HOME=str(self.home), CHUTORA_LANG="zh")
+        for k in ("CHUTORA_DEDUP", "CHUTORA_TRIM", "CHUTORA_MCP_TRIM"):
+            e.pop(k, None)
+        e.update(env or {})
+        r = subprocess.run([sys.executable, str(script)], input=json.dumps(data), capture_output=True, text=True, env=e, timeout=30)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return json.loads(r.stdout) if r.stdout.strip() else None
+
+    def twice(self, cmd="ls -l $HOME/mnt/proj", out1=DEV_OUT, out2=DEV_OUT, **kw):
+        self.add_read("d1")
+        self.assertIsNone(self.run_dev("d1", cmd=cmd, out=out1, **kw))
+        self.add_read("d2")
+        return self.run_dev("d2", cmd=cmd, out=out2, **kw)
+
+    def test_same_output_second_time_is_stub(self):
+        out = self.twice()
+        new = out["hookSpecificOutput"]["updatedMCPToolOutput"]
+        self.assertEqual(new[0]["type"], "text")
+        self.assertIn("Chutora 去重", new[0]["text"])
+        self.assertRegex(new[0]["text"], r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d")
+        self.assertLess(len(new[0]["text"]), len(DEV_OUT) / 2)
+
+    def test_string_response_and_english_and_direct_script(self):
+        out = self.twice(shape="str", script=DEDUP, env={"CHUTORA_LANG": "en"})
+        new = out["hookSpecificOutput"]["updatedMCPToolOutput"]
+        self.assertIsInstance(new, str)
+        self.assertIn("Chutora dedup", new)
+
+    def test_different_output_not_deduped(self):
+        self.assertIsNone(self.twice(out2=DEV_OUT + "\nnew-file.txt"))
+
+    def test_non_read_only_not_deduped(self):
+        for cmd in ("sed -i s/a/b/ $HOME/mnt/proj/a.txt; ls -l", "npm install", "ls -l > out.txt", "find . -exec ls -l {} +"):
+            with self.subTest(cmd=cmd):
+                self.assertIsNone(self.twice(cmd=cmd))
+
+    def test_read_only_pipeline_is_deduped(self):
+        self.assertIsNotNone(self.twice(cmd="cat $HOME/mnt/proj/a.log | grep -v x | head -50"))
+
+    def test_after_compaction_not_deduped(self):
+        self.add_read("d1")
+        self.assertIsNone(self.run_dev("d1"))
+        self.add_read("d2", parent="")
+        self.entries[-2]["parentUuid"] = None
+        self.flush()
+        self.assertIsNone(self.run_dev("d2"))
+
+    def test_too_short_not_deduped(self):
+        self.assertIsNone(self.twice(out1="x" * 399, out2="x" * 399))
+
+    def test_switch_off(self):
+        self.assertIsNone(self.twice(env={"CHUTORA_DEDUP": "0"}))
+
+
 if __name__ == "__main__":
     unittest.main()

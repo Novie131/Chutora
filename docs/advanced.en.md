@@ -111,6 +111,8 @@ Since 2.1.86 Claude Code has had a similar built-in mechanism (an unchanged re-r
 
 Switch: `/chutora dedup off` (saved to `~/.claude/chutora/dedup`) or `CHUTORA_DEDUP=0`. Savings are recorded under `dedup` in `trim-stats.json`; the token figure is an estimate.
 
+Cowork's `device_bash` (the shell on the user's computer) is deduped too: when the command is read-only (`cat`, `head`, `grep`, `ls`, `find` without `-exec`, no write redirection) and the same command already returned exactly the same output earlier on the current conversation chain (no compact since), the output becomes one line with the earlier time. Outputs under 400 characters are left alone. This runs inside `mcptrim.py` before trimming, with the same switch.
+
 ### MCP output trimming
 
 `hooks/mcptrim.py` (PostToolUse, `mcp__.*`) handles huge payloads from MCP tools and replaces them through `updatedMCPToolOutput`:

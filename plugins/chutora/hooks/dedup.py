@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""PostToolUse（Read）hook：讀檔去重。
+"""PostToolUse（Read、Cowork 的 device_bash）hook：讀檔去重。
+
+device_bash（使用者電腦上的 shell）：只讀指令（cat、head、grep、ls、find 不帶 -exec 等，見 guard.is_read_only_command）
+若「同一指令、完全相同的輸出」先前在這條對話鏈上出現過，輸出換成一行說明。輸出不到 DEVICE_MIN_CHARS 字元不處理。
+它由 mcptrim.py 在瘦身之前先呼叫（同一個輸出先去重，命中就不用瘦身，也避免兩個 hook 搶著改同一個輸出）。
 
 同一個 context 裡再次讀到「同一檔案、同一範圍、內容完全相同」時，把 Claude 收到的結果換成一行說明，
 請它參考先前那次讀取，不再把整份內容重送一次。
@@ -22,6 +26,7 @@ Claude Code 自 2.1.86 起內建類似機制（重複讀取未變更的檔案時
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 
@@ -40,6 +45,8 @@ except Exception:  # pragma: no cover
     lang = lambda: "en"  # noqa: E731
 
 MIN_CHARS = 1500
+DEVICE_MIN_CHARS = 400
+DEVICE_SHELL = re.compile(r"^mcp__.+__device_bash$")
 KEEP_SESSIONS = 20
 
 
@@ -134,7 +141,76 @@ def stub(path, n, first_id):
             f"或用 CHUTORA_DEDUP=0、/chutora dedup off 關閉。]")
 
 
+def device_texts(resp):
+    """回傳 (形狀, 文字)；有非文字區塊或看不懂就回傳 (None, None)。形狀：'str'、'list'、'dict'。"""
+    if isinstance(resp, str):
+        return "str", resp
+    blocks = resp if isinstance(resp, list) else (resp.get("content") if isinstance(resp, dict) else None)
+    if not isinstance(blocks, list) or not blocks:
+        return None, None
+    texts = []
+    for b in blocks:
+        if not isinstance(b, dict) or b.get("type") != "text" or not isinstance(b.get("text"), str):
+            return None, None
+        texts.append(b["text"])
+    return ("list" if isinstance(resp, list) else "dict"), "\n".join(texts)
+
+
+def device_stub(n, when):
+    ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(when))
+    if lang() == "en":
+        return (f"[Chutora dedup: this read-only command already returned exactly the same output earlier in this "
+                f"conversation (last at {ts}, seen {n} times). Use the earlier result. If you no longer have it, run a "
+                f"different command (e.g. add head/grep), or turn this off with CHUTORA_DEDUP=0 or /chutora dedup off.]")
+    return (f"[Chutora 去重：同一個只讀指令先前已回傳完全相同的內容（上次時間 {ts}，第 {n} 次）。請直接用前面的結果。"
+            f"如果那次的內容已經不在了，換個指令（例如加 head、grep），或用 CHUTORA_DEDUP=0、/chutora dedup off 關閉。]")
+
+
+def process_device(data):
+    if not enabled():
+        return None
+    ti = data.get("tool_input")
+    cmd = ti.get("command") if isinstance(ti, dict) else None
+    if not isinstance(cmd, str) or not cmd.strip():
+        return None
+    resp = data.get("tool_response")
+    shape, text = device_texts(resp)
+    if shape is None or len(text) < DEVICE_MIN_CHARS:
+        return None
+    import guard
+    if not guard.is_read_only_command(cmd):
+        return None
+    sid = data.get("session_id") or ""
+    ctx = data.get("agent_id") or "main"
+    key = "device|" + hashlib.sha256(cmd.encode("utf-8", "replace")).hexdigest()
+    h = hashlib.sha256(text.encode("utf-8", "replace")).hexdigest()
+    tuid = data.get("tool_use_id") or ""
+    now = time.time()
+    st = load_state()
+    sess = st.setdefault("sessions", {}).setdefault(sid, {})
+    sess["_t"] = now
+    seen = sess.setdefault(ctx, {})
+    prev = seen.get(key)
+    out = None
+    if prev and prev.get("hash") == h and prev.get("id"):
+        ids = chain_tool_ids(transcript_for(data))
+        if ids is not None and prev["id"] in ids:
+            prev["n"] = int(prev.get("n", 1)) + 1
+            stub_text = device_stub(prev["n"], prev.get("t") or now)
+            prev["t"] = now
+            block = {"type": "text", "text": stub_text}
+            new_resp = stub_text if shape == "str" else [block] if shape == "list" else dict(resp, content=[block])
+            out = {"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedMCPToolOutput": new_resp}}
+            add_stats(len(text) - len(stub_text), "dedup", session_id=data.get("session_id"))
+    if out is None:
+        seen[key] = {"hash": h, "id": tuid, "n": 1, "t": now}
+    save_state(st)
+    return out
+
+
 def process(data):
+    if DEVICE_SHELL.match(data.get("tool_name") or ""):
+        return process_device(data)
     if data.get("tool_name") != "Read" or not enabled():
         return None
     resp = data.get("tool_response")
