@@ -335,7 +335,7 @@ worker、worker-hard、bulk 的回報前兩行固定:
 ## 0.8 context 可見性
 
 - `compact.py` 的 `compact_point()`:讀 `~/.claude/settings.json` 的 `autoCompactWindow`,減 buffer(預設 33000,作者機器實測 183000 時 `/context` 顯示 33k(是否固定值未知);建議值 153000 約 120k 壓縮,寫入後請用 `/context` 確認;環境變數 `CONTEXT_AUTOCOMPACT_BUFFER` 可覆寫)。沒設定、讀不到、JSON 壞掉回 None。
-- `statusline.py`:`模型 │ 5h 42%(2h13m) │ 週 18%(週四23:15) │ ctx Nk │ 上輪 12.3k │ 淨≈-1.2k │ 本次 12k tok`(提醒開啟才有 `提醒 100k`,有 `autoCompactWindow` 才有 `壓縮 120k`)。額度取自 stdin 的 `rate_limits.five_hour／seven_day`(只在有讀數時出現);淨省＝省下(瘦身字元÷4)−固定開銷(SessionStart 實際注入字元÷4＋skills／agents 的 name＋description 字元÷4),照實可為負;每次執行把額度與 claude 區塊寫入 `~/.claude/chutora/usage.json`(`usage.py`)。context 用 `context_window.total_input_tokens`(缺時加總 `current_usage`),不用 `used_percentage`(以完整視窗算,1M 模型 10 萬只顯示 10%)。plugin 不能設主狀態列;`install.sh --with-statusline` 只在使用者沒有 `statusLine` 時寫入(先備份),絕不碰其他鍵,也不寫 `autoCompactWindow`。
+- `statusline.py`:`模型 │ 5h 42%(2h13m) │ 週 18%(週四23:15) │ ctx Nk │ 上輪 12.3k │ 淨≈-1.2k │ 本次 12k tok`(提醒開啟才有 `提醒 100k`,有 `autoCompactWindow` 才有 `壓縮 120k`)。額度取自 stdin 的 `rate_limits.five_hour／seven_day`(只在有讀數時出現);淨省＝省下(瘦身字元÷4)−固定開銷(SessionStart 實際注入＋skills／agents 的 name＋description,用 est_tokens 估再乘 1.5 校正),照實可為負;每次執行把額度與 claude 區塊寫入 `~/.claude/chutora/usage.json`(`usage.py`)。context 用 `context_window.total_input_tokens`(缺時加總 `current_usage`),不用 `used_percentage`(以完整視窗算,1M 模型 10 萬只顯示 10%)。plugin 不能設主狀態列;`install.sh --with-statusline` 只在使用者沒有 `statusLine` 時寫入(先備份),絕不碰其他鍵,也不寫 `autoCompactWindow`。
 - (提醒開啟時)context-check 的提醒文字在壓縮點已知時帶入「約 Nk 會自動壓縮」,import 失敗退回原句。
 - guide.md 加兩條:持續萃取 handoff、實作派 worker 不派 general-purpose(實測曾有 408 次實作跑在 Opus)。
 
@@ -397,6 +397,8 @@ Chutora 要在 **Cowork（Claude Desktop）、Claude Code CLI、VS Code 擴充�
 | skills＋agents description | 1471 | 435 |
 
 (改前以新估法重量;舊 ÷4 數字 677／1653／502 作廢。)預算由 `tests/test_overhead.py` 把關:guide 各 ≤350、modes 各 ≤120、descriptions 合計 ≤450。「淨省」照實可為負,文件不宣稱省下特定百分比。
+
+**API 實測(2026-11-10,雲端容器,Claude Code 2.1.319,sonnet,`claude -p` 小任務各 2 次,`unset CLAUDE_CODE_SYNC_PLUGINS` 排除帳號同步的舊版):** 無外掛 cache_creation 平均 6357、有外掛(精簡後,中文注入＋MEMORY.md)8225 → 實際固定開銷約 **1.87k token**;每次小任務費用 $0.0350 → $0.0423(約 +21%,精簡前的 bench 是 +33%～+58%)。同一 session 的 est_tokens 估到約 1230,低估約 35%(skills／agents 清單的格式、前綴與工具列表沒算到)→ `usage.OVERHEAD_CALIBRATION = 1.5`,狀態列的固定開銷改為 est×1.5,寧可高估。小任務沒有可瘦身的長輸出時,淨省仍為負;委派行為抽樣(1 次)有無外掛都沒用 Agent,差異未知。
 
 ### Codex 轉接方案（2026-11-09 研究）
 

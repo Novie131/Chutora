@@ -112,16 +112,27 @@ def limits_from_stdin(rate_limits, now=None, source="claude-cli"):
 
 
 # ---------------------------------------------------------------- transcript
+# 壓縮摘要的開頭（舊版 transcript 沒有 isCompactSummary 標記時靠它認）
+COMPACT_SUMMARY_PREFIX = "This session is being continued from a previous conversation"
+
+# 固定開銷校正係數：2026-11-10 實測（Claude Code 2.1.319、sonnet、claude -p 有／無外掛各 2 次），
+# cache_creation 實際多 1868 token，est_tokens 只估到約 1230（skills／agents 清單的格式、前綴與工具列表沒算到）。
+# 寧可高估開銷，所以乘上 1.5。
+OVERHEAD_CALIBRATION = 1.5
+
+
 def is_real_prompt(d):
     """使用者真正打的提示：不是 tool_result、不是 meta、不是子 agent（isSidechain）。"""
     if not isinstance(d, dict) or d.get("type") != "user" or d.get("isSidechain") or d.get("isMeta"):
+        return False
+    if d.get("isCompactSummary") or d.get("isVisibleInTranscriptOnly"):  # /compact 之後的壓縮摘要
         return False
     m = d.get("message")
     if not isinstance(m, dict):
         return False
     c = m.get("content")
     if isinstance(c, str):
-        return bool(c.strip())
+        return bool(c.strip()) and not c.lstrip().startswith(COMPACT_SUMMARY_PREFIX)
     if isinstance(c, list):
         if any(isinstance(b, dict) and b.get("type") == "tool_result" for b in c):
             return False
@@ -334,11 +345,11 @@ def injected_counts(session_id):
 
 
 def overhead_tokens(session_id):
-    """外掛固定開銷（tokens，估算）＝est_tokens（SessionStart 注入文字＋skills／agents 描述）。"""
+    """外掛固定開銷（tokens，估算）＝est_tokens（SessionStart 注入文字＋skills／agents 描述）×OVERHEAD_CALIBRATION。"""
     try:
         a1, n1 = injected_counts(session_id)
         a2, n2 = descriptor_counts()
-        return est_from_counts(a1 + a2, n1 + n2)
+        return int(round(est_from_counts(a1 + a2, n1 + n2) * OVERHEAD_CALIBRATION))
     except Exception:
         return 0
 

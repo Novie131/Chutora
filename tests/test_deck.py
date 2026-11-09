@@ -169,9 +169,9 @@ class StatuslineDeckTest(Base):
         (self.home / ".claude" / "chutora" / "overhead" / "s1").write_text("4000\n")  # 1k tokens 固定開銷
         out = self.sl(self.payload())
         self.assertTrue(out.startswith("▶ worker·Sonnet 跑測試 npm test · "), out)
-        self.assertIn("淨省≈+7k", out)
+        self.assertIn("淨省≈+6.5k", out)  # 8k − 1k×1.5 校正
         self.assertNotIn("瘦身省", out)
-        self.assertTrue(out.endswith("ctx 95k │ 淨省≈+7k"), out)
+        self.assertTrue(out.endswith("ctx 95k │ 淨省≈+6.5k"), out)
         self.assertIn("ctx 95k/100k", self.sl(self.payload(), CHUTORA_CONTEXT_REMIND="1"))
 
     def test_running_main_english_and_narrow(self):

@@ -170,10 +170,13 @@ class OverheadTest(Base):
         (od / "old").write_text("400\n")  # 舊格式：只有一個數字，當全是 ASCII
         # 描述：ASCII abc(3)+w(1)+"one two"(7)+"three"(5)=16、非 ASCII 8
         self.assertEqual(self.usage.descriptor_counts(), (16, 8))
-        self.assertEqual(self.usage.overhead_tokens("s1"), (1000 + 16) // 4 + 108)
-        self.assertEqual(self.usage.overhead_tokens("old"), (400 + 16) // 4 + 8)
-        self.assertEqual(self.usage.overhead_tokens("nope"), 16 // 4 + 8)  # 只有描述
-        self.assertEqual(self.usage.overhead_tokens("../x"), 16 // 4 + 8)
+        self.assertEqual(self.usage.overhead_tokens("s1"), self.cal((1000 + 16) // 4 + 108))
+        self.assertEqual(self.usage.overhead_tokens("old"), self.cal((400 + 16) // 4 + 8))
+        self.assertEqual(self.usage.overhead_tokens("nope"), self.cal(16 // 4 + 8))  # 只有描述
+        self.assertEqual(self.usage.overhead_tokens("../x"), self.cal(16 // 4 + 8))
+
+    def cal(self, n):
+        return int(round(n * self.usage.OVERHEAD_CALIBRATION))
 
     def test_descriptor_cache_used_when_plugin_dir_missing(self):
         """狀態列副本（~/.claude/chutora/statusline/）旁邊沒有 skills／agents：讀 SessionStart 時算好的快取。"""
@@ -188,7 +191,7 @@ class OverheadTest(Base):
         env.pop("CLAUDE_PLUGIN_ROOT")
         r = subprocess.run([sys.executable, "-c", "import usage; print(usage.overhead_tokens('s1'))"],
                            cwd=str(copy), env=env, capture_output=True, text=True, timeout=30)
-        self.assertEqual(r.stdout.strip(), "100", r.stderr)
+        self.assertEqual(r.stdout.strip(), "150", r.stderr)  # 400÷4＝100，×1.5 校正
 
     def test_real_plugin_descriptors_are_counted(self):
         os.environ["CLAUDE_PLUGIN_ROOT"] = str(HOOKS.parent)
@@ -248,18 +251,18 @@ class StatuslineUsageTest(Base):
                                                       "cache_read_input_tokens": 90000, "output_tokens": 0})])
         od = self.home / ".claude" / "chutora" / "overhead"
         od.mkdir()
-        (od / "s1").write_text("12000\n")  # 3k tokens
+        (od / "s1").write_text("12000\n")  # 3k tokens，×1.5 校正＝4.5k
         act = self.home / ".claude" / "chutora" / "activity"
         act.mkdir()
         (act / "s1.json").write_text(json.dumps({"saved": {"bash": 24000}}))  # 6k tokens
         out = self.sl(self.payload(transcript_path=str(tp), rate_limits=None))
-        self.assertIn("│ 上輪 12.3k │ 淨省≈+3k", out)
-        (act / "s1.json").write_text(json.dumps({"saved": {"bash": 4000}}))  # 1k - 3k = -2k
+        self.assertIn("│ 上輪 12.3k │ 淨省≈+1.5k", out)
+        (act / "s1.json").write_text(json.dumps({"saved": {"bash": 4000}}))  # 1k − 3k×1.5 = −3.5k
         raw = self.sl(self.payload(transcript_path=str(tp), rate_limits=None), raw=True)
-        self.assertIn("\033[2m淨≈-2k\033[0m", raw)
+        self.assertIn("\033[2m淨≈-3.5k\033[0m", raw)  # 1k − 3k×1.5
         self.assertNotIn(RED, raw)
         en = self.sl(self.payload(transcript_path=str(tp), rate_limits=None), CHUTORA_LANG="en")
-        self.assertIn("last 12.3k │ net≈-2k", en)
+        self.assertIn("last 12.3k │ net≈-3.5k", en)
 
     def test_priority_when_narrow(self):
         tp = self.tmp / "t.jsonl"
@@ -340,3 +343,15 @@ class SessionStartOverheadTest(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CompactSummaryTest(unittest.TestCase):
+    """/compact 之後的壓縮摘要不算使用者提示（快照與「上輪」都不該把它當提示）。"""
+
+    def test_compact_summary_not_prompt(self):
+        sys.path.insert(0, str(HOOKS))
+        import usage
+        base = {"type": "user", "message": {"role": "user", "content": "This session is being continued from a previous conversation that ran out of context."}}
+        self.assertFalse(usage.is_real_prompt(base))
+        self.assertFalse(usage.is_real_prompt({**base, "isCompactSummary": True, "message": {"role": "user", "content": "摘要"}}))
+        self.assertTrue(usage.is_real_prompt({"type": "user", "message": {"role": "user", "content": "跑測試"}}))
