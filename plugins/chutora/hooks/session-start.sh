@@ -164,14 +164,16 @@ snapshot_pointer() {
   else printf '\n自動交接快照：%s（%s）\n' "$f" "$t"; fi
 }
 
-# 記下本 session 實際注入的字元數（code point，不是 byte）給狀態列算固定開銷；失敗安靜略過
+# 記下本 session 實際注入文字的「ASCII 字元數 非ASCII字元數」（code point，不是 byte）給狀態列用 est_tokens 算固定開銷；
+# 失敗安靜略過
 record_overhead() {
   sid=$(json_field session_id | tr -cd 'A-Za-z0-9_.-' | cut -c1-80)
   [ -n "$sid" ] || return 0
   d="$CONF/overhead"
   mkdir -p "$d" 2>/dev/null || return 0
   c=$(printf '%s' "$1" | LC_ALL=C tr -d '\200-\277' | wc -c | tr -d ' ')
-  printf '%s\n' "$c" > "$d/$sid" 2>/dev/null
+  a=$(printf '%s' "$1" | LC_ALL=C tr -d '\200-\377' | wc -c | tr -d ' ')
+  printf '%s %s\n' "$a" "$((c - a))" > "$d/$sid" 2>/dev/null
   find "$d" -type f -name '[A-Za-z0-9]*' -mtime +14 -exec rm -f {} + 2>/dev/null
   return 0
 }

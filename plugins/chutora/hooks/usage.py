@@ -5,13 +5,15 @@
    "claude":{"updated_at","session_id","surface","last_turn":{...},"ctx","saved","overhead","net"}}
   原子寫入（tmp＋os.replace）；壞檔當空；limits 只在新值的 updated_at 不比舊的早時才覆蓋（多個 session 同時跑）。
 - last_turn_tokens：最後一則真正的使用者提示之後，主對話 assistant 的 usage 加總。
-- overhead_tokens：外掛的固定開銷估算（SessionStart 實際注入字元數＋skills／agents 描述字元數）÷4。
+- est_tokens：token 估算＝ASCII 字元÷4＋非 ASCII 字元×1.0（CJK 約 1 字 1 token；偏保守，寧可高估開銷）。
+- overhead_tokens：外掛的固定開銷估算（SessionStart 實際注入文字＋skills／agents 描述文字）以 est_tokens 估。
 - fmt_reset：額度重置時間的短字串。
 """
 import json, os, re, time
 
 VERSION = 1
-CHARS_PER_TOKEN = 4
+CHARS_PER_TOKEN = 4  # ASCII 每 token 約 4 字元
+NONASCII_TOKENS = 1.0  # 非 ASCII（主要是 CJK）每字約 1 token
 WEEKDAY = {"zh": "一二三四五六日", "en": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]}
 
 
@@ -220,6 +222,25 @@ def last_turn_tokens(transcript_path):
 
 
 # ---------------------------------------------------------------- 固定開銷
+def est_from_counts(ascii_n, nonascii_n):
+    """由 ASCII／非 ASCII 字元數估 tokens。"""
+    return int(max(0, ascii_n) / CHARS_PER_TOKEN + max(0, nonascii_n) * NONASCII_TOKENS)
+
+
+def count_chars(text):
+    """(ASCII 字元數, 非 ASCII 字元數)。"""
+    a = sum(1 for c in text if ord(c) < 128)
+    return a, len(text) - a
+
+
+def est_tokens(text):
+    """文字的 token 估算＝ASCII 字元÷4＋非 ASCII 字元×1.0。
+
+    固定開銷（注入文字、skills／agents 描述）含大量中文，字元數÷4 會嚴重低估，所以改用這個。
+    """
+    return est_from_counts(*count_chars(text or ""))
+
+
 def overhead_dir():
     return os.path.join(conf_dir(), "overhead")
 
@@ -228,16 +249,16 @@ def _safe(sid):
     return re.sub(r"[^A-Za-z0-9_.-]", "", str(sid or ""))[:80] or None
 
 
-def _frontmatter_chars(p):
-    """frontmatter 裡 name＋description 的字元數（description 可跨行縮排續行）。"""
+def _frontmatter_text(p):
+    """frontmatter 裡 name＋description 的文字（description 可跨行縮排續行）。"""
     try:
         with open(p, encoding="utf-8", errors="replace") as f:
             lines = f.read().splitlines()
     except OSError:
-        return 0
+        return ""
     if not lines or lines[0].strip() != "---":
-        return 0
-    total, cur = 0, None
+        return ""
+    parts, cur = [], None
     for ln in lines[1:]:
         if ln.strip() == "---":
             break
@@ -246,12 +267,12 @@ def _frontmatter_chars(p):
             cur = m.group(1)
             v = m.group(2).strip()
             if v not in (">", "|", ">-", "|-"):
-                total += len(v)
+                parts.append(v)
         elif cur == "description" and ln[:1] in (" ", "\t"):
-            total += len(ln.strip())
+            parts.append(ln.strip())
         else:
             cur = None
-    return total
+    return "".join(parts)
 
 
 def plugin_root():
@@ -262,17 +283,19 @@ def plugin_root():
     return r if os.path.isdir(os.path.join(r, "skills")) or os.path.isdir(os.path.join(r, "agents")) else None
 
 
-def descriptor_chars():
-    """外掛 skills/*/SKILL.md 與 agents/*.md 的 name＋description 字元數。
+def descriptor_counts():
+    """外掛 skills/*/SKILL.md 與 agents/*.md 的 name＋description 的 (ASCII 字元數, 非 ASCII 字元數)。
 
-    找得到外掛目錄就現算並快取到 overhead/.descriptors；狀態列是被複製到別處執行的（找不到外掛目錄）就讀快取。
+    找得到外掛目錄就現算並快取到 overhead/.descriptors（"ascii nonascii"）；
+    狀態列是被複製到別處執行的（找不到外掛目錄）就讀快取（舊格式只有一個數字，當全是 ASCII）。
     """
     cache = os.path.join(overhead_dir(), ".descriptors")
     root = plugin_root()
     if root:
         import glob
-        n = sum(_frontmatter_chars(p) for p in glob.glob(os.path.join(root, "skills", "*", "SKILL.md")))
-        n += sum(_frontmatter_chars(p) for p in glob.glob(os.path.join(root, "agents", "*.md")))
+        text = "".join(_frontmatter_text(p) for p in glob.glob(os.path.join(root, "skills", "*", "SKILL.md")))
+        text += "".join(_frontmatter_text(p) for p in glob.glob(os.path.join(root, "agents", "*.md")))
+        a, n = count_chars(text)
         try:
             os.makedirs(overhead_dir(), exist_ok=True)
             old = None
@@ -281,36 +304,41 @@ def descriptor_chars():
                     old = f.read().strip()
             except OSError:
                 pass
-            if old != str(n):
+            if old != "%d %d" % (a, n):
                 with open(cache + ".tmp", "w") as f:
-                    f.write("%d\n" % n)
+                    f.write("%d %d\n" % (a, n))
                 os.replace(cache + ".tmp", cache)
         except OSError:
             pass
-        return n
+        return a, n
+    return _read_counts(cache)
+
+
+def _read_counts(p):
     try:
-        with open(cache) as f:
-            return int(f.read().strip())
-    except (OSError, ValueError):
-        return 0
+        with open(p) as f:
+            parts = f.read().split()
+        if len(parts) == 1:
+            return max(0, int(parts[0])), 0
+        return max(0, int(parts[0])), max(0, int(parts[1]))
+    except (OSError, ValueError, IndexError):
+        return 0, 0
 
 
-def injected_chars(session_id):
-    """session-start.sh 記下的本 session 實際注入字元數；沒有記錄回傳 0。"""
+def injected_counts(session_id):
+    """session-start.sh 記下的本 session 實際注入文字的 (ASCII 字元數, 非 ASCII 字元數)；沒有記錄回傳 (0, 0)。"""
     s = _safe(session_id)
     if not s:
-        return 0
-    try:
-        with open(os.path.join(overhead_dir(), s)) as f:
-            return max(0, int(f.read().strip()))
-    except (OSError, ValueError):
-        return 0
+        return 0, 0
+    return _read_counts(os.path.join(overhead_dir(), s))
 
 
 def overhead_tokens(session_id):
-    """外掛固定開銷（tokens，估算）＝（SessionStart 注入字元數＋skills／agents 描述字元數）÷4。"""
+    """外掛固定開銷（tokens，估算）＝est_tokens（SessionStart 注入文字＋skills／agents 描述）。"""
     try:
-        return (injected_chars(session_id) + descriptor_chars()) // CHARS_PER_TOKEN
+        a1, n1 = injected_counts(session_id)
+        a2, n2 = descriptor_counts()
+        return est_from_counts(a1 + a2, n1 + n2)
     except Exception:
         return 0
 

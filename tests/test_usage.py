@@ -152,6 +152,13 @@ class UsageFileTest(Base):
 
 
 class OverheadTest(Base):
+    def test_est_tokens(self):
+        e = self.usage.est_tokens
+        self.assertEqual(e(""), 0)
+        self.assertEqual(e("abcd" * 10), 10)  # ASCII 每 4 字元 1 token
+        self.assertEqual(e("一二三四"), 4)  # 非 ASCII 每字 1 token
+        self.assertEqual(e("abcd一二"), 3)
+
     def test_overhead_counts_injected_and_descriptors(self):
         (self.plug / "skills" / "a").mkdir(parents=True)
         (self.plug / "skills" / "a" / "SKILL.md").write_text("---\nname: abc\ndescription: 一二三四五六七八\nx: y\n---\nbody body body\n")
@@ -159,19 +166,21 @@ class OverheadTest(Base):
         (self.plug / "agents" / "w.md").write_text("---\nname: w\ndescription: >\n  one two\n  three\nmodel: haiku\n---\nbody\n")
         od = self.home / ".claude" / "chutora" / "overhead"
         od.mkdir()
-        (od / "s1").write_text("1000\n")
-        # 描述：abc(3)+8 ＋ w(1)+"one two"(7)+"three"(5) = 24；(1000+24)//4
-        self.assertEqual(self.usage.descriptor_chars(), 24)
-        self.assertEqual(self.usage.overhead_tokens("s1"), 256)
-        self.assertEqual(self.usage.overhead_tokens("nope"), 6)  # 只有描述
-        self.assertEqual(self.usage.overhead_tokens("../x"), 6)
+        (od / "s1").write_text("1000 100\n")  # ASCII 1000、非 ASCII 100
+        (od / "old").write_text("400\n")  # 舊格式：只有一個數字，當全是 ASCII
+        # 描述：ASCII abc(3)+w(1)+"one two"(7)+"three"(5)=16、非 ASCII 8
+        self.assertEqual(self.usage.descriptor_counts(), (16, 8))
+        self.assertEqual(self.usage.overhead_tokens("s1"), (1000 + 16) // 4 + 108)
+        self.assertEqual(self.usage.overhead_tokens("old"), (400 + 16) // 4 + 8)
+        self.assertEqual(self.usage.overhead_tokens("nope"), 16 // 4 + 8)  # 只有描述
+        self.assertEqual(self.usage.overhead_tokens("../x"), 16 // 4 + 8)
 
     def test_descriptor_cache_used_when_plugin_dir_missing(self):
         """狀態列副本（~/.claude/chutora/statusline/）旁邊沒有 skills／agents：讀 SessionStart 時算好的快取。"""
         od = self.home / ".claude" / "chutora" / "overhead"
         od.mkdir()
-        (od / ".descriptors").write_text("400\n")
-        (od / "s1").write_text("0\n")
+        (od / ".descriptors").write_text("400 0\n")
+        (od / "s1").write_text("0 0\n")
         copy = self.tmp / "sl"
         copy.mkdir()
         (copy / "usage.py").write_text((HOOKS / "usage.py").read_text())
@@ -183,7 +192,7 @@ class OverheadTest(Base):
 
     def test_real_plugin_descriptors_are_counted(self):
         os.environ["CLAUDE_PLUGIN_ROOT"] = str(HOOKS.parent)
-        self.assertGreater(self.usage.descriptor_chars(), 1000)
+        self.assertGreater(sum(self.usage.descriptor_counts()), 500)
         self.assertTrue((self.home / ".claude" / "chutora" / "overhead" / ".descriptors").exists())
 
 
@@ -298,17 +307,18 @@ class SessionStartOverheadTest(Base):
         r = self.run_hook(CLAUDE_PLUGIN_DATA=str(self.home / ".claude" / "hooks"))
         self.assertEqual(r.returncode, 0)
         rec = self.home / ".claude" / "chutora" / "overhead" / "sess-1"
-        n = int(rec.read_text())
-        self.assertAlmostEqual(n, len(r.stdout.strip()), delta=3)  # 字元數（不是 byte）
-        self.assertTrue(n > 0)
-        self.assertLess(n, len(r.stdout.encode()))
+        a, na = (int(x) for x in rec.read_text().split())  # ASCII、非 ASCII 字元數
+        self.assertAlmostEqual(a + na, len(r.stdout.strip()), delta=3)  # 字元數（不是 byte）
+        self.assertTrue(a > 0 and na > 0)
+        self.assertLess(a + na, len(r.stdout.encode()))
+        self.assertAlmostEqual(na, sum(1 for c in r.stdout if ord(c) > 127), delta=3)
 
     def test_records_in_json_mode_without_counting_system_message(self):
         r = self.run_hook(sid="sess-2")  # 沒有 route-setup 標記：JSON 模式
         d = json.loads(r.stdout)
         ctx = d["hookSpecificOutput"]["additionalContext"]
-        n = int((self.home / ".claude" / "chutora" / "overhead" / "sess-2").read_text())
-        self.assertAlmostEqual(n, len(ctx.strip()), delta=3)
+        a, na = (int(x) for x in (self.home / ".claude" / "chutora" / "overhead" / "sess-2").read_text().split())
+        self.assertAlmostEqual(a + na, len(ctx.strip()), delta=3)
 
     def test_no_session_id_no_record_and_unsafe_id(self):
         proj = self.tmp / "proj"

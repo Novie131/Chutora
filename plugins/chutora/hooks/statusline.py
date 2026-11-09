@@ -168,6 +168,8 @@ def main():
             tok = deck.session_tokens(data.get("transcript_path"), sid)
             if tok and tok["total"] > 0:
                 sess = (7, f"{'本次' if zh else 'session'} {ktok(tok['total'])} tok")
+            # 省下量維持字元÷4：瘦身擋下的多半是 ASCII 的 log／建置輸出（約 4 字元 1 token），
+            # 與固定開銷（含大量中文，用 usage.est_tokens）的估法刻意不同。
             saved = deck.saved_chars(st) // 4
         if usage and sid:
             ovh = usage.overhead_tokens(sid)
