@@ -47,6 +47,9 @@ SAFE = [
     "cat <<'EOF' > notes.md\nrm -rf / and git push --force and DROP TABLE x\nEOF",
     "truncate -s 0 app.log",
     "docker compose up -d",
+    "find . -name '*.py' -exec grep -n foo {} \\;",
+    "find . -name '*.py' -exec grep -n foo {} ;",
+    "find ~/.claude/chutora -name '*.jsonl' -exec wc -l {} +",
 ]
 
 # (指令, 預期決定, 預期規則)
@@ -95,6 +98,12 @@ DANGER = [
     ("cp new.json ~/.claude/settings.json", "ask", "claude-settings"),
     ("find ~/.claude/settings.json -delete", "ask", "claude-settings"),
     ("find ~/.claude/settings.json -exec sed -i s/a/b/ {} +", "ask", "claude-settings"),
+    ("find ~/.claude -name settings.json -exec sed -i s/a/b/ {} \\;", "ask", "claude-settings"),
+    ("find ~/.claude -name settings.json -exec sed -i s/a/b/ {} ;", "ask", "claude-settings"),
+    ("find ~/.claude -name settings.json -execdir sed -i s/a/b/ {} +", "ask", "claude-settings"),
+    ("find ~/.claude -name settings.json -ok sed -i s/a/b/ {} \\;", "ask", "claude-settings"),
+    ("find ~/.claude/chutora -name guard -exec sh -c 'echo off > {}' \\;", "ask", "claude-settings"),
+    ("find ~ -name x -exec rm -rf {} +", "ask", "rm-home"),
     ("echo off > ~/.claude/chutora/guard", "ask", "claude-settings"),
     ("python3 skills/chutora-hub/chutora.py guard off", "ask", "claude-settings"),
     ("python3 skills/route-setup/apply_settings.py --set-autocompact 153000", "ask", "claude-settings"),
@@ -322,6 +331,25 @@ class GuardTest(unittest.TestCase):
             with self.subTest(cmd=cmd):
                 out = self.device(cmd)
                 self.assertEqual(out and out["permissionDecision"], want)
+
+    def test_device_shell_find_exec_checked(self):
+        cases = {
+            "find ~/.claude -name settings.json -exec sed -i s/a/b/ {} \\;": "ask",
+            "find ~/.claude/chutora -name '*.jsonl' -exec wc -l {} +": None,
+        }
+        for cmd, want in cases.items():
+            with self.subTest(cmd=cmd):
+                out = self.device(cmd)
+                self.assertEqual(out and out["permissionDecision"], want)
+
+    def test_find_exec_read_only_stays_non_read_only(self):
+        sys.path.insert(0, str(GUARD.parent))
+        import guard
+        self.assertFalse(guard.read_only_find(["find", ".", "-exec", "wc", "-l", "{}", "+"]))
+        subs = guard.find_exec_commands(["find", "/a", "-name", "x.json", "-exec", "cat", "{}", ";"])
+        self.assertEqual(subs, [["cat", "/a/x.json"]])
+        subs = guard.find_exec_commands(["find", "/a", "-name", "*.json", "-exec", "cat", "{}", ";"])
+        self.assertEqual(subs, [["cat", "/a"]])
 
     def test_device_shell_project_dir_is_not_cloud_dir(self):
         # 雲端工作目錄的路徑對使用者電腦沒有意義：刪除它在 device_bash 上算專案外

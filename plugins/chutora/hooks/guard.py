@@ -83,8 +83,39 @@ INTERPRETERS = {"python", "python3", "node", "ruby", "perl", "deno", "bun"}
 FIND_ACTIONS = {"-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls"}
 
 
+EXEC_FLAGS = {"-exec", "-execdir", "-ok", "-okdir"}
+
+
 def read_only_find(a):
     return bool(a) and base(a[0]) == "find" and not any(x in FIND_ACTIONS for x in a[1:])
+
+
+def find_exec_commands(a):
+    """find 的 -exec／-execdir／-ok／-okdir 子指令。回傳 [argv, …]；{} 代換成 find 的起點路徑，
+    若有不含萬用字元的 -name／-iname 就代換成 起點/該名稱。子指令以 ; 或 + 或指令結尾為止。"""
+    args = a[1:]
+    starts = []
+    for x in args:
+        if x.startswith("-") or x in ("(", "!", ")"):
+            break
+        starts.append(x)
+    starts = starts or ["."]
+    names = [args[k + 1] for k, x in enumerate(args[:-1])
+             if x in ("-name", "-iname") and not re.search(r"[*?\[]", args[k + 1]) and "/" not in args[k + 1]]
+    targets = [st.rstrip("/") + "/" + n if st != "/" else "/" + n for st in starts for n in names] if names else starts
+    out, k = [], 0
+    while k < len(args):
+        if args[k] in EXEC_FLAGS:
+            j = k + 1
+            while j < len(args) and args[j] not in (";", "+"):
+                j += 1
+            sub = args[k + 1:j]
+            if sub:
+                for t in targets:
+                    out.append([w.replace("{}", t) for w in sub])
+            k = j
+        k += 1
+    return out
 WRITERS = {"cp", "mv", "rm", "tee", "truncate", "ln", "install", "rsync", "dd", "chmod", "chown", "unlink", "touch",
            "vi", "vim", "nano", "emacs", "code", "open", "ed", "ex"}
 CATASTROPHIC_DIRS = {"/", "/bin", "/boot", "/dev", "/etc", "/lib", "/lib64", "/opt", "/proc", "/root", "/sbin", "/sys",
@@ -706,7 +737,8 @@ def check_words(s, cwd, root, hits):
     mentioned = [w for w in pos if settings_target(resolve(w, cwd)[0], root)]
     if targets:
         hits.append(("claude-settings", targets[0]))
-    elif mentioned and prog not in READERS and prog not in ("awk", "git") and not read_only_find(a):
+    elif mentioned and prog not in READERS and prog not in ("awk", "git") and not read_only_find(a) and not (
+            prog == "find" and not any(x in FIND_ACTIONS - EXEC_FLAGS for x in a[1:])):  # 只有 -exec 的 find：由子指令判斷
         if prog != "sed" or any(x.startswith("-i") or x == "--in-place" for x in a[1:]):
             hits.append(("claude-settings", mentioned[0]))
     elif prog in INTERPRETERS and any(re.search(r"\.claude/(?:settings(?:\.local)?\.json|chutora/)", w) for w in a[1:]):
@@ -737,6 +769,21 @@ def check_segment(s, cwd, root, data, hits, local_vars=None):
             if any(SQL_DROP.search(w) for w in a[1:]):
                 hits.append(("sql-drop", " ".join(a[:3])))
     check_words(s, cwd, root, hits)
+    if a and base(a[0]) == "find" and any(x in EXEC_FLAGS for x in a[1:]):
+        for sub in find_exec_commands(a):  # -exec 後面的子指令照一般指令檢查（{} 已代換成起點路徑）
+            sub = unwrap(sub)
+            if not sub:
+                continue
+            ss = Seg()
+            ss.argv = sub
+            check_segment(ss, cwd, root, data, hits, local_vars)
+            if base(sub[0]) in SHELLS:
+                for k, arg in enumerate(sub[1:], 1):
+                    if arg == "-c" or (arg.startswith("-") and not arg.startswith("--") and "c" in arg):
+                        if k + 1 < len(sub):
+                            for inner in expand_segments(sub[k + 1]):
+                                check_segment(inner, cwd, root, data, hits, local_vars)
+                        break
 
 
 def check_bash(cmd, data, root=None, cwd=None):
