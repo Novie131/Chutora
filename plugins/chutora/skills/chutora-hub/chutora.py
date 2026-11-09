@@ -569,7 +569,7 @@ def mode(arg):
 def set_lang(arg):
     global L
     if not arg:
-        print(T("目前語言：中文。可選 zh、en、auto（依系統語言）。", "Current language: English. Choices: zh, en, auto (follow the system locale)."))
+        print(T("目前語言：中文。可選 zh、en、auto（自動偵測）。", "Current language: English. Choices: zh, en, auto (detect from your prompts)."))
         return 0
     a = arg.lower()
     if a not in ("zh", "en", "auto"):
@@ -578,7 +578,7 @@ def set_lang(arg):
     write_conf("lang", None if a == "auto" else a)
     L = _lang()
     print(T("已設定：提醒訊息用中文（寫入 ~/.claude/chutora/lang）。", "Done: messages will be in English (saved to ~/.claude/chutora/lang).")
-          if a != "auto" else T("已改回依系統語言。", "Back to following the system locale."))
+          if a != "auto" else T("已改回自動（依提示內容偵測，其次系統語言）。", "Back to auto (detected from your prompts, then the system locale)."))
     return 0
 
 

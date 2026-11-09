@@ -19,7 +19,7 @@ except Exception:  # compact.py 缺檔也不擋提醒
 try:
     from compact import lang
 except Exception:
-    lang = lambda: "zh"  # noqa: E731
+    lang = lambda: "en"  # noqa: E731
     THRESHOLD = int(os.environ.get("CONTEXT_REMIND_TOKENS") or 100000)
 STEP = 40000
 KEEP = 50  # 狀態檔只留最近這麼多個對話
@@ -116,7 +116,13 @@ def reminder(now):
 
 def main():
     try:
-        path = json.load(sys.stdin).get("transcript_path")
+        data = json.load(sys.stdin)
+        try:  # 順便偵測使用者的語言（純本地、不輸出）
+            from compact import note_prompt_lang
+            note_prompt_lang(data.get("prompt"))
+        except Exception:
+            pass
+        path = data.get("transcript_path")
         sizes = context_sizes(path) if path else []
         if not sizes:
             return

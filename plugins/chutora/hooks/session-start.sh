@@ -18,12 +18,13 @@ DONE="$STATE/.route-setup-done"
 SHOWN="$STATE/.route-setup-shown"
 CONF="$HOME/.claude/chutora"
 
-# 訊息語言：CHUTORA_LANG → ~/.claude/chutora/lang → LC_ALL/LC_MESSAGES/LANG（zh 開頭為中文）→ 英文
+# 訊息語言：CHUTORA_LANG → ~/.claude/chutora/lang → ~/.claude/chutora/lang-detected（依使用者提示自動偵測）→ LC_ALL/LC_MESSAGES/LANG（zh 開頭為中文）→ 英文
 pick_lang() {
   case "$1" in zh*|ZH*) echo zh ;; en*|EN*) echo en ;; *) echo "" ;; esac
 }
 L=$(pick_lang "${CHUTORA_LANG:-}")
 [ -z "$L" ] && [ -f "$CONF/lang" ] && L=$(pick_lang "$(head -c 16 "$CONF/lang" 2>/dev/null)")
+[ -z "$L" ] && [ -f "$CONF/lang-detected" ] && L=$(pick_lang "$(head -c 16 "$CONF/lang-detected" 2>/dev/null)")
 if [ -z "$L" ]; then
   loc="${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}"
   case "$loc" in zh*|ZH*) L=zh ;; *) L=en ;; esac

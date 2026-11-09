@@ -72,8 +72,9 @@ Reminders, handoff prompts, the status line and `/chutora` check, in order:
 
 1. The `CHUTORA_LANG` environment variable (`zh` or `en`)
 2. `~/.claude/chutora/lang` (written by `/chutora lang zh` or `/chutora lang en`; `/chutora lang auto` removes it)
-3. The system locale: the first of `LC_ALL`, `LC_MESSAGES`, `LANG` that is set; Chinese if it starts with `zh`
-4. Otherwise English
+3. `~/.claude/chutora/lang-detected`: written locally on each prompt you submit (URLs and code removed; CJK >= 30% of letters means `zh`, otherwise 20+ Latin letters means `en`, too-short prompts leave it unchanged). Nothing is sent to the model
+4. The system locale: the first of `LC_ALL`, `LC_MESSAGES`, `LANG` that is set; Chinese if it starts with `zh`
+5. Otherwise English
 
 ### Weekly recap
 

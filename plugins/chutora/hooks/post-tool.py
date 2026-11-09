@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
     from compact import lang
 except Exception:
-    lang = lambda: "zh"  # noqa: E731
+    lang = lambda: "en"  # noqa: E731
 
 THRESHOLD = int(os.environ.get("LOOP_GUARD_REPEAT") or 3)   # 同一錯誤重複幾次才提醒
 SESS_CAP = 200          # 用量記錄最多留幾個 session id

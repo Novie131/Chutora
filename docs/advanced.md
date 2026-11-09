@@ -72,8 +72,9 @@ README 只留三分鐘上手；這份是完整說明。
 
 1. 環境變數 `CHUTORA_LANG`（`zh` 或 `en`）
 2. `~/.claude/chutora/lang`（用 `/chutora lang zh`、`/chutora lang en` 寫入；`/chutora lang auto` 刪除）
-3. 系統語言 `LC_ALL`、`LC_MESSAGES`、`LANG` 第一個有值的，`zh` 開頭就用中文
-4. 都沒有就用英文
+3. `~/.claude/chutora/lang-detected`：每次送出提示時在本機依內容自動寫入（去掉網址與程式碼；漢字占字母 30% 以上記 `zh`，否則拉丁字母 20 個以上記 `en`，太短不更新），不會多送任何內容給模型
+4. 系統語言 `LC_ALL`、`LC_MESSAGES`、`LANG` 第一個有值的，`zh` 開頭就用中文
+5. 都沒有就用英文
 
 macOS 從 Dock 或 VS Code 啟動時，常常沒有設定 `LANG`。看到英文提醒的話，執行一次 `/chutora lang zh` 就會固定成中文。
 

@@ -56,6 +56,53 @@ class LangPickTest(LangBase):
         self.assertEqual(self.lang(CHUTORA_LANG="en"), "en")
 
 
+class DetectLangTest(LangBase):
+    def note(self, text, **kw):
+        code = (f"import sys; sys.path.insert(0, {str(HOOKS)!r}); from compact import note_prompt_lang, lang; "
+                f"note_prompt_lang({text!r}); print(lang())")
+        return subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
+                              env=self.env(**kw), timeout=30).stdout.strip()
+
+    def detected(self):
+        p = self.home / ".claude" / "chutora" / "lang-detected"
+        return p.read_text().strip() if p.exists() else None
+
+    def test_chinese_prompt_is_zh(self):
+        self.assertEqual(self.note("請幫我看一下這個函式為什麼會失敗，謝謝"), "zh")
+        self.assertEqual(self.detected(), "zh")
+
+    def test_english_prompt_is_en(self):
+        self.assertEqual(self.note("Please look at why this function fails on empty input", LANG="zh_TW.UTF-8"), "en")
+        self.assertEqual(self.detected(), "en")
+
+    def test_explicit_setting_beats_detection(self):
+        (self.home / ".claude" / "chutora").mkdir()
+        (self.home / ".claude" / "chutora" / "lang").write_text("en\n")
+        self.assertEqual(self.note("請幫我看一下這個函式為什麼會失敗，謝謝"), "en")
+        self.assertEqual(self.note("請幫我看一下這個函式為什麼會失敗，謝謝", CHUTORA_LANG="en"), "en")
+
+    def test_too_short_does_not_change(self):
+        self.assertEqual(self.note("ok thanks"), "en")
+        self.assertIsNone(self.detected())
+        self.note("請幫我看一下這個函式為什麼會失敗，謝謝")
+        self.assertEqual(self.note("好"), "zh")
+        self.assertEqual(self.note("yes please do it"), "zh")  # 不到 20 個拉丁字母：維持原判斷
+
+    def test_urls_and_code_are_ignored(self):
+        text = "請看 https://example.com/a/very/long/path/with/many/letters\n```python\n" + "def foo(): return 1\n" * 10 + "```\n謝謝你的協助喔"
+        self.assertEqual(self.note(text), "zh")
+
+    def test_nothing_known_is_english(self):
+        self.assertEqual(self.lang(), "en")
+
+    def test_prompt_hook_writes_file_and_prints_nothing(self):
+        r = subprocess.run([sys.executable, str(HOOKS / "context-check.py")], capture_output=True, text=True,
+                           input=json.dumps({"prompt": "請幫我看一下這個函式為什麼會失敗，謝謝"}),
+                           env=self.env(), timeout=30)
+        self.assertEqual(r.stdout, "")
+        self.assertEqual(self.detected(), "zh")
+
+
 class HookMessagesTest(LangBase):
     def transcript(self, n):
         p = self.tmp / "t.jsonl"

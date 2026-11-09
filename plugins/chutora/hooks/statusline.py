@@ -19,7 +19,7 @@ from compact import compact_point, remind_tokens
 try:
     from compact import lang
 except ImportError:  # 舊版 compact.py
-    lang = lambda: "zh"  # noqa: E731
+    lang = lambda: "en"  # noqa: E731
 try:
     import deck
 except Exception:  # 狀態列資料夾裡沒有 deck.py（舊版同步）時，只顯示閒置版
