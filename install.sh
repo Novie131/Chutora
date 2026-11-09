@@ -290,7 +290,7 @@ print_statusline_tips() {
   say ""
   say "建議另外在 ~/.claude/settings.json 加(本腳本不會寫):"
   say '  "autoCompactWindow": 153000'
-  say "裝好後用 /context 確認 Autocompact buffer(作者機器實測約 33k,約 120k 壓縮;提醒 10 萬後留 2 萬緩衝寫 handoff);有 modelSettings 逐模型覆蓋時要一併看。"
+  say "裝好後用 /context 確認 Autocompact buffer(作者機器實測約 33k,約 120k 壓縮;壓縮前 PreCompact 會自動寫交接快照);有 modelSettings 逐模型覆蓋時要一併看。"
 }
 
 # ---------- 看板 mod(--with-agent-board) ----------

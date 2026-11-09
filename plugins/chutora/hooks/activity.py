@@ -2,7 +2,7 @@
 """駕駛艙穩定版的資料來源：PreToolUse／PostToolUse／PostToolUseFailure／SubagentStart／SubagentStop hook。
 
 把「誰正在做什麼」寫進 ~/.claude/chutora/activity/<session_id>.json，狀態列（statusline.py）讀它顯示：
-▶ worker·Sonnet 跑測試 npm test · 12s │ 本次 42k tok │ 瘦身省≈8k │ ctx 95k/120k
+▶ worker·Sonnet 跑測試 npm test · 12s │ 5h 42%(2h13m) │ ctx 95k/120k │ 上輪 12.3k │ 淨省≈+3k
 只記錄、不輸出任何東西、不改工具行為；任何錯誤都安靜結束。CHUTORA_ACTIVITY=0 關閉。
 """
 import json
