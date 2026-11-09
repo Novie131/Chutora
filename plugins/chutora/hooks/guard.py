@@ -79,6 +79,12 @@ SEARCHERS = {"grep", "egrep", "fgrep", "rg", "ag", "ack", "echo", "printf"}
 READERS = {"cat", "less", "more", "head", "tail", "grep", "egrep", "rg", "ag", "wc", "ls", "stat", "file", "diff",
            "cmp", "jq", "bat", "nl", "md5", "md5sum", "shasum", "sha256sum", "test", "[", "realpath", "readlink"}
 INTERPRETERS = {"python", "python3", "node", "ruby", "perl", "deno", "bun"}
+# find 只有帶這些動作時才會改東西或另外寫檔；沒有的話視為只讀（實測：只讀的 find ~/.claude/chutora 被誤判成改設定）
+FIND_ACTIONS = {"-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls"}
+
+
+def read_only_find(a):
+    return bool(a) and base(a[0]) == "find" and not any(x in FIND_ACTIONS for x in a[1:])
 WRITERS = {"cp", "mv", "rm", "tee", "truncate", "ln", "install", "rsync", "dd", "chmod", "chown", "unlink", "touch",
            "vi", "vim", "nano", "emacs", "code", "open", "ed", "ex"}
 CATASTROPHIC_DIRS = {"/", "/bin", "/boot", "/dev", "/etc", "/lib", "/lib64", "/opt", "/proc", "/root", "/sbin", "/sys",
@@ -700,7 +706,7 @@ def check_words(s, cwd, root, hits):
     mentioned = [w for w in pos if settings_target(resolve(w, cwd)[0], root)]
     if targets:
         hits.append(("claude-settings", targets[0]))
-    elif mentioned and prog not in READERS and prog not in ("awk", "git"):
+    elif mentioned and prog not in READERS and prog not in ("awk", "git") and not read_only_find(a):
         if prog != "sed" or any(x.startswith("-i") or x == "--in-place" for x in a[1:]):
             hits.append(("claude-settings", mentioned[0]))
     elif prog in INTERPRETERS and any(re.search(r"\.claude/(?:settings(?:\.local)?\.json|chutora/)", w) for w in a[1:]):

@@ -84,6 +84,34 @@ class TrimTest(unittest.TestCase):
         self.assertIn("Chutora 瘦身", new["stdout"])
         self.assertFalse(new["interrupted"])  # 其他欄位照抄
 
+    def test_many_similar_warnings_folded(self):
+        # 實測（Cowork）：200 行 npm warn deprecated 全被當成重要行保留，一行都沒省
+        lines = [f"npm warn deprecated pkg-{i}@1.0.{i}: This package is no longer supported" for i in range(200)]
+        lines += ["npm ERR! code ERESOLVE", "added 812 packages, and audited 813 packages in 14s", "found 0 vulnerabilities"]
+        log = "\n".join(lines)
+        new = self.new_output(self.run_hook("npm install", log))["stdout"]
+        self.assertLess(len(new), len(log) // 4)
+        self.assertIn("pkg-0@", new)
+        self.assertIn("pkg-2@", new)
+        self.assertIn("pkg-199@", new)   # 同類最後一行保留
+        self.assertNotIn("pkg-100@", new)
+        self.assertIn("npm ERR! code ERESOLVE", new)  # 錯誤行不摺
+        self.assertIn("added 812 packages", new)
+        self.assertIn("同類警告", new)
+
+    def test_few_or_mixed_warnings_kept(self):
+        # 不同類、或同類不到門檻的警告照舊全部保留
+        lines = [f"npm warn deprecated pkg-{i}@1.0.{i}: old" for i in range(5)]
+        lines += [f"src/file{i}.c:12:5: warning: unused variable 'x{i}'" for i in range(20)]
+        lines += [f"step {i} ok-ish line" for i in range(300)]
+        log = "\n".join(lines)
+        new = self.new_output(self.run_hook("npm install", log))["stdout"]
+        for i in range(5):
+            self.assertIn(f"pkg-{i}@", new)
+        for i in range(20):
+            self.assertIn(f"src/file{i}.c", new)
+        self.assertNotIn("同類警告", new)
+
     def test_chained_command_uses_noisy_segment(self):
         # 實測發現：rm -rf node_modules && npm install 原本只看第一段（rm），被當成不認得的指令而沒有瘦身
         log = npm_install_log(200)

@@ -173,7 +173,8 @@ def process_device(data, resp, shape, blocks):
     if kind == "skip":
         return None
     md = mode()
-    total = {"orig_lines": 0, "orig_chars": 0, "skipped": 0, "saved": 0, "progress": 0, "repeat": 0, "other": 0}
+    total = {"orig_lines": 0, "orig_chars": 0, "skipped": 0, "saved": 0, "progress": 0, "repeat": 0, "other": 0,
+             "warn": 0}
 
     def one(text):
         if not isinstance(text, str) or text.lstrip()[:1] in ("{", "["):

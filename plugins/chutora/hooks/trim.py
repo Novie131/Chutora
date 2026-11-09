@@ -56,6 +56,33 @@ SUMMARY = re.compile(
 )
 PROGRESS = re.compile(r"(?i)(\d{1,3}(?:\.\d+)?\s?%|[█▓▒░■□#=>-]{6,}|\b\d+(?:\.\d+)?\s?[kKmMgG]i?B(?:/s)?\b|eta\s*\d|downloading|fetching|resolving|extracting|⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏)")
 
+# 只算「警告」、不含錯誤字眼的行：同一類（開頭三個詞相同）太多時才摺疊，錯誤行一律保留
+WARNISH = re.compile(r"(?i)\b(?:warn(?:ing|ings)?|deprecat\w*)\b")
+ERRORISH = re.compile(
+    r"(?i)\b(errors?|fail(?:ed|ure|ures|ing|s)?|exception|traceback|panic(?:ked)?|fatal|assert(?:ion)?(?:error)?|"
+    r"denied|cannot|can't|unable|undefined|not found|missing|segmentation fault)\b|✗|✕|×|✘|FAIL|ERR!|\bE\d{3,}\b"
+)
+WARN_GROUP_MIN = 9   # 同一類警告超過 8 行才摺疊
+WARN_KEEP_HEAD = 3   # 摺疊時留前 3 行與最後 1 行
+
+
+def warn_key(line):
+    return " ".join(line.lower().split()[:3])
+
+
+def similar_warnings(lines):
+    """回傳要摺疊的警告行號：同一類警告太多時，只留前幾行與最後一行。"""
+    groups = {}
+    for i, line in enumerate(lines):
+        if WARNISH.search(line) and not ERRORISH.search(line):
+            groups.setdefault(warn_key(line), []).append(i)
+    out = set()
+    for idx in groups.values():
+        if len(idx) >= WARN_GROUP_MIN:
+            out.update(idx[WARN_KEEP_HEAD:-1])
+    return out
+
+
 READ_LIKE = {"cat", "head", "tail", "less", "more", "bat", "nl", "sed", "awk", "jq", "yq", "diff", "cmp",
              "grep", "rg", "ag", "ack", "find", "fd", "ls", "tree", "wc", "file", "stat", "xxd", "hexdump",
              "od", "strings", "echo", "printf", "env", "printenv", "which", "type", "man", "readlink", "realpath"}
@@ -156,13 +183,16 @@ def norm(line):
 def trim_lines(lines, head, tail, ctx):
     n = len(lines)
     tail_from = max(0, n - tail)
-    keep = set(range(min(head, n))) | set(range(tail_from, n))
+    folded = similar_warnings(lines)
+    keep = (set(range(min(head, n))) | set(range(tail_from, n))) - folded
     for i, line in enumerate(lines):
+        if i in folded:
+            continue
         if IMPORTANT.search(line):
-            keep.update(range(max(0, i - ctx), min(n, i + ctx + 1)))
+            keep.update(j for j in range(max(0, i - ctx), min(n, i + ctx + 1)) if j not in folded)
         elif SUMMARY.search(line) and not PROGRESS.search(line):
             keep.add(i)
-    out, skipped, stats = [], 0, {"progress": 0, "repeat": 0, "other": 0}
+    out, skipped, stats = [], 0, {"progress": 0, "repeat": 0, "other": 0, "warn": 0}
     prev_norm, run = None, 0
     gap = 0
 
@@ -176,7 +206,8 @@ def trim_lines(lines, head, tail, ctx):
         if i not in keep:
             gap += 1
             skipped += 1
-            stats["progress" if PROGRESS.search(line) else ("repeat" if norm(line) == prev_norm else "other")] += 1
+            stats["warn" if i in folded else ("progress" if PROGRESS.search(line) else
+                  ("repeat" if norm(line) == prev_norm else "other"))] += 1
             prev_norm = norm(line)
             continue
         nl = norm(line)
@@ -294,11 +325,13 @@ def note(stats, path):
     s = stats
     if lang() == "en":
         return (f"[Chutora trim: output was {s['orig_lines']} lines / {s['orig_chars']} chars; omitted "
-                f"{s['skipped']} lines (progress {s['progress']}, repeats {s['repeat']}, other {s['other']}). "
+                f"{s['skipped']} lines (progress {s['progress']}, repeats {s['repeat']}, other {s['other']}"
+                f"{', similar warnings %d' % s['warn'] if s.get('warn') else ''}). "
                 f"Errors, warnings, summaries, the start and the end are kept. Full original: {path} "
                 f"(read it with the Read tool if you need anything omitted). Turn off with CHUTORA_TRIM=0 or /chutora trim off.]")
     return (f"[Chutora 瘦身：原輸出 {s['orig_lines']} 行／{s['orig_chars']} 字元，略過 {s['skipped']} 行"
-            f"（進度 {s['progress']}、重複 {s['repeat']}、其他 {s['other']}），錯誤、警告、摘要、開頭與結尾都保留。"
+            f"（進度 {s['progress']}、重複 {s['repeat']}、其他 {s['other']}"
+            f"{'、同類警告 %d' % s['warn'] if s.get('warn') else ''}），錯誤、警告、摘要、開頭與結尾都保留。"
             f"完整原文：{path}（需要被略過的內容時用 Read 讀取）。可用 CHUTORA_TRIM=0 或 /chutora trim off 關閉。]")
 
 
@@ -327,7 +360,8 @@ def process(data):
         return None
     path = save_raw(data.get("tool_use_id"), cmd, resp)
     new = dict(resp)
-    total = {"orig_lines": 0, "orig_chars": 0, "skipped": 0, "saved": 0, "progress": 0, "repeat": 0, "other": 0}
+    total = {"orig_lines": 0, "orig_chars": 0, "skipped": 0, "saved": 0, "progress": 0, "repeat": 0, "other": 0,
+             "warn": 0}
     for key, r in (("stdout", r_out), ("stderr", r_err)):
         if r:
             new[key] = r[0]

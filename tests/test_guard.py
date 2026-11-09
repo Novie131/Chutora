@@ -12,6 +12,8 @@ GUARD = ROOT / "plugins" / "chutora" / "hooks" / "guard.py"
 
 # 一般指令：一律不能攔
 SAFE = [
+    "find ~/.claude/chutora -type f -newer x",
+    "find ~/.claude -name settings.json -print",
     "git push origin feat/x",
     "git push -u origin feat/new-thing",
     "git push origin feat/main-menu",
@@ -91,6 +93,8 @@ DANGER = [
     ("echo '{}' > ~/.claude/settings.json", "ask", "claude-settings"),
     ("sed -i 's/a/b/' ~/.claude/settings.json", "ask", "claude-settings"),
     ("cp new.json ~/.claude/settings.json", "ask", "claude-settings"),
+    ("find ~/.claude/settings.json -delete", "ask", "claude-settings"),
+    ("find ~/.claude/settings.json -exec sed -i s/a/b/ {} +", "ask", "claude-settings"),
     ("echo off > ~/.claude/chutora/guard", "ask", "claude-settings"),
     ("python3 skills/chutora-hub/chutora.py guard off", "ask", "claude-settings"),
     ("python3 skills/route-setup/apply_settings.py --set-autocompact 153000", "ask", "claude-settings"),
