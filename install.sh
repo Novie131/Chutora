@@ -215,6 +215,12 @@ hook 不會自動啟用:本腳本不改你的 settings.json。要啟用請把下
   "SubagentStop": [
     { "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/activity.py" }] },
     { "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/observe.py" }] }
+  ],
+  "PreCompact": [
+    { "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/snapshot.py" }] }
+  ],
+  "SessionEnd": [
+    { "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/snapshot.py" }] }
   ]
 MSG
 }
