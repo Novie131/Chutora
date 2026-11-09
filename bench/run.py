@@ -204,7 +204,7 @@ def main(argv=None):
         print("Each run uses a fresh temp copy of bench/fixtures/<task>, a temp HOME and CLAUDE_CONFIG_DIR, "
               "and needs ANTHROPIC_API_KEY. Nothing was run.")
         return 0
-    if not os.environ.get("ANTHROPIC_API_KEY"):
+    if not os.environ.get("ANTHROPIC_API_KEY") and not os.environ.get("ANTHROPIC_BASE_URL"):  # LOCAL: proxy auth
         print("ANTHROPIC_API_KEY is required (runs are isolated from your ~/.claude login). Use --dry-run to preview.",
               file=sys.stderr)
         return 2

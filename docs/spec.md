@@ -375,7 +375,27 @@ Chutora 要在 **Cowork（Claude Desktop）、Claude Code CLI、VS Code 擴充�
 | Claude Code CLI | 可用 | hook 實測正常 |
 | VS Code 擴充 | 待使用者實跑自我檢查 | 底層同為 Claude Code，預期與 CLI 相同。`hooks/selfcheck.py` 已寫好（唯讀，印出環境、hook 觸發、守門與瘦身 dry 結果、語言），步驟見 [vscode-check.md](vscode-check.md)，結果尚未回報 |
 | Cowork | 開發中（feat/v2-cowork） | 底層是 Claude Code 2.1.319，會跑 hook；外掛須上傳到 claude.ai 才會同步進 session。存取使用者資料夾走 `mcp__remote-devices__device_bash`：守門（含 `find -exec` 子指令）、瘦身與只讀指令的輸出去重已涵蓋；決策引擎復原點尚未涵蓋（復原點建不到使用者電腦） |
-| Codex | 待研究 | 先查 Codex 現有的 hook／設定機制，再做轉接層 |
+| Codex | 已研究，待實作轉接層 | 通用層可轉；守門只能 deny；瘦身／去重無法改寫輸出。見下方「Codex 轉接方案」 |
+
+### Codex 轉接方案（2026-11-09 研究）
+
+依據：openai/codex 原始碼（`codex-rs/hooks`，main 2026-11-09）的 hook schema 與測試為「官方」；標「二手」者來自第三方文章，實作前要再核對。
+
+| Chutora 元件 | Codex 對應 | 可行性 |
+|---|---|---|
+| 分工說明、交接、記憶（通用層） | `AGENTS.md`；SessionStart／UserPromptSubmit hook 的 `additionalContext` | 可直接轉（官方：兩個事件都有 additionalContext） |
+| 危險守門 | PreToolUse hook | **只能 deny**：`permissionDecision: allow／ask` 與 `decision: approve` 都被當成不支援而放行（fail open，官方測試 `unsupported_permission_decision_fails_open`）。「先問」改成：deny 並在原因寫明請使用者自行執行，或交給 Codex 自己的 approval policy |
+| 核准時代答（決策引擎） | PermissionRequest hook，`behavior: allow／deny` | 可轉（官方）：只在 Codex 本來就要問使用者時觸發 |
+| 噪音瘦身、讀檔去重 | PostToolUse hook | **不能改寫輸出**：只有 block 與 additionalContext，`updatedMCPToolOutput` 明確不支援（官方）。替代做法待實測：PreToolUse 的 `updatedInput`（官方支援）把指令改寫成 `set -o pipefail; <原指令> 2>&1 \| chutora-trim`，風險是改變結束碼與互動行為；Codex 自己也會把過大的輸出存成檔（`output_spill`） |
+| 壓縮前後 | PreCompact／PostCompact hook | 可轉（官方） |
+| 子 agent 分工 | `~/.codex/agents/*.toml`（name、description、developer_instructions、model…） | 要改寫成 TOML（二手） |
+| skills | plugin 內的 `skills/` | 可轉（二手） |
+| 外掛打包 | `.codex-plugin/plugin.json`，可帶 `hooks/hooks.json`（官方：`plugin_hook_declarations`） | 要另做一份 manifest |
+| 狀態列 | 只有內建 `/statusline` 項目 | 做不到（二手） |
+
+注意：管理員可在 `requirements.toml` 設 `allow_managed_hooks_only = true`，此時使用者與外掛的 hook 全部不生效（官方 docs/config.md）。
+
+建議順序：(1) 通用層 + `AGENTS.md` 產生器；(2) 守門 deny 版 + PermissionRequest；(3) 實測 `updatedInput` 包裝瘦身，確認結束碼與 TTY 不受影響後才開放；(4) agents TOML 與 plugin manifest。
 
 訊息語言（0.16.0-beta.4 起）：明確設定 > 依使用者提示自動偵測（`lang-detected`，純本地）> 系統語言 > 英文，四個平台共用同一函式。
 
