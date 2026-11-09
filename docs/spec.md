@@ -363,11 +363,27 @@ worker、worker-hard、bulk 的回報前兩行固定:
 - **不採用 plugin settings 的 `agent` 鍵。** 它會把使用者所有對話的主 agent 換成 plugin 指定的那個，副作用遠大於「少打一個指令」的好處。
 - **不自動寫 `settings.json`。** plugin 無法安全地代使用者改全域設定；一律經使用者同意，且 33k buffer 只是作者機器的實測值，需使用者用 `/context` 確認。
 
+## 支援平台（目標：四個平台都有效）
+
+Chutora 要在 **Cowork（Claude Desktop）、Claude Code CLI、VS Code 擴充、Codex** 都能用。功能分兩層：
+
+- **通用層**（換平台照樣能用）：交接筆記與記憶放在連接資料夾、規劃／執行／大量讀取的分工、反問與回覆語言規則。本質是說明文字加資料夾裡的檔案；Codex 用 `AGENTS.md` 讀同樣的內容。
+- **平台層**（每個平台各接一次）：hook（瘦身、去重、守門、決策引擎、狀態列）。
+
+| 平台 | 狀態（2026-11-09） | 備註 |
+|---|---|---|
+| Claude Code CLI | 可用 | hook 實測正常 |
+| VS Code 擴充 | 待驗證 | 底層同為 Claude Code，預期與 CLI 相同 |
+| Cowork | 開發中（feat/v2-cowork） | 底層是 Claude Code 2.1.319，會跑 hook；外掛須上傳到 claude.ai 才會同步進 session。存取使用者資料夾走 `mcp__remote-devices__device_bash`：守門與瘦身已涵蓋；讀檔去重、決策引擎復原點尚未涵蓋（復原點建不到使用者電腦） |
+| Codex | 待研究 | 先查 Codex 現有的 hook／設定機制，再做轉接層 |
+
+新功能設計時要寫明在四個平台各自怎麼運作，或為什麼不支援。
+
 ## 已知限制
 
 - plugin 跨對話,記憶跟著資料夾走。Cowork 忘了連接資料夾等於失憶。
 - 委派靠 description 匹配,非保證。要確定用 `@agent-chutora:worker`。
-- hook 在 Cowork 是否執行、`CLAUDE_PROJECT_DIR` 是否指向連接資料夾,未驗證。
+- Cowork 會執行 hook（2026-11-09 驗證），但 `CLAUDE_PROJECT_DIR` 指向雲端工作目錄，不是連接資料夾。
 - 使用者若已在 `~/.claude/` 自設同類 hook 或 CLAUDE.md 分工規則,會重複提醒。
 - `MEMORY.md` 會腐化,需定期整理。超過 150 行或出現已不成立的敘述即是訊號。
 - `harvester` 只看得到本機 session,網頁與手機的對話不在範圍內。
