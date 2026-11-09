@@ -66,15 +66,20 @@ strip() {
     }' "$1"
 }
 
-# 從 stdin 的 JSON 取出 transcript_path（處理 \" 與 \\ 跳脫）；沒有輸入、是終端機、格式不對都回傳空
-read_transcript_path() {
-  [ -t 0 ] && return 0
-  cat 2>/dev/null | awk '
+# stdin 只能讀一次：先整份存起來，再用 json_field 取欄位
+INPUT=""
+[ -t 0 ] || INPUT=$(cat 2>/dev/null)
+
+# 從 stdin 的 JSON 取出字串欄位 $1（處理 \" 與 \\ 跳脫）；沒有輸入、格式不對都回傳空
+json_field() {
+  [ -n "$INPUT" ] || return 0
+  printf '%s\n' "$INPUT" | awk -v key="$1" '
     { buf = buf $0 "\n" }
     END {
-      i = index(buf, "\"transcript_path\"")
+      k = "\"" key "\""
+      i = index(buf, k)
       if (!i) exit
-      rest = substr(buf, i + 17)
+      rest = substr(buf, i + length(k))
       if (!match(rest, /^[ \t\r\n]*:[ \t\r\n]*"/)) exit
       rest = substr(rest, RLENGTH + 1)
       out = ""
@@ -93,7 +98,7 @@ read_transcript_path() {
 
 AUTO_HANDOFF=""
 if [ ! -d "$MEM" ]; then
-  tp=$(read_transcript_path)
+  tp=$(json_field transcript_path)
   if [ -n "$tp" ]; then
     case "$tp" in
       */*) cand="${tp%/*}/memory/handoff.md" ;;
@@ -140,12 +145,41 @@ body() {
     printf '\n# %s（%s）\n\n%s\n\n' "$H_HO" "$AUTO_HANDOFF" "$NOTE"
     strip "$AUTO_HANDOFF" 80 "$HANDOFF_MAX_BYTES"
   fi
+  snapshot_pointer
+}
+
+# 自動交接快照（snapshot.py 在 PreCompact／SessionEnd 寫的）：有就只帶一行指標，內容要用時再讀。
+# claude-memory/ 裡的 handoff-auto.md 直接找；沒有 claude-memory/ 時問 snapshot.py（專案 id 要靠它算）。
+snapshot_pointer() {
+  f=""
+  [ -f "$MEM/handoff-auto.md" ] && f="$MEM/handoff-auto.md"
+  if [ -z "$f" ] && [ -f "$HERE/snapshot.py" ]; then
+    f=$(sh "$HERE/run-python.sh" "$HERE/snapshot.py" --path </dev/null 2>/dev/null | head -n 1)
+    [ -f "$f" ] || f=""
+  fi
+  [ -n "$f" ] || return 0
+  t=$(head -n 1 "$f" 2>/dev/null | sed -n 's/^<!-- time: \(.*\) -->.*$/\1/p')
+  [ -n "$t" ] || return 0
+  if [ "$L" = en ]; then printf '\nAuto handoff snapshot: %s (%s)\n' "$f" "$t"
+  else printf '\n自動交接快照：%s（%s）\n' "$f" "$t"; fi
+}
+
+# 記下本 session 實際注入的字元數（code point，不是 byte）給狀態列算固定開銷；失敗安靜略過
+record_overhead() {
+  sid=$(json_field session_id | tr -cd 'A-Za-z0-9_.-' | cut -c1-80)
+  [ -n "$sid" ] || return 0
+  d="$CONF/overhead"
+  mkdir -p "$d" 2>/dev/null || return 0
+  c=$(printf '%s' "$1" | LC_ALL=C tr -d '\200-\277' | wc -c | tr -d ' ')
+  printf '%s\n' "$c" > "$d/$sid" 2>/dev/null
+  find "$d" -type f -name '[A-Za-z0-9]*' -mtime +14 -exec rm -f {} + 2>/dev/null
+  return 0
 }
 
 # plugin 安裝且使用者已用 route-setup 把狀態列檔案放到固定位置時，跟著 plugin 升級同步
 # （內容不同才複製；目的地是符號連結就不動）
 if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -d "$HOME/.claude/chutora/statusline" ]; then
-  for f in statusline.py compact.py deck.py; do
+  for f in statusline.py compact.py deck.py usage.py; do
     src="$CLAUDE_PLUGIN_ROOT/hooks/$f"
     dst="$HOME/.claude/chutora/statusline/$f"
     if [ -f "$src" ] && [ ! -L "$dst" ] && ! cmp -s "$src" "$dst" 2>/dev/null; then
@@ -184,7 +218,9 @@ fi
 
 if [ -n "$msg" ]; then
   # 先算出內容再寫計數，避免輸出失敗卻已計數
-  json=$(body | awk -v msg="$msg" '
+  BODY=$(body)
+  record_overhead "$BODY"
+  json=$(printf '%s\n' "$BODY" | awk -v msg="$msg" '
     function esc(s,   i, c, o) {
       o = ""
       for (i = 1; i <= length(s); i++) {
@@ -211,5 +247,7 @@ if [ -n "$msg" ]; then
   exit 0
 fi
 
-body
+BODY=$(body)
+record_overhead "$BODY"
+printf '%s\n' "$BODY"
 exit 0

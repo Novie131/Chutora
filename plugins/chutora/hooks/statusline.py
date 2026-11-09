@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """statusLine 指令：駕駛艙穩定版。只用官方 statusline 與標準 hooks，不依賴 mod API。
 
-工作中：▶ worker·Sonnet 跑測試 npm test · 12s │ 本次 42k tok │ 瘦身省≈8k │ ctx 95k/120k
-閒置時：Opus │ ctx 95k │ 提醒 100k │ 壓縮 120k │ 本次 42k tok │ 瘦身省≈8k
+工作中：▶ worker·Sonnet 跑測試 npm test · 12s │ 5h 42%(2h13m) │ 週 18%(週四14:00) │ ctx 95k/120k │ 上輪 12.3k │ 淨省≈+3k │ 本次 42k tok
+閒置時：Opus │ 5h 42%(2h13m) │ 週 18%(週四14:00) │ ctx 95k │ 上輪 12.3k │ 淨省≈+3k │ 本次 42k tok │ 提醒 100k │ 壓縮 120k
 
 - 目前動作來自 activity.py 寫的 ~/.claude/chutora/activity/<session_id>.json；沒有就只顯示閒置版。
 - 本次 token：transcript 的 usage 精確加總（input＋cache 寫入＋output，不含 cache 讀取），主對話＋子 agent。
 - 待確認：決策引擎自動做了、使用者還沒回應的動作數（/chutora changes）。
-- 瘦身省：噪音瘦身、讀檔去重、MCP 瘦身擋在 context 外的字元數 ÷4，標「≈」表示估算。
+- 額度：stdin 的 rate_limits（5 小時、每週；只在有讀數時出現，沒有就略過該欄）；超過 80% 黃、超過 95% 紅。
+- 上輪：最後一則真正提示之後的 token（input＋cache 寫入＋output，不含 cache 讀取）。
+- 淨省：瘦身省下的字元數 ÷4，扣掉外掛固定開銷（SessionStart 注入＋skills／agents 描述）÷4，標「≈」；負值照實顯示（淡色）。
+- 提醒 100k 只在 context 提醒開啟時顯示（CHUTORA_CONTEXT_REMIND=1 或 ~/.claude/chutora/remind 為 on）。
+- 每次執行把額度與 claude 區塊寫入 ~/.claude/chutora/usage.json（同內容 5 秒內不重寫）。
+- 重要性（寬度不夠時後面的先丟）：額度 > ctx > 上輪 > 淨省 > 其他。
 - ctx 用 total_input_tokens（缺時加總 current_usage），不用 used_percentage；8 萬以下綠、提醒門檻以下黃、以上紅。
 - 寬度：CHUTORA_STATUS_WIDTH 或 COLUMNS（預設 120）；放不下時依重要性丟掉後面的欄位，再截短動作描述。
 壞輸入安靜結束。
@@ -17,6 +22,10 @@ import json, os, re, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from compact import compact_point, remind_tokens
 try:
+    from compact import remind_enabled
+except ImportError:  # 舊版 compact.py
+    remind_enabled = lambda: False  # noqa: E731
+try:
     from compact import lang
 except ImportError:  # 舊版 compact.py
     lang = lambda: "en"  # noqa: E731
@@ -24,6 +33,11 @@ try:
     import deck
 except Exception:  # 狀態列資料夾裡沒有 deck.py（舊版同步）時，只顯示閒置版
     deck = None
+
+try:
+    import usage
+except Exception:  # 狀態列資料夾裡沒有 usage.py（舊版同步）時，不顯示額度／上輪／淨省
+    usage = None
 
 REMIND = remind_tokens()
 GREEN, YELLOW, RED, RESET = "\033[32m", "\033[33m", "\033[31m", "\033[0m"
@@ -57,6 +71,13 @@ def ktok(n):
     if n < 1000:
         return str(int(n))
     return f"{n / 1000:.1f}".rstrip("0").rstrip(".") + "k" if n < 10000 else f"{n // 1000}k"
+
+
+def ktok1(n):
+    """一位小數的 k（12300 → 12.3k；整數就不帶小數；100k 以上取整）。"""
+    if n < 1000:
+        return str(int(n))
+    return f"{n / 1000:.1f}".rstrip("0").rstrip(".") + "k" if n < 100000 else f"{n // 1000}k"
 
 
 def elapsed(sec):
@@ -106,31 +127,78 @@ def main():
     except Exception:
         return
 
+    # 優先序（數字越大越先丟）：額度 0／1 > ctx 2 > 待確認 3 > 上輪 4 > 淨省 5 > model 6 > 本次 7 > 提醒／壓縮 8
     extra = []  # (priority, text)
+    limit_parts = []
     running = []
+    sid = data.get("session_id")
     try:
-        sid = data.get("session_id")
+        if usage:
+            lim = usage.limits_from_stdin(data.get("rate_limits"))
+            for i, (key, zh_l, en_l) in enumerate((("five_hour", "5h", "5h"), ("seven_day", "週", "wk"))):
+                w = (lim or {}).get(key)
+                if not w:
+                    continue
+                pct = round(w["pct"])
+                c = RED if w["pct"] > 95 else YELLOW if w["pct"] > 80 else ""
+                rs = usage.fmt_reset(w.get("resets_at"), None, lng)
+                if zh and key == "seven_day":
+                    rs = rs.replace(" ", "")
+                text = f"{zh_l if zh else en_l} {pct}%" + (f"({rs})" if rs else "")
+                limit_parts.append((i, f"{c}{text}{RESET}" if c else text))
+    except Exception:
+        lim, limit_parts = None, []
+    last = None
+    try:
+        if usage:
+            last = usage.last_turn_tokens(data.get("transcript_path"))
+            if last and last["total"] > 0:
+                extra.append((4, f"{'上輪' if zh else 'last'} {ktok1(last['total'])}"))
+    except Exception:
+        last = None
+    saved = net = ovh = 0
+    sess = None
+    try:
+        now = time.time()
         if deck and sid:
             st = deck.load(sid)
-            now = time.time()
             running = sorted((v for v in (st.get("running") or {}).values()
                               if isinstance(v, dict) and now - v.get("start", 0) < STALE),
                              key=lambda v: v.get("start", 0))
             tok = deck.session_tokens(data.get("transcript_path"), sid)
             if tok and tok["total"] > 0:
-                extra.append((3, f"{'本次' if zh else 'session'} {ktok(tok['total'])} tok"))
+                sess = (7, f"{'本次' if zh else 'session'} {ktok(tok['total'])} tok")
             saved = deck.saved_chars(st) // 4
-            if saved >= 100:
-                extra.append((4, f"{'瘦身省' if zh else 'trimmed'}≈{ktok(saved)}"))
+        if usage and sid:
+            ovh = usage.overhead_tokens(sid)
+        net = saved - ovh
+        if abs(net) >= 100 and (saved or ovh):
+            if net > 0:
+                extra.append((5, f"{'淨省' if zh else 'net saved'}≈+{ktok(net)}"))
+            else:
+                extra.append((5, f"{DIM}{'淨' if zh else 'net'}≈-{ktok(-net)}{RESET}"))
+        if sess:
+            extra.append(sess)
     except Exception:
-        extra, running = [], []
+        running = []
+        extra = [e for e in extra if e[0] == 4]
+
+    try:  # 把額度與本機 Claude 用量寫進 usage.json（供選單列、面板讀）；失敗不影響顯示
+        if usage and (lim or sid):
+            claude = {"updated_at": int(time.time()), "session_id": sid, "surface": "cli", "ctx": int(n),
+                      "saved": int(saved), "overhead": int(ovh), "net": int(net)}
+            if last:
+                claude["last_turn"] = last
+            usage.update(limits=lim, claude=claude if sid else None)
+    except Exception:
+        pass
 
     try:  # 決策引擎：自動做了、還沒確認的動作數（狀態列資料夾沒有 decide.py 時略過）
         import decide
         pd = (data.get("workspace") or {}).get("project_dir") or data.get("cwd")
         k = len(decide.pending(pd, data.get("transcript_path"))) if pd else 0
         if k:
-            extra.insert(0, (1, f"{ORANGE}{'待確認' if zh else 'to confirm'} {k}{RESET}"))
+            extra.insert(0, (3, f"{ORANGE}{'待確認' if zh else 'to confirm'} {k}{RESET}"))
     except Exception:
         pass
 
@@ -154,17 +222,16 @@ def main():
             if len(running) > 1:
                 act += f" (+{len(running) - 1})"
             den = compact or REMIND
-            parts = [(0, act)] + extra + [(1, f"{color}ctx {n // 1000}k{RESET}/{den // 1000}k")]
+            ctx = f"{color}ctx {n // 1000}k{RESET}/{den // 1000}k" if (compact or remind_enabled()) else f"{color}ctx {n // 1000}k{RESET}"
+            parts = [(0, act)] + limit_parts + [(2, ctx)] + extra
             print(fit(parts, True, limit()))
             return
-        parts = [(2, model), (0, f"{color}ctx {n // 1000}k{RESET}"), (5, f"{'提醒' if zh else 'remind'} {REMIND // 1000}k")]
+        parts = [(6, model)] + limit_parts + [(2, f"{color}ctx {n // 1000}k{RESET}")] + extra
+        if remind_enabled():
+            parts.append((8, f"{'提醒' if zh else 'remind'} {REMIND // 1000}k"))
         if compact is not None:
-            parts.append((5, f"{'壓縮' if zh else 'compact'} {compact // 1000}k"))
-        parts += extra
-        if not extra:
-            print(" │ ".join(t for _, t in parts))
-        else:
-            print(fit(parts, False, limit()))
+            parts.append((8, f"{'壓縮' if zh else 'compact'} {compact // 1000}k"))
+        print(fit(parts, False, limit()))
     except Exception:
         return
 

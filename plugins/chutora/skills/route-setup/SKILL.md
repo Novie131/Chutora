@@ -36,10 +36,10 @@ chutora 裝完就能用；這個 skill 只是把「想要完整功能」要做�
 
 ## 4. 狀態列
 
-- 做什麼：把 `statusLine` 指到本 plugin 的 `statusline.py`，閒置時顯示 `模型 │ ctx 95k │ 提醒 100k │ 壓縮 120k`，Claude 工作時顯示目前動作，例如 `▶ worker·Sonnet 跑測試 npm test · 12s │ 本次 42k tok │ 瘦身省≈8k │ ctx 95k/120k`（駕駛艙穩定版）。
+- 做什麼：把 `statusLine` 指到本 plugin 的 `statusline.py`，閒置時顯示 `模型 │ 5h 42%(2h13m) │ 週 18%(週四14:00) │ ctx 95k │ 上輪 12.3k │ 淨省≈+3k │ 壓縮 120k`（額度只在有讀數時出現；`提醒 100k` 只在 context 提醒開啟時出現），Claude 工作時顯示目前動作，例如 `▶ worker·Sonnet 跑測試 npm test · 12s │ 5h 42%(2h13m) │ ctx 95k/120k │ 上輪 12.3k │ 淨省≈+3k`（駕駛艙穩定版）。
 - 先決定指令路徑：
   - `~/.claude/hooks/chutora/statusline.py` 存在（install.sh 安裝）→ 指令用 `python3 ~/.claude/hooks/chutora/statusline.py`。
-  - 否則（plugin 安裝）→ 先把 `statusline.py`、`compact.py` 與 `deck.py` 複製到固定位置 `~/.claude/chutora/statusline/`（來源是 `${CLAUDE_PLUGIN_ROOT}/hooks/`；沒有這個變數就用 `${CLAUDE_SKILL_DIR}/../../hooks/`）。**不能直接指向 plugin 快取**（目錄含版本號，升級會失效；user settings 也不會展開 `${CLAUDE_PLUGIN_ROOT}`）。指令用 `python3 ~/.claude/chutora/statusline/statusline.py`。之後 plugin 升級時，session 開始的 hook 會自動把這幾個檔同步過去。
+  - 否則（plugin 安裝）→ 先把 `statusline.py`、`compact.py`、`deck.py` 與 `usage.py` 複製到固定位置 `~/.claude/chutora/statusline/`（來源是 `${CLAUDE_PLUGIN_ROOT}/hooks/`；沒有這個變數就用 `${CLAUDE_SKILL_DIR}/../../hooks/`）。**不能直接指向 plugin 快取**（目錄含版本號，升級會失效；user settings 也不會展開 `${CLAUDE_PLUGIN_ROOT}`）。指令用 `python3 ~/.claude/chutora/statusline/statusline.py`。之後 plugin 升級時，session 開始的 hook 會自動把這幾個檔同步過去。
 - 先 `--status` 看 `statusLine` 有沒有值：已有 → 不覆蓋，只告知現值；使用者要換請他自己決定。
 - 使用者同意才執行 `python3 "${CLAUDE_SKILL_DIR}/apply_settings.py" --set-statusline "<指令>"`。
 - 還原：把 `settings.json.bak-<時間>` 改回 `settings.json`；plugin 安裝另可刪掉 `~/.claude/chutora/`。

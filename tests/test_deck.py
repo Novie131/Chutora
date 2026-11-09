@@ -32,7 +32,9 @@ class Base(unittest.TestCase):
 
     def env(self, **kw):
         e = {k: v for k, v in os.environ.items() if not k.startswith(("CHUTORA_", "LC_", "LANG", "COLUMNS"))}
-        e.update(HOME=str(self.home), CHUTORA_LANG="zh")
+        noplug = self.home / "noplugin"  # 外掛固定開銷的描述字元數：測試時指向空目錄，結果才固定
+        noplug.mkdir(exist_ok=True)
+        e.update(HOME=str(self.home), CHUTORA_LANG="zh", CLAUDE_PLUGIN_ROOT=str(noplug))
         e.update(kw)
         return e
 
@@ -155,17 +157,22 @@ class StatuslineDeckTest(Base):
         return d
 
     def test_idle_without_activity_keeps_old_format(self):
-        self.assertEqual(self.sl(self.payload(50000)), "Opus │ ctx 50k │ 提醒 100k")
+        self.assertEqual(self.sl(self.payload(50000)), "Opus │ ctx 50k")
+        self.assertEqual(self.sl(self.payload(50000), CHUTORA_CONTEXT_REMIND="1"), "Opus │ ctx 50k │ 提醒 100k")
 
     def test_running_subagent(self):
         self.hook({"hook_event_name": "SubagentStart", "session_id": "s1", "agent_id": "a1", "agent_type": "worker"})
         self.hook({"hook_event_name": "PreToolUse", "session_id": "s1", "agent_id": "a1", "agent_type": "worker",
                    "tool_name": "Bash", "tool_input": {"command": "npm test"}, "tool_use_id": "t1"})
         deck.add_saved("s1", 32000, "bash")
+        (self.home / ".claude" / "chutora" / "overhead").mkdir(parents=True)
+        (self.home / ".claude" / "chutora" / "overhead" / "s1").write_text("4000\n")  # 1k tokens 固定開銷
         out = self.sl(self.payload())
         self.assertTrue(out.startswith("▶ worker·Sonnet 跑測試 npm test · "), out)
-        self.assertIn("瘦身省≈8k", out)
-        self.assertTrue(out.endswith("ctx 95k/100k"), out)
+        self.assertIn("淨省≈+7k", out)
+        self.assertNotIn("瘦身省", out)
+        self.assertTrue(out.endswith("ctx 95k │ 淨省≈+7k"), out)
+        self.assertIn("ctx 95k/100k", self.sl(self.payload(), CHUTORA_CONTEXT_REMIND="1"))
 
     def test_running_main_english_and_narrow(self):
         self.hook({"hook_event_name": "PreToolUse", "session_id": "s1", "tool_name": "Read",
@@ -174,7 +181,7 @@ class StatuslineDeckTest(Base):
         out = self.sl(self.payload(), CHUTORA_LANG="en")
         self.assertTrue(out.startswith("▶ Opus Read README.md · "), out)
         narrow = self.sl(self.payload(), CHUTORA_LANG="en", CHUTORA_STATUS_WIDTH="40")
-        self.assertNotIn("trimmed", narrow)
+        self.assertNotIn("net saved", narrow)
         self.assertLessEqual(len(narrow), 40)
 
     def test_idle_with_tokens(self):
@@ -183,7 +190,7 @@ class StatuslineDeckTest(Base):
         tp.write_text(json.dumps({"type": "assistant", "requestId": "r", "message": {
             "id": "m", "model": "claude-opus-5-5", "usage": {"input_tokens": 42000, "output_tokens": 0}}}) + "\n")
         out = self.sl(self.payload(50000, transcript_path=str(tp)))
-        self.assertEqual(out, "Opus │ ctx 50k │ 提醒 100k │ 本次 42k tok")
+        self.assertEqual(out, "Opus │ ctx 50k │ 上輪 42k │ 本次 42k tok")
 
 
 if __name__ == "__main__":
