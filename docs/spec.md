@@ -373,9 +373,11 @@ Chutora 要在 **Cowork（Claude Desktop）、Claude Code CLI、VS Code 擴充�
 | 平台 | 狀態（2026-11-09） | 備註 |
 |---|---|---|
 | Claude Code CLI | 可用 | hook 實測正常 |
-| VS Code 擴充 | 待驗證 | 底層同為 Claude Code，預期與 CLI 相同 |
-| Cowork | 開發中（feat/v2-cowork） | 底層是 Claude Code 2.1.319，會跑 hook；外掛須上傳到 claude.ai 才會同步進 session。存取使用者資料夾走 `mcp__remote-devices__device_bash`：守門與瘦身已涵蓋；讀檔去重、決策引擎復原點尚未涵蓋（復原點建不到使用者電腦） |
+| VS Code 擴充 | 待使用者實跑自我檢查 | 底層同為 Claude Code，預期與 CLI 相同。`hooks/selfcheck.py` 已寫好（唯讀，印出環境、hook 觸發、守門與瘦身 dry 結果、語言），步驟見 [vscode-check.md](vscode-check.md)，結果尚未回報 |
+| Cowork | 開發中（feat/v2-cowork） | 底層是 Claude Code 2.1.319，會跑 hook；外掛須上傳到 claude.ai 才會同步進 session。存取使用者資料夾走 `mcp__remote-devices__device_bash`：守門（含 `find -exec` 子指令）、瘦身與只讀指令的輸出去重已涵蓋；決策引擎復原點尚未涵蓋（復原點建不到使用者電腦） |
 | Codex | 待研究 | 先查 Codex 現有的 hook／設定機制，再做轉接層 |
+
+訊息語言（0.16.0-beta.4 起）：明確設定 > 依使用者提示自動偵測（`lang-detected`，純本地）> 系統語言 > 英文，四個平台共用同一函式。
 
 新功能設計時要寫明在四個平台各自怎麼運作，或為什麼不支援。
 
