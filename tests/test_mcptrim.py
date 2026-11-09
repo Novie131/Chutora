@@ -147,5 +147,45 @@ class McpTrimTest(unittest.TestCase):
         self.assertIn("×299", body[1])
 
 
+    # ---- Cowork：device_bash 的純文字 shell 輸出比照 Bash 瘦身
+    def npm_noise(self, n=200):
+        return "\n".join([f"npm http fetch GET 200 https://registry.npmjs.org/pkg-{i} 5ms (cache miss)" for i in range(n)]
+                         + ["npm WARN deprecated old@1.0.0: no longer supported", "added 812 packages in 14s"])
+
+    def run_device(self, cmd, resp, env=None):
+        data = {"hook_event_name": "PostToolUse", "tool_name": "mcp__remote-devices__device_bash", "tool_use_id": "toolu_d1",
+                "tool_input": {"command": cmd}, "tool_response": resp}
+        e = dict(os.environ, HOME=str(self.home), CHUTORA_LANG="zh")
+        for k in ("CHUTORA_MCP_TRIM", "CHUTORA_TRIM", "CHUTORA_MCP_TRIM_EXCLUDE", "CHUTORA_MCP_TRIM_TEXT", "CHUTORA_MODE"):
+            e.pop(k, None)
+        e.update(env or {})
+        r = subprocess.run([sys.executable, str(MCP)], input=json.dumps(data), capture_output=True, text=True, env=e, timeout=30)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return json.loads(r.stdout) if r.stdout.strip() else None
+
+    def test_device_shell_noisy_text_trimmed(self):
+        raw = self.npm_noise()
+        for resp in ([{"type": "text", "text": raw}], {"content": [{"type": "text", "text": raw}]}, raw):
+            with self.subTest(shape=type(resp).__name__):
+                out = self.run_device("cd $HOME/mnt/proj && npm install", resp)
+                new = out["hookSpecificOutput"]["updatedMCPToolOutput"]
+                body = new if isinstance(new, str) else json.dumps(new, ensure_ascii=False)
+                self.assertLess(len(body), len(json.dumps(resp, ensure_ascii=False)) * 0.8)
+                self.assertIn("added 812 packages", body)
+                self.assertIn("deprecated", body)
+                self.assertIn("Chutora", body)
+        raws = list((self.conf / "raw").glob("*.log"))
+        self.assertTrue(raws and "pkg-150" in raws[0].read_text())
+
+    def test_device_shell_read_like_untouched(self):
+        self.assertIsNone(self.run_device("cat $HOME/mnt/proj/big.log", [{"type": "text", "text": self.npm_noise()}]))
+        self.assertIsNone(self.run_device("npm install | tail -5", [{"type": "text", "text": self.npm_noise()}]))
+
+    def test_device_shell_follows_bash_trim_switch(self):
+        resp = [{"type": "text", "text": self.npm_noise()}]
+        self.assertIsNone(self.run_device("npm install", resp, env={"CHUTORA_TRIM": "0"}))
+        self.assertIsNotNone(self.run_device("npm install", resp, env={"CHUTORA_MCP_TRIM": "0"}))
+
+
 if __name__ == "__main__":
     unittest.main()

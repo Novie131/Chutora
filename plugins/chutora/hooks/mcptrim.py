@@ -18,11 +18,16 @@ claude_ai_Notion，等同 mcp__<名稱>__）；/chutora mcp-trim exclude <server
 """
 import json
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from trim import add_stats, cfg_file, conf_dir, mode, observe_trimmed, save_raw_text, shrink  # noqa: E402
+from trim import classify, enabled as bash_trim_enabled, note as bash_note  # noqa: E402
+
+# Cowork 在使用者電腦上跑指令的工具。輸出是純文字的 shell 結果，比照 Bash 瘦身（開關也跟 Bash 瘦身一樣）。
+DEVICE_SHELL = re.compile(r"^mcp__.+__device_bash$")
 
 try:
     from compact import lang
@@ -160,14 +165,71 @@ def text_slots(resp):
     return None, None
 
 
+def process_device(data, resp, shape, blocks):
+    if not bash_trim_enabled():
+        return None
+    cmd = (data.get("tool_input") or {}).get("command", "")
+    kind = classify(cmd)
+    if kind == "skip":
+        return None
+    md = mode()
+    total = {"orig_lines": 0, "orig_chars": 0, "skipped": 0, "saved": 0, "progress": 0, "repeat": 0, "other": 0}
+
+    def one(text):
+        if not isinstance(text, str) or text.lstrip()[:1] in ("{", "["):
+            return None
+        r = shrink(text, kind, md)
+        if r:
+            for k in total:
+                total[k] += r[1].get(k, 0)
+            return r[0]
+        return None
+
+    before = len(json.dumps(resp, ensure_ascii=False))
+    if shape == "str":
+        new = one(resp)
+        if new is None:
+            return None
+        new_resp, raw = new, resp
+    else:
+        new_blocks, texts, changed = [], [], False
+        for b in blocks:
+            if b.get("type") == "text":
+                texts.append(b.get("text") or "")
+                new = one(b.get("text"))
+                if new is not None:
+                    new_blocks.append(dict(b, text=new))
+                    changed = True
+                    continue
+            new_blocks.append(b)
+        if not changed:
+            return None
+        new_resp, raw = (new_blocks if shape == "list" else dict(resp, content=new_blocks)), "\n".join(texts)
+    path = save_raw_text(data.get("tool_use_id"), "$ " + str(cmd), raw)
+    tag = bash_note(total, path)
+    if shape == "str":
+        new_resp = new_resp + "\n" + tag
+    else:
+        bl = list(new_resp if shape == "list" else new_resp["content"]) + [{"type": "text", "text": tag}]
+        new_resp = bl if shape == "list" else dict(new_resp, content=bl)
+    saved = before - len(json.dumps(new_resp, ensure_ascii=False))
+    if saved <= 0:
+        return None
+    add_stats(saved, "device", session_id=data.get("session_id"))
+    observe_trimmed(data, before, saved, "device")
+    return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedMCPToolOutput": new_resp}}
+
+
 def process(data):
     tool = data.get("tool_name") or ""
-    if not tool.startswith("mcp__") or not enabled() or excluded(tool):
+    if not tool.startswith("mcp__") or (not enabled() and not DEVICE_SHELL.match(tool)) or excluded(tool):
         return None
     resp = data.get("tool_response")
     shape, blocks = text_slots(resp)
     if shape is None:
         return None
+    if DEVICE_SHELL.match(tool):
+        return process_device(data, resp, shape, blocks)
     md = mode()
     total_before = len(json.dumps(resp, ensure_ascii=False))
     if total_before <= LIMITS[md][0]:

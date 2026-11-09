@@ -201,7 +201,7 @@ hook 不會自動啟用:本腳本不改你的 settings.json。要啟用請把下
   "PreToolUse": [
     { "matcher": "AskUserQuestion",
       "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/decide.py ask" }] },
-    { "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|Read",
+    { "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|Read|mcp__.*__device_bash",
       "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/guard.py" }] },
     { "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/chutora/run-python.sh ~/.claude/hooks/chutora/activity.py" }] }
   ],

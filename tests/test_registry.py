@@ -41,7 +41,7 @@ class RegistryTest(unittest.TestCase):
 
     def test_new_hooks_registered(self):
         pairs = plugin_pairs()
-        self.assertIn(("PreToolUse", "Bash|Write|Edit|MultiEdit|NotebookEdit|Read", "guard.py"), pairs)
+        self.assertIn(("PreToolUse", "Bash|Write|Edit|MultiEdit|NotebookEdit|Read|mcp__.*__device_bash", "guard.py"), pairs)
         for ev in ("PostToolUse", "PostToolUseFailure", "SubagentStop", "UserPromptSubmit"):
             self.assertIn((ev, "", "observe.py"), pairs)
 

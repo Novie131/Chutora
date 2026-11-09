@@ -109,7 +109,7 @@
         ]
       },
       {
-        "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|Read",
+        "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|Read|mcp__.*__device_bash",
         "hooks": [
           {
             "type": "command",

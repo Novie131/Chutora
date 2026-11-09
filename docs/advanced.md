@@ -135,7 +135,7 @@ Claude Code 自 2.1.86 起內建類似機制（重複讀取未變更的檔案時
 
 ### 危險守門（實驗中）
 
-`hooks/guard.py`（PreToolUse，`Bash|Write|Edit|MultiEdit|NotebookEdit|Read`）在工具執行前檢查「永遠要問清單」，命中時回傳標準的 `hookSpecificOutput.permissionDecision` 與雙語的 `permissionDecisionReason`：
+`hooks/guard.py`（PreToolUse，`Bash|Write|Edit|MultiEdit|NotebookEdit|Read|mcp__.*__device_bash`）在工具執行前檢查「永遠要問清單」，命中時回傳標準的 `hookSpecificOutput.permissionDecision` 與雙語的 `permissionDecisionReason`：
 
 - **先問你（ask）**：force push（`--force`、`-f`、`--force-with-lease`、`+分支`）；推到 main／master（含沒寫分支、但目前就在 main）；`rm -rf` 或刪除專案外的檔案（暫存目錄底下除外）；刪掉整個專案或它的 `.git`；刪除路徑含無法確認的變數；讀寫 `.env`（`.env.example` 這類範本除外）與金鑰檔（`id_rsa`、`*.pem`、`*.key`、`.netrc`…）；`DROP TABLE`／`DROP DATABASE`／`TRUNCATE`；`terraform destroy`；`kubectl delete`；修改 `~/.claude/settings.json`、專案的 `.claude/settings.json` 或 Chutora 設定（含 `/chutora guard off`；`/chutora:route-setup` 執行 Chutora 自己目錄裡的 `apply_settings.py` 除外，因為它已經逐項問過你。同名但在別處的腳本、同一行另外重導向到設定檔、或改寫這支腳本本身，照樣要問）；`git reset --hard`；`git clean -f`；Claude 自己替自己開自動權限（跑 `/chutora ok … auto` 或改寫 `decisions.jsonl`，規則 `self-grant`，略過權限模式下直接擋）。
 - **直接擋（deny）**：非常明確的災難：`rm -rf /`、`rm -rf ~`、刪除系統目錄、`mkfs`、`dd of=/dev/<磁碟>`。原因回給 Claude，請你自己決定要不要在終端機執行。

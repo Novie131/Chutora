@@ -297,5 +297,37 @@ class GuardTest(unittest.TestCase):
             self.assertEqual(self.run_hook(tool, {"file_path": own})["permissionDecision"], "ask")
 
 
+    # ---- Cowork：使用者電腦上的 shell（mcp__remote-devices__device_bash）
+    def device(self, cmd, **kw):
+        return self.run_hook("mcp__remote-devices__device_bash", {"command": cmd}, **kw)
+
+    def test_device_shell_uses_device_paths(self):
+        cases = {
+            "ls $HOME/mnt/Chutora": None,
+            "rm -rf $HOME/mnt/Chutora/build": None,
+            "cd $HOME/mnt/Chutora && rm -rf node_modules": None,
+            "rm -rf ~": "deny",
+            "rm -rf $HOME/mnt/Chutora": "ask",
+            "rm -rf $HOME/mnt": "ask",
+            "rm -rf /Users/someone/Documents": "ask",
+            "cd $HOME/mnt/Chutora && git push --force": "ask",
+            "cd $HOME/mnt/Chutora && git reset --hard": "ask",
+            "cat $HOME/mnt/Chutora/.env": "ask",
+        }
+        for cmd, want in cases.items():
+            with self.subTest(cmd=cmd):
+                out = self.device(cmd)
+                self.assertEqual(out and out["permissionDecision"], want)
+
+    def test_device_shell_project_dir_is_not_cloud_dir(self):
+        # 雲端工作目錄的路徑對使用者電腦沒有意義：刪除它在 device_bash 上算專案外
+        out = self.device("rm -rf /home/claude/src")
+        self.assertEqual(out["permissionDecision"], "ask")
+
+    def test_device_shell_bypass_denies(self):
+        out = self.device("cd $HOME/mnt/Chutora && git push --force", mode="bypassPermissions")
+        self.assertEqual(out["permissionDecision"], "deny")
+
+
 if __name__ == "__main__":
     unittest.main()

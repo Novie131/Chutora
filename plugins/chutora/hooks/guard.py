@@ -38,6 +38,15 @@ except Exception:  # pragma: no cover
     lang = lambda: "en"  # noqa: E731
 
 HOME = os.path.expanduser("~")
+# Cowork：使用者電腦上的 shell（mcp__remote-devices__device_bash）。它跑在使用者的 VM，不是這台機器，
+# 所以用一個虛擬的家目錄判斷路徑：連接資料夾在 $HOME/mnt/<名稱>，預設 cwd 是 $HOME/mnt/outputs。
+DEVICE_SHELL = re.compile(r"^mcp__.+__device_bash$")
+DEVICE_HOME = "/__device__/home"
+DEVICE_MNT = DEVICE_HOME + "/mnt"
+
+
+def is_device_shell(tool):
+    return bool(DEVICE_SHELL.match(tool or ""))
 
 # 規則 id → (決定, 中文說明, 英文說明)
 RULES = {
@@ -464,11 +473,15 @@ def check_rm(a, cwd, root, data, hits, local_vars=None):
         return
     rec, targets = r
     tmp = temp_dirs(data)
-    home_n, root_n = os.path.normpath(HOME), os.path.normpath(root)
+    home_n, root_n0 = os.path.normpath(HOME), os.path.normpath(root)
+    device = bool((data or {}).get("_device"))
     for t in targets:
         if not t:
             continue
         full, unresolved, globbed = resolve(t, cwd, local_vars)
+        root_n = root_n0
+        if device and under(full, DEVICE_MNT) and full != DEVICE_MNT:  # 每個連接資料夾各自算一個專案
+            root_n = os.path.join(DEVICE_MNT, full[len(DEVICE_MNT) + 1:].split("/")[0])
         rp = real(full)
         cands = {full, rp}
         if any(c in CATASTROPHIC_DIRS or c in (home_n, real(home_n)) or c == os.path.dirname(home_n) for c in cands):
@@ -720,9 +733,9 @@ def check_segment(s, cwd, root, data, hits, local_vars=None):
     check_words(s, cwd, root, hits)
 
 
-def check_bash(cmd, data):
-    root = os.path.normpath(os.environ.get("CLAUDE_PROJECT_DIR") or data.get("cwd") or os.getcwd())
-    cwd = os.path.normpath(data.get("cwd") or root)
+def check_bash(cmd, data, root=None, cwd=None):
+    root = os.path.normpath(root or os.environ.get("CLAUDE_PROJECT_DIR") or data.get("cwd") or os.getcwd())
+    cwd = os.path.normpath(cwd or data.get("cwd") or root)
     hits = []
     try:
         segs = expand_segments(cmd)
@@ -767,6 +780,18 @@ def check_bash(cmd, data):
     return hits
 
 
+def check_device_bash(cmd, data):
+    """Cowork 的 device_bash：同一套規則，但路徑以使用者電腦（虛擬家目錄）判斷。"""
+    global HOME
+    saved = HOME
+    HOME = DEVICE_HOME
+    try:
+        d = dict(data, _device=True, cwd=DEVICE_MNT + "/outputs", scratchpad_dir=None)
+        return check_bash(cmd, d, root=DEVICE_MNT, cwd=DEVICE_MNT + "/outputs")
+    finally:
+        HOME = saved
+
+
 def check_path_tool(tool, inp, data):
     root = os.path.normpath(os.environ.get("CLAUDE_PROJECT_DIR") or data.get("cwd") or os.getcwd())
     path = inp.get("file_path") or inp.get("notebook_path") or inp.get("path") or ""
@@ -789,11 +814,11 @@ def decide(data):
     inp = data.get("tool_input") or {}
     if not isinstance(inp, dict):
         return None
-    if tool == "Bash":
+    if tool == "Bash" or is_device_shell(tool):
         subject = inp.get("command") or ""
         if not isinstance(subject, str) or not subject.strip():
             return None
-        hits = check_bash(subject, data)
+        hits = check_device_bash(subject, data) if is_device_shell(tool) else check_bash(subject, data)
     elif tool in ("Write", "Edit", "MultiEdit", "NotebookEdit", "Read"):
         subject = inp.get("file_path") or inp.get("notebook_path") or ""
         hits = check_path_tool(tool, inp, data)
@@ -870,7 +895,7 @@ def log_change(data, decision, hits, user_hit, bypass=False):
         from projectid import project_data_dir
         tool = data.get("tool_name")
         inp = data.get("tool_input") or {}
-        subj = inp.get("command") if tool == "Bash" else (inp.get("file_path") or inp.get("notebook_path"))
+        subj = inp.get("command") if (tool == "Bash" or is_device_shell(tool)) else (inp.get("file_path") or inp.get("notebook_path"))
         rules = [h[0] for h in hits] + ["user:" + line for _, line in user_hit]
         try:
             import observe
@@ -923,6 +948,8 @@ def process(data):
     r = decide(data)
     mode = data.get("permission_mode")
     if not r:
+        if is_device_shell(data.get("tool_name")):  # 復原點只能建在這台機器，使用者電腦上的指令不交給決策引擎
+            return None
         eng = engine()  # 守門沒命中：決策引擎看是不是已學會可自動的類型（例如專案內刪除）
         try:
             return eng.pretool(data, None) if eng else None
@@ -930,7 +957,8 @@ def process(data):
             return None
     decision, hits, user_hit = r
     decision, bypass = bypass_upgrade(decision, hits, mode)
-    learnable = decision == "ask" and not bypass and not user_hit and hits and all(h[0] in LEARNABLE_RULES for h in hits)
+    device = is_device_shell(data.get("tool_name"))
+    learnable = not device and decision == "ask" and not bypass and not user_hit and hits and all(h[0] in LEARNABLE_RULES for h in hits)
     eng = engine() if learnable else None
     if eng:
         try:
