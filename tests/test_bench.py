@@ -85,6 +85,7 @@ class BenchTest(unittest.TestCase):
     def test_no_key_refuses(self):
         env = dict(os.environ)
         env.pop("ANTHROPIC_API_KEY", None)
+        env.pop("ANTHROPIC_BASE_URL", None)
         r = subprocess.run([sys.executable, str(RUN), "--runs", "1"], capture_output=True, text=True, env=env)
         self.assertEqual(r.returncode, 2)
 
