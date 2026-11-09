@@ -159,7 +159,7 @@ export function familyColor(f) {
 
 // ---------------------------------------------------------------- 狀態：時間線、檔案、待辦、工作量
 export function newDeck() {
-  return { events: [], byId: new Map(), edited: new Map(), read: new Set(), todos: [], tasks: new Map(), usage: {}, mainContext: 0, started: undefined }
+  return { events: [], byId: new Map(), edited: new Map(), read: new Set(), todos: [], tasks: new Map(), usage: {}, mainContext: 0, started: undefined, quota: newQuota() }
 }
 
 const lines = (s) => (typeof s === 'string' && s.length ? s.split('\n').length : 0)
@@ -268,6 +268,86 @@ export function runningCount(deck) {
   return deck.events.filter((e) => e.status === 'running').length
 }
 
+// ---------------------------------------------------------------- 額度：5 小時／每週用量與上一輪 token
+// 資料來源：session.measure／$.session.usage() 的 rateLimits，與 turn.complete（主對話）的 usage。
+export function newQuota() {
+  return { limits: {}, lastTurn: undefined }
+}
+
+const KINDS = { five_hour: 'five_hour', seven_day: 'seven_day' }
+
+// SessionRateLimit[] → { five_hour: { pct, resets_at(秒) }, seven_day: {...} }；只收這兩種視窗，壞值略過
+export function normalizeLimits(rateLimits) {
+  const out = {}
+  if (!Array.isArray(rateLimits)) return out
+  for (const r of rateLimits) {
+    const k = r && KINDS[r.kind]
+    if (!k || typeof r.percentUsed !== 'number' || !Number.isFinite(r.percentUsed)) continue
+    const w = { pct: r.percentUsed }
+    const ms = typeof r.resetsAt === 'string' ? Date.parse(r.resetsAt) : NaN
+    if (Number.isFinite(ms)) w.resets_at = Math.floor(ms / 1000)
+    out[k] = w
+  }
+  return out
+}
+
+// 記下最新讀數；回傳是否有任何一個視窗的讀數（空陣列＝非訂閱或還沒有讀數，保留舊值不清掉）
+export function applyMeasure(deck, rateLimits) {
+  const lim = normalizeLimits(rateLimits)
+  if (!lim.five_hour && !lim.seven_day) return false
+  deck.quota.limits = lim
+  return true
+}
+
+// 主對話一個回合的 token：cache 讀取另列、不算進 total（與 chutora 狀態列「本次」一致）
+export function recordTurn(deck, usage) {
+  if (!usage || typeof usage !== 'object') return false
+  const n = (v) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0)
+  const t = { input: n(usage.input_tokens), cache_write: n(usage.cache_creation_input_tokens), cache_read: n(usage.cache_read_input_tokens), output: n(usage.output_tokens) }
+  t.total = t.input + t.cache_write + t.output
+  deck.quota.lastTurn = t
+  return true
+}
+
+// 合併進 ~/.claude/chutora/usage.json：只在 limits 較新時覆蓋，其他欄位原樣保留；壞檔當空。
+// 回傳要寫的文字；不需要寫（沒有讀數，或檔案裡的 limits 一樣新或更新）回傳 null。
+export function mergeUsageFile(existingText, limits, nowSec) {
+  if (!limits || (!limits.five_hour && !limits.seven_day) || !Number.isFinite(nowSec)) return null
+  let cur = {}
+  try {
+    const j = JSON.parse(existingText)
+    if (j && typeof j === 'object' && !Array.isArray(j)) cur = j
+  } catch (err) {
+    cur = {}
+  }
+  const prev = cur.limits && typeof cur.limits === 'object' ? cur.limits.updated_at : undefined
+  if (typeof prev === 'number' && prev >= nowSec) return null
+  cur.v = 1
+  cur.limits = { source: 'claude-mod', updated_at: nowSec, ...limits }
+  return JSON.stringify(cur)
+}
+
+// 重置時間：24 小時內「2h13m 後」，否則「週四 14:00」（本機時間）
+export function resetLabel(resetsAtSec, nowMs, lang = 'zh') {
+  if (typeof resetsAtSec !== 'number' || !Number.isFinite(resetsAtSec)) return ''
+  const diff = resetsAtSec * 1000 - nowMs
+  if (diff <= 0) return lang === 'en' ? 'resetting' : '即將重置'
+  const mins = Math.ceil(diff / 60000)
+  if (diff < 24 * 3600 * 1000) {
+    const s = mins >= 60 ? Math.floor(mins / 60) + 'h' + String(mins % 60).padStart(2, '0') + 'm' : mins + 'm'
+    return lang === 'en' ? 'in ' + s : s + ' 後'
+  }
+  const d = new Date(resetsAtSec * 1000)
+  const hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0')
+  const wd = lang === 'en' ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] : ['週日', '週一', '週二', '週三', '週四', '週五', '週六']
+  return wd[d.getDay()] + ' ' + hm
+}
+
+// 用量顏色：≥95 紅、≥80 黃、其餘綠
+export function pctColor(pct) {
+  return pct >= 95 ? COLORS.bad : pct >= 80 ? COLORS.run : COLORS.ok
+}
+
 // ---------------------------------------------------------------- SVG 圖塊（桌面版、VS Code、手機）
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
 
@@ -301,6 +381,13 @@ export function workloadSvg(wl, width = 400) {
       })
     : [`<rect x="0" y="0" width="${width}" height="14" fill="${COLORS.empty}"/>`]
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} 14" width="${width}" height="14"><clipPath id="r"><rect width="${width}" height="14" rx="3"/></clipPath><g clip-path="url(#r)" shape-rendering="crispEdges">${rects.join('')}</g></svg>`
+}
+
+// 額度長條：底色深藍，已用的部分依用量變色
+export function quotaSvg(pct, width = 400) {
+  const p = Math.max(0, Math.min(100, Number(pct) || 0))
+  const w = (p / 100) * width
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} 10" width="${width}" height="10" shape-rendering="crispEdges"><rect x="0" y="0" width="${width}" height="10" fill="${COLORS.empty}"/><rect x="0" y="0" width="${w.toFixed(1)}" height="10" fill="${pctColor(p)}"/></svg>`
 }
 
 // 執行中燈號（綠色方塊加光暈，閒置時灰）

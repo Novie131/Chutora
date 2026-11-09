@@ -1,7 +1,7 @@
 // 駕駛艙面板的畫面：桌面版／VS Code／手機用 Svg 畫進度格、工作量長條與像素圖示；終端機用文字與色塊畫同樣的區塊。
 import {
   COLORS, currentEvent, familyColor, iconSvg, liveDotSvg, progressSvg, workloadSvg, todoProgress, workload,
-  runningCount, blockBar, progressCells, statusMark, statusColor,
+  runningCount, blockBar, progressCells, statusMark, statusColor, quotaSvg, pctColor, resetLabel,
 } from './deck-logic.js'
 import { formatElapsed, formatTokens, truncate } from './board-logic.js'
 
@@ -12,6 +12,8 @@ const L = {
     trimmed: '瘦身與去重擋下（估算）', ctx: '主對話 context', timeline: '動作時間線', files: '碰過的檔案',
     edited: '改過', read: '讀過', expand: '展開 ▸', fold: '收起 ▾', plain: '白話', raw: '原始指令',
     collapse: '▾ 縮小', main: '主對話', none: '—', doing: '正在', did: '剛完成', failed: '失敗',
+    quota: '額度', h5: '5 小時', wk: '每週', reset: '重置', noQuota: '沒有額度讀數', lastTurn: '上一輪 token',
+    tIn: '輸入', tCw: '快取寫', tCr: '快取讀', tOut: '輸出',
   },
   en: {
     title: 'Flight Deck', live: 'Running', idle: 'Idle', now: 'Now', nothing: 'No actions yet', nth: (n) => `action #${n}`,
@@ -19,6 +21,8 @@ const L = {
     trimmed: 'kept out by trimming (est.)', ctx: 'main context', timeline: 'Timeline', files: 'Files touched',
     edited: 'Edited', read: 'Read', expand: 'Show ▸', fold: 'Hide ▾', plain: 'Plain', raw: 'Raw',
     collapse: '▾ Collapse', main: 'main', none: '—', doing: '', did: 'Just did', failed: 'Failed',
+    quota: 'Usage limits', h5: '5-hour', wk: 'Weekly', reset: 'resets', noQuota: 'No usage reading', lastTurn: 'Last turn tokens',
+    tIn: 'in', tCw: 'cache write', tCr: 'cache read', tOut: 'out',
   },
 }
 
@@ -89,6 +93,34 @@ export function renderDeck(el, ctx) {
     })
   }
   const parts = [header, section('s-now', [label(t.now), nowCard])]
+
+  // 額度：5 小時／每週用量（附進度條與重置時間），與上一輪 token（主對話）
+  {
+    const lim = (deck.quota && deck.quota.limits) || {}
+    const last = deck.quota && deck.quota.lastTurn
+    const winRow = (key, name, w) => {
+      const pct = Math.round(w.pct)
+      const barW = Math.max(120, Math.min(px, 320))
+      const bar = graphic
+        ? Svg({ key: 'qb-' + key, source: quotaSvg(w.pct, barW), alt: `${pct}%`, width: barW, height: 10 })
+        : Box({ flexDirection: 'row', children: blockBar([[Math.min(100, w.pct), pctColor(w.pct)], [Math.max(0, 100 - w.pct), COLORS.empty]].filter(([v]) => v > 0), 20).map((p, i) => Text({ key: 'q' + key + i, color: p.color, children: [p.text] })) })
+      const rs = resetLabel(w.resets_at, now, lang)
+      return Box({ key: 'qr-' + key, flexDirection: 'row', alignItems: 'center', gap: 1, children: [
+        Text({ dimColor: true, children: [name] }),
+        Text({ bold: true, mono: true, color: pctColor(w.pct), children: [pct + '%'] }),
+        bar,
+        rs ? Text({ dimColor: true, size: 'caption', children: [t.reset + ' ' + rs] }) : null,
+      ].filter(Boolean) })
+    }
+    const rows = [
+      lim.five_hour ? winRow('h5', t.h5, lim.five_hour) : null,
+      lim.seven_day ? winRow('wk', t.wk, lim.seven_day) : null,
+    ].filter(Boolean)
+    const tk = last
+      ? Text({ mono: true, children: [`${t.lastTurn}：${t.tIn} ${formatTokens(last.input)} · ${t.tCw} ${formatTokens(last.cache_write)} · ${t.tCr} ${formatTokens(last.cache_read)} · ${t.tOut} ${formatTokens(last.output)}`] })
+      : null
+    parts.push(section('s-quota', [label(t.quota), ...(rows.length ? rows : [Text({ dimColor: true, children: [t.noQuota] })]), tk].filter(Boolean)))
+  }
 
   // 待辦進度
   if (prog) {

@@ -13,7 +13,7 @@ import {
   summarizeUsage,
   collapsedLabel,
 } from './board-logic.js'
-import { newDeck, callStart, callEnd, addUsage, runningCount, family } from './deck-logic.js'
+import { newDeck, callStart, callEnd, addUsage, runningCount, family, applyMeasure, recordTurn, mergeUsageFile } from './deck-logic.js'
 import { renderDeck, DECK_LABELS } from './deck-view.js'
 
 const PANE = 'agent-board'
@@ -98,6 +98,28 @@ async function readSaved($) {
   }
 }
 
+// 額度讀數：記進駕駛艙；本機時順便寫進 ~/.claude/chutora/usage.json（source claude-mod，只在較新時覆蓋，其他欄位保留）。
+// 任何一步失敗都安靜略過，不能影響對話。
+async function takeLimits($, rateLimits) {
+  try {
+    if (!applyMeasure(deck, rateLimits)) return
+    redraw($)
+    const home = await $.env.get('HOME')
+    if (!home) return
+    const path = home + '/.claude/chutora/usage.json'
+    let old = ''
+    try {
+      old = await $.fs.read(path)
+    } catch (err) {
+      // 還沒有檔案
+    }
+    const out = mergeUsageFile(typeof old === 'string' ? old : '', deck.quota.limits, Math.floor((await $.clock.now()) / 1000))
+    if (out) await $.fs.write(path, out)
+  } catch (err) {
+    // 不是本機、沒有寫入權限或讀數壞掉：略過
+  }
+}
+
 // 面板要真的放上畫面才算開著：$.ui.panes() 也會列出等待放置（isPlaced: false）的面板
 async function isShown($) {
   const panes = await $.ui.panes()
@@ -150,6 +172,13 @@ export function register(on, options) {
       immediate: true,
     })
     lang = await detectLang($)
+    // 啟動時讀一次額度（沒有讀數就維持「沒有額度讀數」）
+    try {
+      const u = await $.session.usage()
+      await takeLimits($, u && u.rateLimits)
+    } catch (err) {
+      // 讀不到用量
+    }
     // 常駐模式：一開始就開面板（不帶 focus），沒有子 agent 時顯示「目前沒有子 agent」
     await ensureOpen($, options)
     return next(e)
@@ -163,6 +192,7 @@ export function register(on, options) {
   })
   on('session.measure', async ($, e, next) => {
     const result = await next(e)
+    await takeLimits($, e.rateLimits)
     await ensureOpen($, options)
     return result
   })
@@ -231,6 +261,11 @@ export function register(on, options) {
   // 回合結束時再檢查一次（例如回合中途畫面重連過）
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
+    try {
+      if (!e.agentId && recordTurn(deck, e.usage)) redraw($)
+    } catch (err) {
+      // 額度區的錯誤不能影響回合
+    }
     await ensureOpen($, options)
     return result
   })
