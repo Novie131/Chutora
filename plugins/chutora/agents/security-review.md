@@ -1,6 +1,6 @@
 ---
 name: security-review
-description: 對你自己的程式碼做靜態安全審查。當你想檢查自己的專案有沒有安全漏洞、不安全寫法、或祕密（金鑰、token）外洩時使用。只讀不改，回傳附證據、嚴重度與修補建議的結構化報告。只審你自己或已獲授權的程式碼。
+description: 自有程式碼的靜態安全審查,唯讀,回報附證據與嚴重度
 tools: Read, Glob, Grep, Bash
 model: sonnet
 memory: user

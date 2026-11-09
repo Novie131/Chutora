@@ -1,6 +1,6 @@
 ---
 name: harness-tune
-description: 想讓這套 harness 自己越用越好時使用。針對某類一再出現、做起來總是卡卡的任務，提出一到三個具體的 harness 調整（改 prompt／skill／agent／工具提示），跟你確認後才改、改前備份、可回滾，並把有效與無效的調整記進 harness-lessons。
+description: 讓 harness 對反覆卡關的任務越調越好;改前確認、可回滾
 ---
 # Harness Tune（輕量自我強化迴圈）
 

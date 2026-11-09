@@ -1,6 +1,6 @@
 ---
 name: evidence-analysis
-description: 做調查、分析、找根因，或需要把「事實、推測、不知道」分清楚時使用。像反向工程那樣只認證據：每個結論標明是觀察還是推論、附上出處，先給概覽再往下深入，最後留一份可追的 finding ledger。
+description: 調查、找根因、分清事實與推測;結論附出處
 ---
 # Evidence Analysis（證據導向分析）
 

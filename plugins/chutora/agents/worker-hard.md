@@ -1,6 +1,6 @@
 ---
 name: worker-hard
-description: 僅在 worker 失敗後由主對話指派的升級版執行者，委派時必須附上前次的失敗報告。不要用於一般任務，也不要跳過 worker 直接派給它。
+description: 僅在 worker 失敗後使用,須附前次失敗報告
 tools: Read, Write, Edit, Glob, Grep, Bash, WebFetch, WebSearch
 model: sonnet
 memory: user

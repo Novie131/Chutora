@@ -1,6 +1,6 @@
 ---
 name: librarian
-description: 在知識庫與記憶中查找資料。當需要知道「我們之前記過什麼」「筆記裡有沒有提過 X」「相關的背景資料在哪」時使用。它只讀不寫，回傳原文片段與出處。需要查東西時優先派給它，不要自己在主對話裡翻檔案。
+description: 查知識庫與記憶(「之前記過什麼」),唯讀,回傳原文出處
 tools: Read, Glob, Grep
 model: haiku
 effort: low

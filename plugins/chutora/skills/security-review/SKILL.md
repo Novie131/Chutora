@@ -1,6 +1,6 @@
 ---
 name: security-review
-description: 要對自己的程式碼做安全審查、對照 OWASP 類別、或整理一份附證據與修補的安全報告時使用。提供審查清單、嚴重度判準與報告格式。只用於你自己或已授權的程式碼。
+description: 自有程式碼的安全審查清單、嚴重度、報告格式
 ---
 # Security Review（靜態安全審查）
 

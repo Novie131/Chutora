@@ -1,6 +1,6 @@
 ---
 name: toolprune
-description: 想知道哪些工具／MCP 長期沒用到、可以關掉來省 token 時使用。讀使用記錄，列出一段時間沒用到的工具，建議停用——全部手動、可逆、一步復原。只建議，不自動改設定。
+description: 找出長期沒用的工具/MCP,建議停用省 token
 ---
 # Toolprune（工具修剪）
 

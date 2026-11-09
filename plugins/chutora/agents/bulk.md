@@ -1,6 +1,6 @@
 ---
 name: bulk
-description: 會產生大量內容、但只需要結論的工作：看多張圖片或影格、抓網頁並摘要、讀長 log、跑輸出很多的指令，以及規則明確的批次修改。
+description: 大量內容但只要結論:多圖、長 log、抓網頁、輸出很多的指令
 model: haiku
 effort: medium
 maxTurns: 20

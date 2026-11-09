@@ -1,6 +1,6 @@
 ---
 name: usage-stats
-description: 量測主對話 context 長度與子 agent 使用比例,做優化前後比較時使用。
+description: 量測主對話 context 長度與子 agent 使用比例
 ---
 # Usage stats
 

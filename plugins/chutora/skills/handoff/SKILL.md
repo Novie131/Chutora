@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: 寫交接筆記 handoff.md，讓對話可以放心清空。對話 context 過長、一件事告一段落、或使用者說「交接」「準備 /clear」時使用。
+description: 寫交接筆記 handoff.md;context 過長、告一段落、「交接」時用
 ---
 # Handoff
 

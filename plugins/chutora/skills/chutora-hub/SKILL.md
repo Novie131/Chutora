@@ -1,6 +1,6 @@
 ---
 name: chutora
-description: Chutora 的單一入口。使用者輸入 /chutora、問「Chutora 有什麼功能」「現在狀態如何」、要健檢安裝（doctor）、切換省錢／平衡／品質模式、開關噪音輸出瘦身／讀檔去重／MCP 瘦身、危險守門、觀察紀錄、決策引擎的自動動作（changes／ok／undo）、要求「先問我」（ask）、或切換提醒語言時使用。Single entry point for Chutora: status, what it can do, install check (doctor), mode, output trimming / read dedup / MCP trimming switches, danger guard, observation log, decision-engine auto actions (changes / ok / undo), clarify-first (ask) and language switching.
+description: Chutora 入口:/chutora、狀態、doctor、模式、語言、各項開關、ask
 ---
 # /chutora
 

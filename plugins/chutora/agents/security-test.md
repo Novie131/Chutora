@@ -1,6 +1,6 @@
 ---
 name: security-test
-description: 對你自己、已授權的專案做動態安全測試——像真實攻擊方那樣實際打你的 dev／測試環境，找出漏洞與外洩疑慮並驗證。只在你擁有或明確授權、且隔離的環境進行。開始前一定先確認授權範圍。
+description: 自有或已授權、隔離環境的動態安全測試;先確認授權
 tools: Read, Glob, Grep, Bash, WebFetch
 model: sonnet
 memory: user

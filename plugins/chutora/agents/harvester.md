@@ -1,6 +1,6 @@
 ---
 name: harvester
-description: 把過去的對話紀錄挖成知識庫筆記。只在使用者明確要求時使用（例如「把之前的對話整理進知識庫」「挖一下歷史紀錄」）。這是耗費較大的批次作業，不要主動或順帶執行。
+description: 把歷史對話挖成知識庫筆記。只在使用者明確要求時用
 model: sonnet
 color: purple
 ---

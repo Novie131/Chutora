@@ -1,6 +1,6 @@
 ---
 name: route-setup
-description: 一次性的完整功能設定：記憶位置（claude-memory）、Haiku 版 Explore、自動壓縮門檻、context 狀態列。裝完 chutora 已可直接使用，想要完整功能時才執行。
+description: 一次性完整設定:記憶位置、Explore、自動壓縮、狀態列
 disable-model-invocation: true
 ---
 # Route setup

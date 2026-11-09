@@ -1,6 +1,6 @@
 ---
 name: worker
-description: 執行已經想清楚的工作。當任務的「做什麼」已經確定、剩下的是動手完成時使用——包含撰寫或修改程式、修 bug、補測試、依既定方向修改內容。不要用它來決定方向、評估取捨、或回答開放式問題；那些留在主對話。只需要結論的大量讀取（多張圖片、長 log、抓網頁）交給 bulk。
+description: 執行方向已定的工作:寫改程式、修 bug、補測試;不決定方向;大量讀取給 bulk
 tools: Read, Write, Edit, Glob, Grep, Bash, WebFetch, WebSearch
 model: sonnet
 memory: user

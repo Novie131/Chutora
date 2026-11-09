@@ -388,7 +388,15 @@ Chutora 要在 **Cowork（Claude Desktop）、Claude Code CLI、VS Code 擴充�
 | Cowork | 在雲端,狀態列與選單列拿不到;只有面板(未實測) |
 | Opus／Sonnet 週分項 | 外掛與狀態列拿不到(只在 host 控制請求 `get_usage`),不做 |
 
-固定開銷實測(÷4 估算):SessionStart 注入中文約 677 tok、英文約 1653 tok;skills／agents 描述約 502 tok;合計中文約 1179、英文約 2155。英文版注入比中文多一倍以上,**待辦:壓低固定開銷**(尤其英文版)。因此「淨省」照實可為負,文件不宣稱省下特定百分比。
+固定開銷實測(估算法已改:ASCII 字元÷4＋非 ASCII 字元×1.0,舊的「字元÷4」對中文嚴重低估;省下量仍用字元÷4,因為瘦身擋下的多半是 ASCII log):
+
+| est tokens | 改前 | 改後 |
+|---|---|---|
+| SessionStart 注入(balanced)中文 | 1805 | 421 |
+| SessionStart 注入(balanced)英文 | 1679 | 409 |
+| skills＋agents description | 1471 | 435 |
+
+(改前以新估法重量;舊 ÷4 數字 677／1653／502 作廢。)預算由 `tests/test_overhead.py` 把關:guide 各 ≤350、modes 各 ≤120、descriptions 合計 ≤450。「淨省」照實可為負,文件不宣稱省下特定百分比。
 
 ### Codex 轉接方案（2026-11-09 研究）
 
