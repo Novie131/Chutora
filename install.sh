@@ -20,6 +20,11 @@
 #   bash install.sh --with-reply-detail  另外把 plugins/reply-detail(回覆格式規則 mod)的目錄加進
 #                                   env.CLAUDE_CODE_PLUGIN_DIRS;行為、限制、--link／複製模式與 --uninstall 的處理全部同 --with-agent-board
 #                                   (複製模式的目的地是 ~/.claude/chutora/reply-detail/)。兩個旗標可同時使用。
+#   bash install.sh --with-menubar  另外把 menubar/chutora-usage.1m.py(Mac 選單列用量儀表)用符號連結放進 SwiftBar 外掛資料夾
+#                                   (預設 ~/Library/Application Support/SwiftBar/Plugins,可用環境變數 SWIFTBAR_PLUGINS_DIR 指定,
+#                                   指定的資料夾不存在會建立;預設資料夾不存在表示還沒裝 SwiftBar,只印說明不建立)。
+#                                   連結指向本 repo,repo 搬家要重跑;已有同名檔案不覆蓋;--uninstall 會移除連到本 repo 的那個連結。
+#                                   可與預設複製模式或 --link 併用;不能與 --agents-only 併用。
 #
 # 複製安裝的項目記在 ~/.claude/.chutora-installed(每行一個相對 ~/.claude 的路徑)。
 # 有 chutora.plugin 就從它安裝;沒有(例如直接 clone repo)就用 plugins/chutora/。
@@ -47,6 +52,7 @@ WITH_EXPLORE=0
 WITH_STATUSLINE=0
 WITH_AGENT_BOARD=0
 WITH_REPLY_DETAIL=0
+WITH_MENUBAR=0
 for arg in "$@"; do
   case "$arg" in
     --agents-only)  MODE="agents" ;;
@@ -56,6 +62,7 @@ for arg in "$@"; do
     --with-statusline) WITH_STATUSLINE=1 ;;
     --with-agent-board) WITH_AGENT_BOARD=1 ;;
     --with-reply-detail) WITH_REPLY_DETAIL=1 ;;
+    --with-menubar) WITH_MENUBAR=1 ;;
     *) printf '未知參數:%s\n' "$arg" >&2; exit 1 ;;
   esac
 done
@@ -75,6 +82,10 @@ if [[ "$WITH_REPLY_DETAIL" == 1 && ( "$MODE" == "agents" || "$MODE" == "uninstal
   die "--with-reply-detail 不能與 --agents-only 或 --uninstall 併用。"
 fi
 
+if [[ "$WITH_MENUBAR" == 1 && "$MODE" == "agents" ]]; then
+  die "--with-menubar 不能與 --agents-only 併用。"
+fi
+
 SETTINGS="${HOME}/.claude/settings.json"
 BOARD_SRC="${SCRIPT_DIR}/plugins/agent-board"
 BOARD_REL="chutora/agent-board"          # 複製模式的目的地(相對 ~/.claude,記入安裝清單)
@@ -82,6 +93,10 @@ BOARD_COPY="${HOME}/.claude/${BOARD_REL}"
 DETAIL_SRC="${SCRIPT_DIR}/plugins/reply-detail"
 DETAIL_REL="chutora/reply-detail"
 DETAIL_COPY="${HOME}/.claude/${DETAIL_REL}"
+
+MENUBAR_SRC="${SCRIPT_DIR}/menubar/chutora-usage.1m.py"
+MENUBAR_NAME="chutora-usage.1m.py"
+MENUBAR_DEFAULT_DIR="${HOME}/Library/Application Support/SwiftBar/Plugins"
 
 # ---------- 移除 ----------
 if [[ "$MODE" == "uninstall" ]]; then
@@ -119,6 +134,13 @@ if [[ "$MODE" == "uninstall" ]]; then
     done < "$MANIFEST"
     rm -f "$MANIFEST" && ok "已移除安裝清單"
   fi
+  # 選單列外掛:只移除連到本 repo 的符號連結(預設資料夾與 SWIFTBAR_PLUGINS_DIR 都檢查)
+  for mdir in "$MENUBAR_DEFAULT_DIR" "${SWIFTBAR_PLUGINS_DIR:-}"; do
+    ml="${mdir}/${MENUBAR_NAME}"
+    if [[ -n "$mdir" && -L "$ml" && "$(readlink "$ml")" == "$MENUBAR_SRC" ]]; then
+      rm -f "$ml" && ok "已移除選單列連結 ${ml/#$HOME/~}"
+    fi
+  done
   [[ -d "$PLUGIN_DEST" ]] && rm -rf "$PLUGIN_DEST" && ok "已移除 $PLUGIN_DEST"
   [[ -d "$LEGACY_DEST" ]] && rm -rf "$LEGACY_DEST" && ok "已移除舊版 $LEGACY_DEST"
   # agent(給沒有清單的舊安裝用):只移除連到本 repo 的連結,或跟 repo 內容相同的複本;
@@ -304,6 +326,39 @@ setup_mod() {  # $1 = 名稱(agent-board 或 reply-detail), $2 = 要加進去的
   say "  用 plugin 市集安裝的人改用 /plugin install ${name}@chutora,不需要 --with-${name}。"
 }
 
+# ---------- Mac 選單列(--with-menubar) ----------
+setup_menubar() {
+  say ""
+  say "設定 Mac 選單列用量儀表…"
+  if [[ ! -f "$MENUBAR_SRC" ]]; then
+    warn "找不到 menubar/chutora-usage.1m.py(從 .plugin 封包安裝時不含它),略過選單列。"
+    return 0
+  fi
+  chmod +x "$MENUBAR_SRC" 2>/dev/null || true
+  local dir link
+  if [[ -n "${SWIFTBAR_PLUGINS_DIR:-}" ]]; then
+    dir="$SWIFTBAR_PLUGINS_DIR"
+    mkdir -p "$dir" || { warn "無法建立 ${dir},略過選單列。"; return 0; }
+  else
+    dir="$MENUBAR_DEFAULT_DIR"
+    if [[ ! -d "$dir" ]]; then
+      warn "找不到 SwiftBar 外掛資料夾(${dir/#$HOME/~}),可能還沒安裝 SwiftBar。"
+      say "  安裝:brew install --cask swiftbar,啟動後選一個外掛資料夾;"
+      say "  再重跑本腳本,或設 SWIFTBAR_PLUGINS_DIR=<你選的資料夾> 後重跑。詳見 menubar/README.md。"
+      return 0
+    fi
+  fi
+  link="${dir}/${MENUBAR_NAME}"
+  if [[ -L "$link" && "$(readlink "$link")" == "$MENUBAR_SRC" ]]; then
+    ok "${link/#$HOME/~}(已連結)"
+  elif [[ -e "$link" || -L "$link" ]]; then
+    warn "${link/#$HOME/~} 已存在,不覆蓋。要改用連結請先備份並刪除,再重跑。"
+  else
+    ln -s "$MENUBAR_SRC" "$link" && ok "${link/#$HOME/~} → ${MENUBAR_SRC/#$HOME/~}"
+  fi
+  command -v python3 >/dev/null 2>&1 || warn "找不到 python3:選單列需要它(macOS 可執行 xcode-select --install)。"
+}
+
 # ---------- 清掉舊版錯誤的安裝位置 ----------
 if [[ -e "$PLUGIN_DEST" || -L "$PLUGIN_DEST" ]]; then
   rm -rf "$PLUGIN_DEST"
@@ -354,6 +409,7 @@ if [[ "$MODE" == "link" ]]; then
   if [[ "$WITH_REPLY_DETAIL" == 1 ]]; then
     if [[ -d "$DETAIL_SRC" ]]; then setup_mod reply-detail "$DETAIL_SRC"; else warn "找不到 ${DETAIL_SRC/#$HOME/~},略過 reply-detail。"; fi
   fi
+  if [[ "$WITH_MENUBAR" == 1 ]]; then setup_menubar; fi
   say ""
   say "之後重開 Claude Code,用 /agents 與 /hooks 確認。repo 搬家後連結會失效,重跑一次即可。"
   say "──────────────────────────────────────────"
@@ -487,6 +543,7 @@ say ""
 if [[ "$WITH_STATUSLINE" == 1 ]]; then setup_statusline; print_statusline_tips; fi
 if [[ "$BOARD_READY" == 1 ]]; then setup_mod agent-board "$BOARD_COPY"; fi
 if [[ "$DETAIL_READY" == 1 ]]; then setup_mod reply-detail "$DETAIL_COPY"; fi
+if [[ "$WITH_MENUBAR" == 1 ]]; then setup_menubar; fi
 say ""
 say "更新:之後重跑 bash install.sh 即可(清單內的項目會被覆蓋更新)。"
 cat <<'EOF'
