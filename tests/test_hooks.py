@@ -33,6 +33,7 @@ class ContextCheckTest(unittest.TestCase):
         env["HOME"] = str(self.home)
         env["CLAUDE_PLUGIN_DATA"] = str(self.data)
         env["CONTEXT_REMIND_TOKENS"] = "1000"
+        env["CHUTORA_CONTEXT_REMIND"] = "1"  # 提醒預設關；這組測試測的是開啟後的行為
         return env
 
     def transcript(self, name, sizes):
@@ -53,6 +54,29 @@ class ContextCheckTest(unittest.TestCase):
 
     def run_payload(self, path):
         return self.run_hook(json.dumps({"transcript_path": str(path)}))
+
+    def test_default_is_silent(self):
+        """預設不注入任何東西，連狀態檔都不寫。"""
+        p = self.transcript("off.jsonl", [100, 5000])
+        env = self.env()
+        env.pop("CHUTORA_CONTEXT_REMIND")
+        r = subprocess.run([sys.executable, str(CONTEXT_CHECK)], input=json.dumps({"transcript_path": str(p)}),
+                           text=True, capture_output=True, env=env, timeout=30)
+        self.assertEqual((r.returncode, r.stdout), (0, ""))
+        self.assertFalse((self.data / ".context-check-state.json").exists())
+
+    def test_remind_file_turns_it_on_and_env_overrides(self):
+        p = self.transcript("file.jsonl", [100, 5000])
+        env = self.env()
+        env.pop("CHUTORA_CONTEXT_REMIND")
+        (self.home / ".claude" / "chutora").mkdir(parents=True)
+        (self.home / ".claude" / "chutora" / "remind").write_text("on\n")
+        run = lambda e: subprocess.run([sys.executable, str(CONTEXT_CHECK)], input=json.dumps({"transcript_path": str(p)}),
+                                       text=True, capture_output=True, env=e, timeout=30).stdout
+        self.assertIn("additionalContext", run(env))
+        (self.data / ".context-check-state.json").unlink()
+        env["CHUTORA_CONTEXT_REMIND"] = "0"
+        self.assertEqual(run(env), "")
 
     def test_below_threshold_silent(self):
         r = self.run_payload(self.transcript("a.jsonl", [100, 500]))
@@ -137,6 +161,7 @@ class HomeCase(unittest.TestCase):
         env["HOME"] = str(self.home)
         env.pop("CONTEXT_AUTOCOMPACT_BUFFER", None)
         env.pop("CONTEXT_REMIND_TOKENS", None)
+        env.pop("CHUTORA_CONTEXT_REMIND", None)
         env.update(extra)
         return subprocess.run([sys.executable, *script], input=stdin, text=True,
                               capture_output=True, env=env, timeout=30)
@@ -194,14 +219,18 @@ class StatuslineTest(HomeCase):
             with self.subTest(n=n):
                 r = self.run_sl(self.payload(n))
                 self.assertEqual(r.returncode, 0)
+                self.assertEqual(r.stdout, f"Opus │ {color}ctx {n // 1000}k{self.RESET} │ 壓縮 120k\n")
+                r = self.run_sl(self.payload(n), CHUTORA_CONTEXT_REMIND="1")
                 self.assertEqual(r.stdout, f"Opus │ {color}ctx {n // 1000}k{self.RESET} │ 提醒 100k │ 壓縮 120k\n")
 
     def test_without_compact_segment(self):
         r = self.run_sl(self.payload(50000))
+        self.assertEqual(r.stdout, f"Opus │ {self.GREEN}ctx 50k{self.RESET}\n")
+        r = self.run_sl(self.payload(50000), CHUTORA_CONTEXT_REMIND="1")
         self.assertEqual(r.stdout, f"Opus │ {self.GREEN}ctx 50k{self.RESET} │ 提醒 100k\n")
 
     def test_remind_env(self):
-        r = self.run_sl(self.payload(50000), CONTEXT_REMIND_TOKENS="60000")
+        r = self.run_sl(self.payload(50000), CONTEXT_REMIND_TOKENS="60000", CHUTORA_CONTEXT_REMIND="1")
         self.assertIn(f"{self.GREEN}ctx 50k", r.stdout)
         self.assertIn("提醒 60k", r.stdout)
 
@@ -446,6 +475,7 @@ class SessionStartTest(SessionStartBase):
         self.assertEqual((dst / "statusline.py").read_text(), STATUSLINE.read_text())
         self.assertEqual((dst / "compact.py").read_text(), COMPACT.read_text())
         self.assertEqual((dst / "deck.py").read_text(), (HOOKS / "deck.py").read_text())  # 駕駛艙狀態列需要
+        self.assertEqual((dst / "usage.py").read_text(), (HOOKS / "usage.py").read_text())  # 額度／上輪／淨省需要
 
     def test_statusline_sync_skips_symlink(self):
         dst = self.home / ".claude" / "chutora" / "statusline"

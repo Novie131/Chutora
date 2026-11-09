@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """UserPromptSubmit hook：對話 context 超過門檻時，讓 Claude 提醒使用者清空或壓縮對話。
 
+預設不提醒、不注入任何東西（省固定開銷）；CHUTORA_CONTEXT_REMIND=1 或 ~/.claude/chutora/remind 內容為 on 才啟用。
+不論開不開，都會順便偵測使用者語言（純本地、不輸出）。
+
 只在跨過門檻、或之後每多 STEP 個 token 時提醒一次，避免每輪都提醒。
 門檻可用環境變數 CONTEXT_REMIND_TOKENS 覆寫（測試時可設低一點）。
 
@@ -20,6 +23,10 @@ try:
     from compact import lang
 except Exception:
     lang = lambda: "en"  # noqa: E731
+try:
+    from compact import remind_enabled
+except Exception:
+    remind_enabled = lambda: False  # noqa: E731
     THRESHOLD = int(os.environ.get("CONTEXT_REMIND_TOKENS") or 100000)
 STEP = 40000
 KEEP = 50  # 狀態檔只留最近這麼多個對話
@@ -122,6 +129,8 @@ def main():
             note_prompt_lang(data.get("prompt"))
         except Exception:
             pass
+        if not remind_enabled():
+            return
         path = data.get("transcript_path")
         sizes = context_sizes(path) if path else []
         if not sizes:

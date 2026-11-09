@@ -19,6 +19,19 @@ def remind_tokens():
         return DEFAULT_REMIND
 
 
+def remind_enabled():
+    """context 提醒是否開啟（預設關）：CHUTORA_CONTEXT_REMIND=1／on 開、0／off 關；
+    沒設環境變數就看 ~/.claude/chutora/remind 的內容是不是 on。"""
+    v = (os.environ.get("CHUTORA_CONTEXT_REMIND") or "").strip().lower()
+    if v:
+        return v in ("1", "on", "true", "yes")
+    try:
+        with open(os.path.join(CONFIG_DIR, "remind")) as f:
+            return f.read(16).strip().lower() in ("on", "1", "true", "yes")
+    except OSError:
+        return False
+
+
 def compact_point():
     """回傳預估的自動壓縮點（tokens）；沒設定、讀不到、JSON 壞掉都回傳 None，不丟例外。"""
     try:

@@ -112,7 +112,7 @@ class HookMessagesTest(LangBase):
     def context_check(self, **kw):
         r = subprocess.run([sys.executable, str(HOOKS / "context-check.py")],
                            input=json.dumps({"transcript_path": str(self.transcript(5000))}),
-                           capture_output=True, text=True, env=self.env(CONTEXT_REMIND_TOKENS="1000", **kw), timeout=30)
+                           capture_output=True, text=True, env=self.env(CONTEXT_REMIND_TOKENS="1000", CHUTORA_CONTEXT_REMIND="1", **kw), timeout=30)
         return json.loads(r.stdout)["hookSpecificOutput"]["additionalContext"]
 
     def test_context_check_en(self):
@@ -140,7 +140,7 @@ class HookMessagesTest(LangBase):
     def statusline(self, **kw):
         r = subprocess.run([sys.executable, str(HOOKS / "statusline.py")],
                            input=json.dumps({"model": {"display_name": "Opus"}, "context_window": {"total_input_tokens": 5000}}),
-                           capture_output=True, text=True, env=self.env(**kw), timeout=30)
+                           capture_output=True, text=True, env=self.env(CHUTORA_CONTEXT_REMIND="1", **kw), timeout=30)
         return r.stdout
 
     def test_statusline_en(self):
