@@ -1,5 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { plain, newDeck, callStart, callEnd, todoProgress, addUsage, workload, progressSvg, workloadSvg, iconSvg } from '../hooks/deck-logic.js'
+import { DECK_LABELS } from '../hooks/deck-view.js'
+import { plain, newDeck, callStart, callEnd, todoProgress, addUsage, workload, progressSvg, workloadSvg, iconSvg, normalizeLimits, applyMeasure, recordTurn, mergeUsageFile, resetLabel, quotaSvg } from '../hooks/deck-logic.js'
 
 test('白話翻譯：與 chutora 狀態列同一份規則', async () => {
   expect(plain('Bash', { command: 'cd app && npm test -- checkout' }).text).toBe('跑測試')
@@ -105,4 +106,123 @@ test('tool.call 只觀察：結果原樣回傳', async ($, on) => {
   await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
   const ran: any = await $.tool.call({ tool: 'Grep', pattern: 'x' } as any)
   expect(ran.result).toBe('ok')
+})
+
+const RL = [
+  { kind: 'five_hour', percentUsed: 42, resetsAt: '2026-11-09T10:13:00.000Z' },
+  { kind: 'seven_day', percentUsed: 18.5, resetsAt: '2026-11-12T06:00:00.000Z' },
+  { kind: 'spend_limit', percentUsed: 5 },
+]
+const T0 = Date.parse('2026-11-09T08:00:00.000Z')
+
+test('額度：讀數正規化、空讀數不清舊值、上一輪 token（cache 讀取不算進 total）', async () => {
+  expect(normalizeLimits(RL)).toEqual({ five_hour: { pct: 42, resets_at: Date.parse('2026-11-09T10:13:00.000Z') / 1000 }, seven_day: { pct: 18.5, resets_at: Date.parse('2026-11-12T06:00:00.000Z') / 1000 } })
+  expect(normalizeLimits([{ kind: 'five_hour', percentUsed: 'x' }, null])).toEqual({})
+  const d = newDeck()
+  expect(applyMeasure(d, RL)).toBe(true)
+  expect(applyMeasure(d, [])).toBe(false)
+  expect(d.quota.limits.five_hour.pct).toBe(42)
+  expect(recordTurn(d, { input_tokens: 10, cache_creation_input_tokens: 200, cache_read_input_tokens: 5000, output_tokens: 30 })).toBe(true)
+  expect(d.quota.lastTurn).toEqual({ input: 10, cache_write: 200, cache_read: 5000, output: 30, total: 240 })
+  expect(recordTurn(d, undefined)).toBe(false)
+})
+
+test('額度：寫入 usage.json 只在較新時覆蓋並保留其他欄位；壞檔當空', async () => {
+  const lim = { five_hour: { pct: 42, resets_at: 100 } }
+  const old = JSON.stringify({ v: 1, limits: { source: 'statusline', updated_at: 1000, five_hour: { pct: 1, resets_at: 5 } }, claude: { net: -3 } })
+  expect(mergeUsageFile(old, lim, 1000)).toBe(null)
+  expect(mergeUsageFile(old, lim, 999)).toBe(null)
+  const out = JSON.parse(mergeUsageFile(old, lim, 1001) as string)
+  expect(out.limits).toEqual({ source: 'claude-mod', updated_at: 1001, five_hour: { pct: 42, resets_at: 100 } })
+  expect(out.claude).toEqual({ net: -3 })
+  expect(JSON.parse(mergeUsageFile('{壞掉', lim, 5) as string).limits.updated_at).toBe(5)
+  expect(JSON.parse(mergeUsageFile('', lim, 5) as string).v).toBe(1)
+  expect(mergeUsageFile(old, {}, 2000)).toBe(null)
+})
+
+test('額度：重置時間文字與長條圖', async () => {
+  const sec = (ms: number) => Math.floor((T0 + ms) / 1000)
+  expect(resetLabel(sec(2 * 3600e3 + 13 * 60e3), T0)).toBe('2h13m 後')
+  expect(resetLabel(sec(45 * 60e3), T0, 'en')).toBe('in 45m')
+  expect(resetLabel(sec(-1000), T0)).toBe('即將重置')
+  expect(resetLabel(sec(3 * 86400e3), T0)).toMatch(/^週[日一二三四五六] \d\d:\d\d$/)
+  expect(resetLabel(sec(3 * 86400e3), T0, 'en')).toMatch(/^[A-Z][a-z]{2} \d\d:\d\d$/)
+  expect(quotaSvg(96, 200).includes('#F85149')).toBe(true)
+  expect(quotaSvg(85, 200).includes('#E3B341')).toBe(true)
+  expect(quotaSvg(10, 200).includes('#3FB950')).toBe(true)
+})
+
+function quotaSetup(on: any, writes: string[], file?: string, usage: any = { rateLimits: RL }, lang = 'zh') {
+  mock.clock(on, { now: T0 })
+  mock.env(on, { HOME: '/home/u', CHUTORA_LANG: lang })
+  on('session.measure', () => ({ changed: ['rateLimits'] }))
+  on('turn.complete', () => ({ text: '' }))
+  on('session.start', () => ({ cwd: '/work' }))
+  on('command.register', () => ({ value: undefined }))
+  on('ui.status', () => ({ value: undefined }))
+  on('ui.panes', () => ({ value: [] }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('agent.list', () => ({ value: [] }))
+  on('session.usage', () => ({ value: { startedAt: 0, context: {}, rateLimits: usage.rateLimits } }))
+  on('fs.read', () => {
+    if (file === undefined) throw new Error('ENOENT')
+    return { value: file }
+  })
+  on('fs.write', (_$: any, e: any) => {
+    writes.push(e.path + '\n' + e.text)
+    return { value: undefined }
+  })
+}
+
+for (const surface of ['terminal', 'desktop'] as const) {
+  test('駕駛艙額度區（' + surface + '）：5h／週、重置、上一輪 token、寫入 usage.json', async ($, on) => {
+    const writes: string[] = []
+    quotaSetup(on, writes, JSON.stringify({ v: 1, claude: { net: 7 } }))
+    await $.session.start({ surface, isInteractive: true, cwd: '/work' })
+    expect(writes.length).toBe(1)
+    const [path, text] = writes[0].split('\n')
+    expect(path).toBe('/home/u/.claude/chutora/usage.json')
+    const j = JSON.parse(text)
+    expect(j.claude).toEqual({ net: 7 })
+    expect(j.limits.source).toBe('claude-mod')
+    expect(j.limits.updated_at).toBe(Math.floor(T0 / 1000))
+    expect(j.limits.five_hour.pct).toBe(42)
+
+    await $.session.measure({ context: {}, rateLimits: [{ kind: 'five_hour', percentUsed: 97, resetsAt: '2026-11-09T09:30:00.000Z' }], changed: ['rateLimits'] } as any)
+    await $.turn.complete({ turnId: 't1', answer: '', durationMs: 5, isAborted: false, reason: 'end_turn', usage: { model: 'claude-opus-5-5', input_tokens: 12, output_tokens: 300, cache_read_input_tokens: 90000, cache_creation_input_tokens: 1500 } } as any)
+    const ui = await $.ui.mount({
+      plugin: 'agent-board', component: 'Pane', requestId: 'agent-board', surface,
+      viewport: { columns: 100, rows: 40 },
+      props: { title: '駕駛艙', isFocused: true, bodyColumns: 70, placement: 'inline', scroll: { offset: 0, bodyRows: 30 }, view: {} },
+    } as any)
+    expect(await ui.find({ type: 'Text', text: /^額度$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^97%$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /重置 1h30m 後/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /上一輪 token：輸入 12 · 快取寫 1\.5k · 快取讀 90k · 輸出 300/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /沒有額度讀數/ })).toBeUndefined()
+    await ui.unmount()
+  })
+}
+
+test('駕駛艙額度區：沒有讀數（非訂閱）顯示「沒有額度讀數」，英文版跟 lang', async ($, on) => {
+  const writes: string[] = []
+  quotaSetup(on, writes, undefined, { rateLimits: [] }, 'en')
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  expect(writes.length).toBe(0)
+  const mount = () => $.ui.mount({
+    plugin: 'agent-board', component: 'Pane', requestId: 'agent-board', surface: 'terminal',
+    viewport: { columns: 100, rows: 40 },
+    props: { title: '駕駛艙', isFocused: true, bodyColumns: 70, placement: 'inline', scroll: { offset: 0, bodyRows: 30 }, view: {} },
+  } as any)
+  const ui = await mount()
+  expect(await ui.find({ type: 'Text', text: /^No usage reading$/ })).toBeDefined()
+  await ui.unmount()
+  expect(DECK_LABELS.zh.noQuota).toBe('沒有額度讀數')
+})
+
+test('額度寫檔失敗時安靜略過，且檔案較新時不覆蓋', async ($, on) => {
+  const writes: string[] = []
+  quotaSetup(on, writes, JSON.stringify({ v: 1, limits: { source: 'statusline', updated_at: Math.floor(T0 / 1000) + 50 } }))
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  expect(writes.length).toBe(0)
 })
