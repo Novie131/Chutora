@@ -54,7 +54,7 @@ Add `--with-statusline` (it can be combined with the default copy mode or `--lin
 "statusLine": { "type": "command", "command": "python3 ~/.claude/hooks/chutora/statusline.py" }
 ```
 
-We also recommend `"autoCompactWindow": 153000` (the script does not write it): after subtracting a buffer of about 33k, auto-compact triggers at roughly 120k, leaving about 20k of headroom after the 100k reminder to write the handoff; the handoff is injected back automatically after compaction. The 33k figure was measured on the author's machine; after writing the value, confirm with `/context` that the compact point is about 120k.
+We also recommend `"autoCompactWindow": 153000` (the script does not write it): after subtracting a buffer of about 33k, auto-compact triggers at roughly 120k, leaving headroom for the handoff; the handoff is injected back automatically after compaction. The 33k figure was measured on the author's machine; after writing the value, confirm with `/context` that the compact point is about 120k.
 
 ### Board mod (optional)
 

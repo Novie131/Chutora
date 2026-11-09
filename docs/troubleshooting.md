@@ -16,13 +16,22 @@
 
 ### 對話很長卻沒看到 context 提醒
 
-- 門檻預設 10 萬 token，可用環境變數 `CONTEXT_REMIND_TOKENS` 調整。
-- 提醒在你送出下一則訊息時才檢查，而且同一格只提醒一次（之後每多 4 萬再提醒）。
+預設就不提醒（少一段固定開銷）；壓縮前與結束對話時改由腳本自動存 `handoff-auto.md`。想恢復提醒：
+
+- 設環境變數 `CHUTORA_CONTEXT_REMIND=1`，或在 `~/.claude/chutora/remind` 寫 `on`。
+- 恢復後門檻預設 10 萬 token，可用 `CONTEXT_REMIND_TOKENS` 調整；在你送出下一則訊息時才檢查，同一格只提醒一次（之後每多 4 萬再提醒）。
 - 需要 `python3`；`/chutora doctor` 的「hook 觸發紀錄」一直是空的，代表 hooks 沒在跑。
 
 ### 狀態列沒出現
 
 plugin 沒辦法自己設定主狀態列。plugin 安裝的用 `/chutora:route-setup`；install.sh 安裝的用 `bash install.sh --with-statusline`。
+
+### 狀態列沒有額度（5h／週）或淨省
+
+- 額度只在 Claude Code 傳給狀態列的資料帶有 `rate_limits` 時才顯示（Claude Code 2.1.319 有，沒有讀數時整欄略過）；訂閱帳號以外（例如 API 金鑰）可能沒有。
+- 「淨≈」是估算的省下量減去外掛固定開銷，比較短的對話可能是負的，照實顯示。
+- Opus／Sonnet 週分項外掛拿不到，所以不顯示。
+- Mac 選單列沒東西：確認 SwiftBar 外掛資料夾裡有 `chutora-usage.1m.py`、`python3` 可用，且 `~/.claude/chutora/usage.json` 存在（要先用過設好的狀態列或面板）；細節見 [menubar/README.md](../menubar/README.md)。
 
 ### 狀態列沒顯示目前動作
 

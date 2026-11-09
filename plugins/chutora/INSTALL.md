@@ -54,7 +54,7 @@ bash install.sh
 "statusLine": { "type": "command", "command": "python3 ~/.claude/hooks/chutora/statusline.py" }
 ```
 
-另建議 `"autoCompactWindow": 153000`(腳本不會寫):扣掉約 33k buffer 後約 120k 自動壓縮,10 萬提醒後留 2 萬緩衝寫 handoff,壓縮後自動帶回交接筆記。33k 是作者機器的實測值,寫入後用 `/context` 確認壓縮點約 120k。
+另建議 `"autoCompactWindow": 153000`(腳本不會寫):扣掉約 33k buffer 後約 120k 自動壓縮,給 handoff 留下緩衝,壓縮後自動帶回交接筆記。33k 是作者機器的實測值,寫入後用 `/context` 確認壓縮點約 120k。
 
 ### 看板 mod(選用)
 
@@ -98,7 +98,7 @@ bash install.sh --with-explore
 bash install.sh --agents-only
 ```
 
-只複製 agent 定義(同樣記入清單)。代價是 hook(context 提醒、session 開始帶入記憶)與 skill(`/handoff`、`/research`、`/usage-stats`)不會生效。
+只複製 agent 定義(同樣記入清單)。代價是 hook(交接快照、session 開始帶入記憶)與 skill(`/handoff`、`/research`、`/usage-stats`)不會生效。
 
 ### 想自己維護、改了立即生效
 
@@ -129,7 +129,7 @@ claude --plugin-dir ./chutora.plugin
 | `effort` | 依失敗代價配置推理量 | 跟隨 session 設定 |
 | `omitClaudeMd` | bulk 不載入 CLAUDE.md(需 2.1.271+) | 會多載入 CLAUDE.md,較貴但可用 |
 
-context 長度提醒 hook 需要 `python3`;找不到時安靜停用。
+狀態列、交接快照與(開啟後的)context 提醒 hook 需要 `python3`;找不到時安靜停用。
 
 檢查版本:
 

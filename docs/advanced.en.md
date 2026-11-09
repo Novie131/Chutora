@@ -36,7 +36,7 @@ Just talk normally; the main conversation decides whether to delegate:
 
 To force a specific agent, use `@agent-chutora:worker`.
 
-When the conversation gets long (past 100k tokens by default) you get a reminder, and Claude first writes the current progress into `handoff.md`. After that, whether it is an auto-compact, a `/clear`, or a new conversation the next day, the handoff note comes back automatically, so you do not have to explain everything again.
+By default you are no longer reminded when the conversation gets long. Before every compact (PreCompact) and when a conversation ends (SessionEnd), a script writes `handoff-auto.md` automatically; when you say "hand off", Claude still writes `handoff.md` with the handoff skill. After that, whether it is an auto-compact, a `/clear`, or a new conversation the next day, the handoff note comes back automatically, so you do not have to explain everything again.
 
 ### Glossary
 
@@ -202,7 +202,7 @@ The savings come from four places, in order of impact:
 1. **Context isolation** (the biggest, and it compounds). Running 30 tool calls in the main conversation means paying for those 30 results until the conversation ends; in a subagent, the main conversation receives only a summary. Delegate whole chunks of work, not single steps, because each subagent launch pays the system prompt and memory injection again.
 2. **Model tiering.** Useful but linear: the saving is roughly the price difference.
 3. **`effort` levels.** worker uses `medium`, escalating to worker-hard (`high`) only on failure; librarian uses `low`.
-4. **Do not keep the main conversation open too long.** Isolation only covers tool calls, not the conversation itself growing longer, so the plugin also watches length and reminds you to write a handoff note past a threshold (see [Advanced settings](#advanced)). Starting a new conversation or `/clear` when a topic ends is still the cheapest.
+4. **Do not keep the main conversation open too long.** Isolation only covers tool calls, not the conversation itself growing longer, so the plugin also watches length and can remind you to write a handoff note past a threshold (off by default, see [Advanced settings](#advanced)); an automatic handoff snapshot is also saved on compact and on session end. Starting a new conversation or `/clear` when a topic ends is still the cheapest.
 
 ### When things fail
 
@@ -216,11 +216,11 @@ Failure escalation order: re-delegate to the same agent with added background, t
 
 ## <img src="../assets/icons/wrench.svg" width="26" height="26" alt=""> Advanced settings
 
-### Context reminders and auto-compact
+### Context reminders, automatic handoff snapshot and auto-compact
 
-- The UserPromptSubmit hook reminds you once when the context passes 100k tokens, then every additional 40k. Adjust the threshold with the environment variable `CONTEXT_REMIND_TOKENS`.
-- On reminder, Claude writes the current state into `handoff.md` with the handoff skill (current task / done / next steps / open questions).
-- If `autoCompactWindow` is set, the reminder just tells you auto-compact will happen at about N k and the handoff will be restored; otherwise it gives you a copyable command: `/clear` at a stopping point, `/compact` with a focus mid-task, or `/rewind` with a partial summary if the later part is debugging noise.
+- **The reminder is off by default**: the UserPromptSubmit context-length reminder injects nothing unless you turn it on. Set the environment variable `CHUTORA_CONTEXT_REMIND=1`, or write `on` into `~/.claude/chutora/remind`, to bring it back: it then reminds once past 100k tokens and every additional 40k; adjust the threshold with `CONTEXT_REMIND_TOKENS`.
+- With the reminder on, Claude writes the current state into `handoff.md` with the handoff skill (current task / done / next steps / open questions). If `autoCompactWindow` is set, the reminder just tells you auto-compact will happen at about N k and the handoff will be restored; otherwise it gives you a copyable command.
+- **Automatic handoff snapshot**: PreCompact and SessionEnd have a plain script (no AI) write `handoff-auto.md` (into `claude-memory/` if the project has it, otherwise `~/.claude/chutora/handoff/<project-id>.md`): time, branch and last 3 commits, last 5 prompts (each cut to 200 characters and redacted), files touched, latest to-dos. Your own `handoff.md` is never touched; SessionStart only injects a one-line pointer, to be read when needed.
 - The SessionStart hook injects `handoff.md` after every compact, `/clear` and startup: from `claude-memory/` if the project has it, otherwise from the auto memory directory next to the transcript (Claude Code only injects the MEMORY.md index of auto memory, never handoff.md).
 
 Recommended: set auto-compact as a safety net in `~/.claude/settings.json` (a plugin cannot set it for you; `/chutora:route-setup` writes it safely):
@@ -229,15 +229,21 @@ Recommended: set auto-compact as a safety net in `~/.claude/settings.json` (a pl
 "autoCompactWindow": 153000
 ```
 
-After subtracting a buffer of about 33k, auto-compact triggers at roughly 120k, leaving about 20k of headroom after the 100k reminder to write the handoff. The 33k figure was measured on the author's machine (it is not known to be fixed); after writing the value, confirm with `/context` that the Autocompact buffer is about 33k and the compact point about 120k (and also check any per-model overrides in `modelSettings`).
+After subtracting a buffer of about 33k, auto-compact triggers at roughly 120k, leaving headroom for the handoff. The 33k figure was measured on the author's machine (it is not known to be fixed); after writing the value, confirm with `/context` that the Autocompact buffer is about 33k and the compact point about 120k (and also check any per-model overrides in `modelSettings`).
 
 ### Status line (optional)
 
-When idle it shows `model │ ctx 95k │ reminder 100k │ compact 120k`; while Claude works it shows the current action instead (the Flight Deck stable path): `▶ worker·Sonnet Run tests npm test · 12s │ session 42k tok │ trimmed≈8k │ ctx 95k/120k`. "session" is the tokens newly processed this session (input + cache writes + output, excluding cache reads, main plus subagents, summed exactly from the transcript); "trimmed≈" is the characters kept out by trimming, dedup and MCP trimming ÷4, an estimate. The current action is recorded by `activity.py` under `~/.claude/chutora/activity/` (`CHUTORA_ACTIVITY=0` turns it off); when space is short, later fields are dropped by importance (`CHUTORA_STATUS_WIDTH` sets the width). The compact point is read from `autoCompactWindow` (not shown if unset). A plugin cannot configure the main status line: plugin users should use `/chutora:route-setup`, which places the file in a fixed location; install.sh users can run `bash install.sh --with-statusline` or paste this into settings.json by hand:
+When idle it shows `Opus │ 5h 42%(2h13m) │ wk 18%(Thu 23:15) │ ctx 95k │ last 12.3k │ net≈-1.2k │ session 12k tok`; while Claude works it shows the current action instead (the Flight Deck stable path): `▶ worker·Sonnet Run tests npm test · 12s │ 5h 42%(2h13m) │ wk 18%(Thu 23:15) │ ctx 95k/120k │ last 12.3k │ net saved≈+3k │ session 42k tok`. "5h" and "wk" are the limit percentages and reset times Claude Code passes to the status line (shown only when it has a reading; yellow past 80%, red past 95%); "last" is the tokens since the latest prompt (input + cache writes + output, excluding cache reads); "session" is the tokens newly processed this session (main plus subagents, summed exactly from the transcript). "net saved≈" is the characters kept out by trimming, dedup and MCP trimming ÷4 (an estimate) minus the plugin's fixed overhead (SessionStart injection plus skills / agents descriptions ÷4); when the overhead is larger it is shown as it is, negative, such as `net≈-1.2k`, which does not mean it saves every time. `remind 100k` appears only when the reminder is on; `compact 120k` appears when `autoCompactWindow` is set. Every run writes the limits and usage into `~/.claude/chutora/usage.json` for the menu bar and the panel to read. The current action is recorded by `activity.py` under `~/.claude/chutora/activity/` (`CHUTORA_ACTIVITY=0` turns it off); when space is short, later fields are dropped by importance (limits last; `CHUTORA_STATUS_WIDTH` sets the width). A plugin cannot configure the main status line: plugin users should use `/chutora:route-setup`, which places the file in a fixed location; install.sh users can run `bash install.sh --with-statusline` or paste this into settings.json by hand:
 
 ```json
 "statusLine": { "type": "command", "command": "python3 ~/.claude/hooks/chutora/statusline.py" }
 ```
+
+### Mac menu bar and Flight Deck limits area (optional)
+
+- **Mac menu bar**: `menubar/chutora-usage.1m.py` is a SwiftBar / xbar plugin that shows Claude's and Codex's 5-hour and weekly limits in the menu bar (for example `C 5h42% wk18% · X 5h10% wk3%`); open it for reset times and last-turn tokens. Claude's data comes from `usage.json`, Codex's from the `token_count` events in the newest rollout file under `~/.codex/sessions/`. Install with `bash install.sh --with-menubar`; details in [menubar/README.md](../menubar/README.md) (Chinese).
+- **Flight Deck "limits" area**: the `agent-board` panel gains an area showing 5-hour / weekly usage, reset times and last-turn tokens; when running locally it also writes `usage.json`. Cowork runs in the cloud, so the status line and menu bar cannot get it; only the panel works there.
+- **Limits**: the per-model Opus / Sonnet weekly split is not available to the plugin or the status line, so it is not shown; for what has actually been tested see [spec.md](spec.md) (Chinese).
 
 ### Subagent board and reply-mode switch (optional)
 

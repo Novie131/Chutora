@@ -18,7 +18,7 @@
           ├──► Explore(Haiku)     ← 搜程式碼。使用者層級,需另裝
           └──► harvester(Sonnet)  ← 挖歷史對話進知識庫。手動觸發
 
-hook :SessionStart 帶入分工慣例、記憶索引、交接筆記;UserPromptSubmit 在 context 過長時提醒
+hook :SessionStart 帶入分工慣例、記憶索引、交接筆記;PreCompact／SessionEnd 自動寫交接快照(context 長度提醒預設關閉)
 skill:handoff 寫交接筆記;research 查外部資料、附來源、存筆記;usage-stats 量測 context 與子 agent 用量
 ```
 
@@ -77,7 +77,7 @@ worker 從 0.6 的 `low` 改為 `medium`:執行層做錯由主對話收拾的成
 
 ## 省 token 的四個槓桿
 
-0. **對話長度**(實測最大)。21 個 session、約 2,000 次呼叫的實測:主對話每次呼叫的 context 中位數約 24 萬 token,快取讀取約 4.9 億 vs 輸出 240 萬——錢花在每輪重讀舊對話。→ hook 在 10 萬 token 時提醒、之後每 4 萬再提醒;handoff skill 寫下現況;建議另設 `autoCompactWindow: 153000`(約 12 萬自動壓縮),壓縮後自動帶回 handoff(見 0.8 全自動 context 管理)。
+0. **對話長度**(實測最大)。21 個 session、約 2,000 次呼叫的實測:主對話每次呼叫的 context 中位數約 24 萬 token,快取讀取約 4.9 億 vs 輸出 240 萬——錢花在每輪重讀舊對話。→ 壓縮前與結束時由腳本自動寫 `handoff-auto.md`;handoff skill 寫下現況;context 長度提醒(10 萬 token、之後每 4 萬)預設關閉,`CHUTORA_CONTEXT_REMIND=1` 或 `~/.claude/chutora/remind` 寫 on 才恢復(固定開銷考量,見「用量儀表實測」);建議另設 `autoCompactWindow: 153000`(約 12 萬自動壓縮),壓縮後自動帶回 handoff(見 0.8 全自動 context 管理)。
 1. **Context 隔離**(複利)。對話中每則訊息在後續每一輪都會重送。30 次工具呼叫留在主對話 = 被反覆計費到對話結束;派給 subagent 則主對話只收摘要。→ **整包派工,不要一件一件派**,每次啟動 subagent 都要重付系統提示與記憶注入。
 2. **模型分層**。線性效果,省的比例約等於價差比例。
 3. **`effort`**。librarian `low`、worker `medium`、worker-hard `high`。依失敗代價配置,不是一律壓低。
@@ -315,7 +315,7 @@ claude-memory/
 
 **SessionStart hook**(matcher `startup|clear|compact`)— 輸出 `guide.md`,再附 `claude-memory/MEMORY.md`(≤120 行)與 `handoff.md`(≤80 行),兩者都略過 HTML 註解與空行。`resume` 不觸發,因為恢復的對話已含先前帶入的內容。
 
-**UserPromptSubmit hook** — 從 `transcript_path` 讀主對話(排除 sidechain)最後一次呼叫的 input + cache 讀寫 token;以 10 萬為門檻(預設值集中在 `compact.py` 的 `DEFAULT_REMIND`)、每 4 萬一格,「上次在哪一格」記在 `${CLAUDE_PLUGIN_DATA}/.context-check-state.json`(只比最後兩次呼叫會漏掉回合中途跨門檻的情況)。跨進新的一格才以 `additionalContext` 提醒一次,文字用陳述語氣。
+**UserPromptSubmit hook(預設關閉,`CHUTORA_CONTEXT_REMIND=1` 或 `~/.claude/chutora/remind` 為 on 才啟用)** — 從 `transcript_path` 讀主對話(排除 sidechain)最後一次呼叫的 input + cache 讀寫 token;以 10 萬為門檻(預設值集中在 `compact.py` 的 `DEFAULT_REMIND`)、每 4 萬一格,「上次在哪一格」記在 `${CLAUDE_PLUGIN_DATA}/.context-check-state.json`(只比最後兩次呼叫會漏掉回合中途跨門檻的情況)。跨進新的一格才以 `additionalContext` 提醒一次,文字用陳述語氣。
 
 ## 0.8 回報選擇題
 
@@ -335,16 +335,16 @@ worker、worker-hard、bulk 的回報前兩行固定:
 ## 0.8 context 可見性
 
 - `compact.py` 的 `compact_point()`:讀 `~/.claude/settings.json` 的 `autoCompactWindow`,減 buffer(預設 33000,作者機器實測 183000 時 `/context` 顯示 33k(是否固定值未知);建議值 153000 約 120k 壓縮,寫入後請用 `/context` 確認;環境變數 `CONTEXT_AUTOCOMPACT_BUFFER` 可覆寫)。沒設定、讀不到、JSON 壞掉回 None。
-- `statusline.py`:`模型 │ ctx Nk │ 提醒 100k │ 壓縮 120k`。用 `context_window.total_input_tokens`(缺時加總 `current_usage`),不用 `used_percentage`(以完整視窗算,1M 模型 10 萬只顯示 10%)。plugin 不能設主狀態列;`install.sh --with-statusline` 只在使用者沒有 `statusLine` 時寫入(先備份),絕不碰其他鍵,也不寫 `autoCompactWindow`。
-- context-check 的提醒文字在壓縮點已知時帶入「約 Nk 會自動壓縮」,import 失敗退回原句。
+- `statusline.py`:`模型 │ 5h 42%(2h13m) │ 週 18%(週四23:15) │ ctx Nk │ 上輪 12.3k │ 淨≈-1.2k │ 本次 12k tok`(提醒開啟才有 `提醒 100k`,有 `autoCompactWindow` 才有 `壓縮 120k`)。額度取自 stdin 的 `rate_limits.five_hour／seven_day`(只在有讀數時出現);淨省＝省下(瘦身字元÷4)−固定開銷(SessionStart 實際注入字元÷4＋skills／agents 的 name＋description 字元÷4),照實可為負;每次執行把額度與 claude 區塊寫入 `~/.claude/chutora/usage.json`(`usage.py`)。context 用 `context_window.total_input_tokens`(缺時加總 `current_usage`),不用 `used_percentage`(以完整視窗算,1M 模型 10 萬只顯示 10%)。plugin 不能設主狀態列;`install.sh --with-statusline` 只在使用者沒有 `statusLine` 時寫入(先備份),絕不碰其他鍵,也不寫 `autoCompactWindow`。
+- (提醒開啟時)context-check 的提醒文字在壓縮點已知時帶入「約 Nk 會自動壓縮」,import 失敗退回原句。
 - guide.md 加兩條:持續萃取 handoff、實作派 worker 不派 general-purpose(實測曾有 408 次實作跑在 Opus)。
 
 ## 0.8 全自動 context 管理
 
 目標:使用者不需要手動 `/clear`。流程:
 
-1. context 到 10 萬(`DEFAULT_REMIND`,可用 `CONTEXT_REMIND_TOKENS` 覆寫):UserPromptSubmit hook 提醒;有設 `autoCompactWindow` 時,Claude 先依 handoff skill 更新 `handoff.md`,再用一句話告知「約 N k 會自動壓縮、壓縮後自動帶回交接筆記」,不再給 /compact、/rewind 指令選單;沒設才維持三選一可複製指令。
-2. 約 12 萬(`autoCompactWindow` 153000 扣 buffer 約 33k;buffer 是作者機器實測、未確認固定,寫入後用 `/context` 確認):Claude Code 自動壓縮。10 萬提醒到 12 萬壓縮之間留 2 萬緩衝寫 handoff。
+1. (僅在提醒開啟時)context 到 10 萬(`DEFAULT_REMIND`,可用 `CONTEXT_REMIND_TOKENS` 覆寫):UserPromptSubmit hook 提醒;預設關閉,改由 PreCompact／SessionEnd 的 `snapshot.py` 純腳本寫 `handoff-auto.md`(時間、分支與最近 3 commit、最近 5 則提示、碰過的檔案、最新待辦),SessionStart 只帶一行指標;有設 `autoCompactWindow` 時,Claude 先依 handoff skill 更新 `handoff.md`,再用一句話告知「約 N k 會自動壓縮、壓縮後自動帶回交接筆記」,不再給 /compact、/rewind 指令選單;沒設才維持三選一可複製指令。
+2. 約 12 萬(`autoCompactWindow` 153000 扣 buffer 約 33k;buffer 是作者機器實測、未確認固定,寫入後用 `/context` 確認):Claude Code 自動壓縮。(提醒開啟時)10 萬提醒到 12 萬壓縮之間留 2 萬緩衝寫 handoff。
 3. 壓縮後 SessionStart(matcher `startup|clear|compact`)hook 自動帶回 handoff 全文:專案有 `claude-memory/` 就用它;沒有時從 stdin JSON 的 `transcript_path` 取上層目錄的 `memory/handoff.md`(去掉 HTML 註解與空行,上限 80 行,標題寫明路徑)。仍刻意不帶 auto memory 的 `MEMORY.md`(Claude Code 本來就會帶,重複只會多付費)。
 
 為何 auto memory 使用者以前會漏讀 handoff:Claude Code 只自動帶入 auto memory 的 `MEMORY.md` 索引,索引裡指向 handoff.md 的那一行得靠模型自己想到去讀,壓縮或 /clear 後常常沒讀;只有 `claude-memory/` 的使用者有 hook 帶入全文。
@@ -376,6 +376,19 @@ Chutora 要在 **Cowork（Claude Desktop）、Claude Code CLI、VS Code 擴充�
 | VS Code 擴充 | 待使用者實跑自我檢查 | 底層同為 Claude Code，預期與 CLI 相同。`hooks/selfcheck.py` 已寫好（唯讀，印出環境、hook 觸發、守門與瘦身 dry 結果、語言），步驟見 [vscode-check.md](vscode-check.md)，結果尚未回報 |
 | Cowork | 開發中（feat/v2-cowork） | 底層是 Claude Code 2.1.319，會跑 hook；外掛須上傳到 claude.ai 才會同步進 session。存取使用者資料夾走 `mcp__remote-devices__device_bash`：守門（含 `find -exec` 子指令）、瘦身與只讀指令的輸出去重已涵蓋；決策引擎復原點尚未涵蓋（復原點建不到使用者電腦） |
 | Codex | 已研究，待實作轉接層 | 通用層可轉；守門只能 deny；瘦身／去重無法改寫輸出。見下方「Codex 轉接方案」 |
+
+### 用量儀表實測狀態（2026-11-09）
+
+| 項目 | 實測狀態 |
+|---|---|
+| CLI 狀態列 | 雲端容器用假 stdin JSON 實跑通過(Claude Code 2.1.319 的 statusline JSON 帶 `rate_limits.five_hour／seven_day`,來源:binary 字串);真實訂閱帳號的互動式 CLI 未實測 |
+| Mac 選單列 | Linux 上用假 `usage.json`＋假 Codex rollout 實跑通過;macOS＋SwiftBar 未實測 |
+| 面板 mod(Desktop／VS Code) | `claude plugin test` 在 terminal 與 desktop surface 掛載通過;真實 app 未實測 |
+| Codex | 選單列依 codex-rs 原始碼的 `token_count` 格式解析;真實 Codex 檔案未實測;Codex 自身狀態列未做 |
+| Cowork | 在雲端,狀態列與選單列拿不到;只有面板(未實測) |
+| Opus／Sonnet 週分項 | 外掛與狀態列拿不到(只在 host 控制請求 `get_usage`),不做 |
+
+固定開銷實測(÷4 估算):SessionStart 注入中文約 677 tok、英文約 1653 tok;skills／agents 描述約 502 tok;合計中文約 1179、英文約 2155。英文版注入比中文多一倍以上,**待辦:壓低固定開銷**(尤其英文版)。因此「淨省」照實可為負,文件不宣稱省下特定百分比。
 
 ### Codex 轉接方案（2026-11-09 研究）
 

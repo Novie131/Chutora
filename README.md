@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/Novie131/chutora/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Novie131/chutora/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="version 0.16.0-beta.4" src="https://img.shields.io/badge/version-0.16.0--beta.4-FF6A26">
+  <img alt="version 0.16.0-beta.5" src="https://img.shields.io/badge/version-0.16.0--beta.5-FF6A26">
   <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-1B2D52">
   <img alt="VS Code supported" src="https://img.shields.io/badge/VS%20Code-supported-1B2D52">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-2EA043"></a>
@@ -41,7 +41,7 @@
 |---|---|---|
 | <img src="assets/icons/money.svg" width="18" height="18" alt=""> 所有事都用最貴的模型 | 讀 log、看截圖、改幾十個檔都付 Opus 的價 | Opus 只負責想和判斷，動手交給 Sonnet，大量讀取交給 Haiku |
 | <img src="assets/icons/scissors.svg" width="18" height="18" alt=""> 一次安裝、一份 log 就塞爆 context | 幾千行進度訊息整份留在對話裡，之後每一輪都重讀 | 進到 context 前先瘦身；重讀沒變的檔案只回一行；MCP 的大坨資料也先瘦身，原文另存 |
-| <img src="assets/icons/scroll.svg" width="18" height="18" alt=""> 對話越拉越長 | 越後面越貴、越亂；一清空進度就沒了 | 超過 10 萬 token 先提醒寫交接筆記；壓縮、`/clear` 或隔天開新對話都自動接回 |
+| <img src="assets/icons/scroll.svg" width="18" height="18" alt=""> 對話越拉越長 | 越後面越貴、越亂；一清空進度就沒了 | 壓縮或結束對話時由腳本自動存一份交接快照；壓縮、`/clear` 或隔天開新對話都自動接回（預設不再提醒） |
 | <img src="assets/icons/loop.svg" width="18" height="18" alt=""> AI 卡在同一個錯誤 | 反覆重試、一直燒 token | loop guard 提醒換方向；失敗依固定順序升級，不會無限重試 |
 | <img src="assets/icons/question.svg" width="18" height="18" alt=""> 會錯意、做錯再重做 | 一開工就照自己的理解做下去 | 需求模糊或你說不確定時，先用選擇題問清楚再動手 |
 | <img src="assets/icons/brain.svg" width="18" height="18" alt=""> 「之前好像講過」 | 每次都要重新解釋 | 記憶就是 Markdown，librarian 查回原文與出處，可以進 git、用 Obsidian 開 |
@@ -93,10 +93,11 @@
 
 | 功能 | 觸發 | 做什麼 |
 |---|---|---|
-| context 長度提醒 | 自動 | 超過 10 萬 token 提醒一次，之後每多 4 萬再提醒（可用 `CONTEXT_REMIND_TOKENS` 調整） |
+| context 長度提醒 | 預設關閉 | 預設不提醒（少一段固定開銷）；設環境變數 `CHUTORA_CONTEXT_REMIND=1`，或在 `~/.claude/chutora/remind` 寫 `on` 才恢復。恢復後超過 10 萬 token 提醒一次，之後每多 4 萬再提醒（可用 `CONTEXT_REMIND_TOKENS` 調整） |
+| 自動交接快照 | 自動 | PreCompact（壓縮前）與 SessionEnd（結束時）由純腳本寫 `handoff-auto.md`：時間、分支與最近 3 個 commit、最近 5 則提示、碰過的檔案、最新待辦；不動你的 `handoff.md`，新對話只帶一行指標 |
 | `handoff` | 指令 | 把目前任務、已完成、下一步、未決問題寫進 `handoff.md`，之後可以放心 `/clear`。說「交接一下」也會觸發 |
 | 交接筆記自動帶回 | 自動 | 新對話、`/clear`、自動壓縮之後，自動帶入分工慣例、記憶索引與 `handoff.md` |
-| context 狀態列 | 選裝 | 顯示 `模型 │ ctx 95k │ 提醒 100k │ 壓縮 120k` |
+| 用量狀態列 | 選裝 | 顯示 `Opus │ 5h 42%(2h13m) │ 週 18%(週四23:15) │ ctx 95k │ 上輪 12.3k │ 淨≈-1.2k │ 本次 12k tok`：5 小時與每週額度（附重置時間）、context、上一輪 token、淨省≈、本 session 總量。「淨≈」是估算的省下量減去外掛固定開銷，照實顯示，可能是負的 |
 | 自動壓縮門檻 | 選裝 | 在 `settings.json` 設 `autoCompactWindow` 當保險，`route-setup` 可以幫你安全寫入 |
 
 ### 4. 反問：先問清楚再動手
@@ -158,10 +159,20 @@
 | `/chutora changes`／`ok`／`undo` | 指令 | 決策引擎（實驗中）：列出自動做了、還沒確認的動作；`ok <id|all> auto`（這類以後可自動）／`ask`（下次先問我）；`undo <id>` 用復原點還原 |
 | 三種模式 | 指令 | `/chutora mode economy`／`balanced`／`quality`：改變 session 開始時帶入的派工慣例、瘦身門檻與反問題數，不改各 agent 的模型 |
 | 中英雙語 | 自動 | 提醒訊息、狀態列、`/chutora` 依系統語言切換；`/chutora lang zh`／`en`／`auto` 可固定 |
-| 駕駛艙狀態列 | 自動（設好狀態列後） | Claude 工作時狀態列即時顯示目前動作：`▶ worker·Sonnet 跑測試 npm test · 12s │ 本次 42k tok │ 瘦身省≈8k │ ctx 95k/120k`；閒置時維持原本的精簡版。只用官方狀態列與標準 hooks，`CHUTORA_ACTIVITY=0` 關閉 |
+| 駕駛艙狀態列 | 自動（設好狀態列後） | Claude 工作時狀態列即時顯示目前動作：`▶ worker·Sonnet 跑測試 npm test · 12s │ 5h 42%(2h13m) │ 週 18%(週四23:15) │ ctx 95k/120k │ 上輪 12.3k │ 淨省≈+3k │ 本次 42k tok`；閒置時顯示上面的精簡版。只用官方狀態列與標準 hooks，`CHUTORA_ACTIVITY=0` 關閉 |
 | 駕駛艙面板（`agent-board`） | 選裝 | 輸入框上方或側邊的常駐面板：「現在」大卡、待辦分格進度、三色工作量長條（交出去的比例、瘦身擋下的量、主對話 context）、動作時間線（白話＋原始指令、子 agent 縮排在派工下）、碰過的檔案（附增刪行數）、子 agent 列表。桌面版／VS Code／手機用圖像版，終端機用文字版。用 `/agent-board` 開關 |
 | `reply-detail` | 選裝 | 回覆預設精簡三段（現況／你要做的／需要你決定或提供）；用看板的「⇄ 回覆：精簡／詳細」切換，或輸入「詳細說明」單次改寫成詳細版 |
 | `route-setup` | 指令 | 一次性完整設定：記憶庫、Haiku 版 Explore、自動壓縮門檻、狀態列。一次只問一項，改設定前先備份 |
+
+### 10. 用量儀表：額度與淨省一眼看
+
+| 功能 | 觸發 | 做什麼 |
+|---|---|---|
+| 狀態列額度與淨省 | 選裝（設好狀態列後） | 見上方「用量狀態列」；額度讀自 Claude Code 傳給狀態列的資料，有讀數才顯示 |
+| Mac 選單列 | 選裝 | SwiftBar／xbar 外掛，在選單列顯示 Claude 與 Codex 的 5 小時、每週額度，點開看重置時間與上一輪 token。`bash install.sh --with-menubar` 安裝，細節見 [menubar/README.md](menubar/README.md) |
+| 駕駛艙「額度」區 | 選裝（`agent-board`） | 面板裡顯示 5 小時／每週用量、重置時間與上一輪 token；Cowork 在雲端，只能看面板 |
+
+限制：Opus／Sonnet 分項額度外掛拿不到，所以不顯示；固定開銷（SessionStart 注入加 skills／agents 描述）會被計入「淨」，所以淨省≈ 可能是負值。
 
 ---
 
@@ -189,7 +200,7 @@
 
 **3. 照平常講話**
 
-主對話會自己判斷要不要派工：說「照剛才講的做」就交給 worker，「看這份 log 為什麼失敗」就交給 bulk，「我之前記過 X 嗎」就交給 librarian。需求不清楚時，它會先用選擇題問你幾題；你也可以直接說「先問我」或輸入 `/chutora ask`。對話超過 10 萬 token 會提醒你先寫交接筆記，之後不管是 `/clear` 還是隔天開新對話，進度都會自動接回。
+主對話會自己判斷要不要派工：說「照剛才講的做」就交給 worker，「看這份 log 為什麼失敗」就交給 bulk，「我之前記過 X 嗎」就交給 librarian。需求不清楚時，它會先用選擇題問你幾題；你也可以直接說「先問我」或輸入 `/chutora ask`。壓縮或結束對話時會自動存一份交接快照，之後不管是 `/clear` 還是隔天開新對話，進度都會自動接回。
 
 **4. 卡住怎麼辦**
 
@@ -216,7 +227,7 @@ flowchart LR
   O --> SR["security-review · Sonnet<br/>靜態審查，唯讀"]
   O --> ST["security-test · Sonnet<br/>授權動態測試"]
   L --- M[("claude-memory<br/>MEMORY.md · handoff.md · kb/ · web/")]
-  HK[["hooks<br/>帶入慣例與記憶 · context 提醒 · loop guard"]] -.-> O
+  HK[["hooks<br/>帶入慣例與記憶 · 自動交接快照 · loop guard"]] -.-> O
   classDef lead fill:#FF6A26,stroke:#C2410C,color:#fff
   classDef mem fill:#1B2D52,stroke:#0E1A31,color:#fff
   class O lead
@@ -235,7 +246,7 @@ flowchart LR
 | Explore（選裝） | Haiku | 內建 Explore 在主對話是 Opus 時也跑 Opus。plugin 蓋不掉它（只有使用者或專案層級、名為 `Explore` 的 agent 能覆蓋），所以用 route-setup 或 `bash install.sh --with-explore` 把 Haiku 版裝進 `~/.claude/agents/` |
 
 - **Skills**：`handoff` 寫 `handoff.md`；`research` 查外部資料並附來源；`usage-stats` 量測主對話 context 長度、各 agent 的派工次數、token 用量與估計金額（唯讀；加 `--html` 可輸出圖表報表）；`route-setup` 是一次性完整設定。
-- **Hooks**：SessionStart 帶入分工慣例、記憶索引與交接筆記；UserPromptSubmit 在 context 過長時提醒。
+- **Hooks**：SessionStart 帶入分工慣例、記憶索引與交接筆記；PreCompact／SessionEnd 自動寫交接快照；UserPromptSubmit 的 context 長度提醒預設關閉。
 - **新增能力**：`evidence-analysis`（證據導向分析：結論分 觀察／推論／未知 並附出處）；`security-review`／`security-test`（防禦性安全：靜態審查＋授權動態測試）。安全能力只用於你自己或明確授權的程式碼與環境，動態測試只在隔離環境、不碰 production、不外送資料。
 - **省 token 與自我強化**：`toolprune`（指認長期沒用到的工具、建議停用，可逆）；`harness-tune`（針對某類任務調整 harness，改前確認、可回滾，取自 harness2）；PostToolUse `loop guard` hook（同一錯誤重複就提醒換方向，只提醒不中斷，取自 TokenEconomizer）；micro-skills（把這個 repo 的固定指令事實記進記憶，少走回頭路）。
 
@@ -322,7 +333,7 @@ ANTHROPIC_API_KEY=... python3 bench/run.py --runs 3 --model opus
 
 ## <img src="assets/icons/pin.svg" width="26" height="26" alt=""> 狀態
 
-**v0.16.0-beta.4 — 早期版本（實驗中：feat/v2-batch2）。** 0.10.0 以前叫 smart-agent-route、0.7.0 以前叫 tiered-agents，升級請先移除舊版（見 [docs/部署安裝.md](docs/部署安裝.md#從-smart-agent-route0100-以前升級)）。 context 提醒 hook、handoff、bulk、Explore 覆蓋版移植自作者的個人設定：hook 已在真實對話中觸發、Explore 與 bulk 已確認跑在 Haiku，但都還在驗證期。worker-hard 升級鏈、research skill 與 plugin 形式的 hook 尚未實際使用。agent-board 與 reply-detail 已在 VS Code 擴充 2.1.301 實測過看板；常駐模式、看板裡的按鈕與回覆格式注入還在驗證。0.12 新增的 `/chutora`、doctor、三種模式、中英雙語與每週回顧已有單元測試，還沒在真實對話中長期驗證。0.13 的噪音輸出瘦身與 0.14 的讀檔去重、MCP 輸出瘦身、反問都有單元測試，但替換工具輸出的格式是依 Claude Code 型別定義與官方文件推斷，還沒在真實對話中確認。0.16 的危險守門、觀察紀錄與 MCP 瘦身修正有單元測試，並用 `claude -p`（Claude Code 2.1.319）實測過：守門在預設模式與 `--dangerously-skip-permissions` 下都把要問的指令攔下沒有執行、一般指令照常執行；觀察紀錄不增加 token；長篇純文字的 MCP 輸出完整保留、長 JSON 陣列照常瘦身。0.16.0-beta.2 的略過權限模式直接擋、route-setup 只問一次、觀察紀錄隱私開關與被瘦身／重讀訊號有單元測試，並用 `claude -p --dangerously-skip-permissions`（Claude Code 2.1.319）實測：hook 收到的 `permission_mode` 是 `bypassPermissions`，force push 到不存在的 remote 被直接擋下、訊息正確，`git reset --hard` 仍是「先問你」（非互動沒人確認所以沒執行），一般指令照常；觀察紀錄出現 `trimmed` 與 `reread`。互動模式下守門跳出的確認畫面還沒實測，可照[疑難排解](docs/troubleshooting.md#在你自己的互動式-claude-code-驗證危險守門)自己驗證。 0.16.0-beta.3 的決策引擎有單元測試（公式、平滑、冷啟動、相似度、校準、門檻與模式、復原點與 undo、通知與回饋、守門整合），並用 `claude -p`（Claude Code 2.1.319、Sonnet）實測：暫存專案裡 `rm -rf build/` 第一次在略過權限模式下照常執行、先建復原點並在回覆結尾附一行；回 `/chutora:chutora ok <id> auto`（由 UserPromptSubmit hook 直接處理）後，預設權限模式的 `claude -p` 也自動執行了同一個指令並通知，換成 `rm -rf dist/` 就沒有自動（被拒）；`/chutora:chutora undo <id>` 把 `build/` 還原；force push 到不存在的 remote 在略過權限模式下直接擋、預設模式先問，回 `ok … auto` 也學不成自動；settings 的 `permissions.deny` 仍然優先於 hook 的 allow。一般流程每個請求固定多約 320 個輸入 token（分工慣例多兩行）。互動模式下的通知與回饋還沒實測。
+**v0.16.0-beta.5 — 早期版本（實驗中：feat/v2-batch2）。** 0.10.0 以前叫 smart-agent-route、0.7.0 以前叫 tiered-agents，升級請先移除舊版（見 [docs/部署安裝.md](docs/部署安裝.md#從-smart-agent-route0100-以前升級)）。 context 提醒（現已預設關閉）、handoff、bulk、Explore 覆蓋版移植自作者的個人設定：hook 已在真實對話中觸發、Explore 與 bulk 已確認跑在 Haiku，但都還在驗證期。worker-hard 升級鏈、research skill 與 plugin 形式的 hook 尚未實際使用。agent-board 與 reply-detail 已在 VS Code 擴充 2.1.301 實測過看板；常駐模式、看板裡的按鈕與回覆格式注入還在驗證。0.12 新增的 `/chutora`、doctor、三種模式、中英雙語與每週回顧已有單元測試，還沒在真實對話中長期驗證。0.13 的噪音輸出瘦身與 0.14 的讀檔去重、MCP 輸出瘦身、反問都有單元測試，但替換工具輸出的格式是依 Claude Code 型別定義與官方文件推斷，還沒在真實對話中確認。0.16 的危險守門、觀察紀錄與 MCP 瘦身修正有單元測試，並用 `claude -p`（Claude Code 2.1.319）實測過：守門在預設模式與 `--dangerously-skip-permissions` 下都把要問的指令攔下沒有執行、一般指令照常執行；觀察紀錄不增加 token；長篇純文字的 MCP 輸出完整保留、長 JSON 陣列照常瘦身。0.16.0-beta.2 的略過權限模式直接擋、route-setup 只問一次、觀察紀錄隱私開關與被瘦身／重讀訊號有單元測試，並用 `claude -p --dangerously-skip-permissions`（Claude Code 2.1.319）實測：hook 收到的 `permission_mode` 是 `bypassPermissions`，force push 到不存在的 remote 被直接擋下、訊息正確，`git reset --hard` 仍是「先問你」（非互動沒人確認所以沒執行），一般指令照常；觀察紀錄出現 `trimmed` 與 `reread`。互動模式下守門跳出的確認畫面還沒實測，可照[疑難排解](docs/troubleshooting.md#在你自己的互動式-claude-code-驗證危險守門)自己驗證。 0.16.0-beta.3 的決策引擎有單元測試（公式、平滑、冷啟動、相似度、校準、門檻與模式、復原點與 undo、通知與回饋、守門整合），並用 `claude -p`（Claude Code 2.1.319、Sonnet）實測：暫存專案裡 `rm -rf build/` 第一次在略過權限模式下照常執行、先建復原點並在回覆結尾附一行；回 `/chutora:chutora ok <id> auto`（由 UserPromptSubmit hook 直接處理）後，預設權限模式的 `claude -p` 也自動執行了同一個指令並通知，換成 `rm -rf dist/` 就沒有自動（被拒）；`/chutora:chutora undo <id>` 把 `build/` 還原；force push 到不存在的 remote 在略過權限模式下直接擋、預設模式先問，回 `ok … auto` 也學不成自動；settings 的 `permissions.deny` 仍然優先於 hook 的 allow。一般流程每個請求固定多約 320 個輸入 token（分工慣例多兩行）。互動模式下的通知與回饋還沒實測。0.16.0-beta.5 新增的用量儀表（狀態列額度／上輪／淨省≈、Mac 選單列、面板額度區、PreCompact／SessionEnd 自動交接快照、提醒預設關閉）有單元測試；狀態列用假的 stdin JSON 在雲端容器實跑通過，選單列用假 usage.json 與假 Codex 檔案在 Linux 實跑通過，面板 mod 以 `claude plugin test` 掛載通過；真實訂閱帳號的互動式 CLI、macOS＋SwiftBar、真實 Desktop／VS Code 面板與真實 Codex 檔案都還沒實測，詳見[支援平台](docs/spec.md#支援平台目標四個平台都有效)。淨省≈ 是估算，照實顯示，可能是負的，不代表固定省下多少。
 
 已知會需要調整的地方：
 

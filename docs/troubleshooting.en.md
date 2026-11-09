@@ -16,13 +16,22 @@ Run `/chutora lang en` (or `zh`). To follow the system locale again: `/chutora l
 
 ### Long conversation but no context reminder
 
-- The threshold defaults to 100k tokens; adjust it with the `CONTEXT_REMIND_TOKENS` environment variable.
-- The check runs when you send your next message, and reminds once per step (then again every additional 40k).
+The reminder is off by default (one less block of fixed cost); before a compact and when a conversation ends, a script saves `handoff-auto.md` instead. To bring the reminder back:
+
+- Set the environment variable `CHUTORA_CONTEXT_REMIND=1`, or write `on` into `~/.claude/chutora/remind`.
+- Once on, the threshold defaults to 100k tokens (adjust with `CONTEXT_REMIND_TOKENS`); the check runs when you send your next message, and reminds once per step (then again every additional 40k).
 - It needs `python3`; if the "hook activity" line in `/chutora doctor` stays empty, the hooks aren't running.
 
 ### No status line
 
 A plugin can't set the main status line by itself. Plugin installs: run `/chutora:route-setup`; install.sh installs: `bash install.sh --with-statusline`.
+
+### The status line shows no limits (5h / wk) or net saved
+
+- Limits are shown only when the data Claude Code passes to the status line carries `rate_limits` (Claude Code 2.1.319 does; the whole field is skipped when there is no reading); non-subscription setups such as an API key may have none.
+- "net≈" is the estimated amount saved minus the plugin's fixed overhead; in a short conversation it can be negative, and it is shown as it is.
+- The Opus / Sonnet weekly split is not available to the plugin, so it is not shown.
+- Nothing in the Mac menu bar: check that `chutora-usage.1m.py` is in the SwiftBar plugin folder, that `python3` works, and that `~/.claude/chutora/usage.json` exists (the configured status line or the panel must have run first); details in [menubar/README.md](../menubar/README.md) (Chinese).
 
 ### The status line does not show the current action
 

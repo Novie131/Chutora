@@ -36,7 +36,7 @@ README 只留三分鐘上手；這份是完整說明。
 
 想強制指定某個 agent，用 `@agent-chutora:worker`。
 
-對話變長時（預設超過 10 萬 token）你會看到提醒，Claude 會先把目前進度寫進 `handoff.md`。之後不管是自動壓縮、`/clear` 還是隔天開新對話，交接筆記都會自動帶回來，不用重新解釋一次。
+預設不會再提醒你對話變長。每次壓縮前（PreCompact）與結束對話時（SessionEnd），腳本會自動寫一份 `handoff-auto.md`；你說「交接一下」時，Claude 仍會用 handoff skill 寫 `handoff.md`。之後不管是自動壓縮、`/clear` 還是隔天開新對話，交接筆記都會自動帶回來，不用重新解釋一次。
 
 ### 名詞小抄
 
@@ -204,7 +204,7 @@ Cowork 的 `device_bash`（使用者電腦上的 shell）也會去重：指令�
 1. **Context 隔離**（最大的一筆，而且是複利）。在主對話裡跑 30 次工具呼叫，那 30 份結果會被反覆計費到對話結束；派給子 agent 的話，主對話只收到一份摘要。派工要整包派，不要一件一件派，因為每次啟動子 agent 都要重付一次系統提示與記憶注入。
 2. **模型分層。** 有用，但是線性的：省的比例大致等於價差。
 3. **`effort` 等級。** worker 用 `medium`，失敗才升級到 worker-hard（`high`）；librarian 用 `low`。
-4. **主對話別開太久。** 隔離只管得到工具呼叫，管不到對話本身變長，所以 plugin 另外盯著長度，超過門檻就提醒寫交接筆記（見[進階設定](#advanced)）。話題告一段落時，換新對話或 `/clear` 仍然最省。
+4. **主對話別開太久。** 隔離只管得到工具呼叫，管不到對話本身變長，所以 plugin 另外盯著長度，超過門檻可以提醒寫交接筆記（預設關閉，見[進階設定](#advanced)）；壓縮與結束時另有自動交接快照。話題告一段落時，換新對話或 `/clear` 仍然最省。
 
 ### 失敗怎麼辦
 
@@ -218,11 +218,11 @@ Cowork 的 `device_bash`（使用者電腦上的 shell）也會去重：指令�
 
 ## <img src="../assets/icons/wrench.svg" width="26" height="26" alt=""> 進階設定
 
-### context 提醒與自動壓縮
+### context 提醒、自動交接快照與自動壓縮
 
-- UserPromptSubmit hook 在 context 超過 10 萬 token 時提醒一次，之後每多 4 萬再提醒。門檻可用環境變數 `CONTEXT_REMIND_TOKENS` 調整。
-- 提醒時 Claude 用 handoff skill 把現況寫進 `handoff.md`（目前任務 / 已完成 / 下一步 / 未決問題）。
-- 有設 `autoCompactWindow` 時，提醒只會告訴你約多少 k 會自動壓縮、壓縮後會帶回交接筆記；沒設才給可複製的指令：告一段落用 `/clear`、做到一半用 `/compact` 並指定重點、後半段是除錯雜訊就用 `/rewind` 局部摘要。
+- **提醒預設關閉**：UserPromptSubmit 的 context 長度提醒預設不注入任何東西。設環境變數 `CHUTORA_CONTEXT_REMIND=1`，或在 `~/.claude/chutora/remind` 寫 `on`，才恢復：超過 10 萬 token 提醒一次，之後每多 4 萬再提醒，門檻可用 `CONTEXT_REMIND_TOKENS` 調整。
+- 恢復提醒後，Claude 用 handoff skill 把現況寫進 `handoff.md`（目前任務 / 已完成 / 下一步 / 未決問題）。有設 `autoCompactWindow` 時，提醒只告訴你約多少 k 會自動壓縮、壓縮後會帶回交接筆記；沒設才給可複製的指令。
+- **自動交接快照**：PreCompact 與 SessionEnd 由純腳本（不用 AI）寫 `handoff-auto.md`（專案有 `claude-memory/` 就放那裡，否則放 `~/.claude/chutora/handoff/<project-id>.md`）：時間、分支與最近 3 個 commit、最近 5 則提示（各截 200 字並遮蔽敏感內容）、碰過的檔案、最新待辦。不會動你的 `handoff.md`；SessionStart 只帶一行指標，需要時再讀。
 - 每次壓縮、`/clear`、新 session 開始時，SessionStart hook 自動帶入 `handoff.md`：專案有 `claude-memory/` 就用它，否則用 transcript 旁 auto memory 目錄的 `handoff.md`（Claude Code 只會自動帶入 auto memory 的 MEMORY.md 索引，不會帶 handoff.md）。
 
 建議在 `~/.claude/settings.json` 把自動壓縮當保險（plugin 不能代設，`/chutora:route-setup` 會幫你安全地寫入）：
@@ -231,15 +231,21 @@ Cowork 的 `device_bash`（使用者電腦上的 shell）也會去重：指令�
 "autoCompactWindow": 153000
 ```
 
-扣掉約 33k 的 buffer 後，約在 12 萬自動壓縮，在 10 萬提醒之後留 2 萬緩衝寫 handoff。33k 是作者機器的實測值（不確定是否固定）；寫入後請用 `/context` 確認 Autocompact buffer 約 33k、壓縮點約 120k（有 `modelSettings` 逐模型覆蓋時要一併看）。
+扣掉約 33k 的 buffer 後，約在 12 萬自動壓縮，給 handoff 留下緩衝。33k 是作者機器的實測值（不確定是否固定）；寫入後請用 `/context` 確認 Autocompact buffer 約 33k、壓縮點約 120k（有 `modelSettings` 逐模型覆蓋時要一併看）。
 
 ### 狀態列（選用）
 
-閒置時顯示 `模型 │ ctx 95k │ 提醒 100k │ 壓縮 120k`；Claude 工作時改顯示目前動作（駕駛艙穩定版）：`▶ worker·Sonnet 跑測試 npm test · 12s │ 本次 42k tok │ 瘦身省≈8k │ ctx 95k/120k`。「本次」是這個 session 新處理的 token（input＋cache 寫入＋output，不含 cache 讀取，主對話加子 agent，從 transcript 精確加總）；「瘦身省≈」是瘦身、去重、MCP 瘦身擋下的字元 ÷4，屬於估算。目前動作由 `activity.py` 記在 `~/.claude/chutora/activity/`，`CHUTORA_ACTIVITY=0` 關閉；寬度不夠時依重要性丟掉後面的欄位（`CHUTORA_STATUS_WIDTH` 可指定寬度）。壓縮點讀自 `autoCompactWindow`（沒設就不顯示）。plugin 不能設定主狀態列：plugin 安裝的使用者請用 `/chutora:route-setup`，它會把檔案放到固定位置；install.sh 安裝的用 `bash install.sh --with-statusline`，或手動貼進 settings.json：
+閒置時顯示 `Opus │ 5h 42%(2h13m) │ 週 18%(週四23:15) │ ctx 95k │ 上輪 12.3k │ 淨≈-1.2k │ 本次 12k tok`；Claude 工作時改顯示目前動作（駕駛艙穩定版）：`▶ worker·Sonnet 跑測試 npm test · 12s │ 5h 42%(2h13m) │ 週 18%(週四23:15) │ ctx 95k/120k │ 上輪 12.3k │ 淨省≈+3k │ 本次 42k tok`。「5h」「週」是 Claude Code 傳給狀態列的額度百分比與重置時間（只在有讀數時出現，超過 80% 黃、95% 紅）；「上輪」是最後一則提示之後的 token（input＋cache 寫入＋output，不含 cache 讀取）；「本次」是這個 session 新處理的 token（主對話加子 agent，從 transcript 精確加總）。「淨省≈」是瘦身、去重、MCP 瘦身擋下的字元 ÷4（估算）扣掉外掛固定開銷（SessionStart 注入加 skills／agents 描述 ÷4）；固定開銷比省下的多時照實顯示成負的，如 `淨≈-1.2k`，不代表每次都省。提醒開啟時才多顯示 `提醒 100k`；有設 `autoCompactWindow` 時顯示 `壓縮 120k`。每次執行會把額度與用量寫進 `~/.claude/chutora/usage.json`，供選單列與面板讀取。目前動作由 `activity.py` 記在 `~/.claude/chutora/activity/`，`CHUTORA_ACTIVITY=0` 關閉；寬度不夠時依重要性丟掉後面的欄位（額度最後才丟，`CHUTORA_STATUS_WIDTH` 可指定寬度）。plugin 不能設定主狀態列：plugin 安裝的使用者請用 `/chutora:route-setup`，它會把檔案放到固定位置；install.sh 安裝的用 `bash install.sh --with-statusline`，或手動貼進 settings.json：
 
 ```json
 "statusLine": { "type": "command", "command": "python3 ~/.claude/hooks/chutora/statusline.py" }
 ```
+
+### Mac 選單列與駕駛艙額度區（選用）
+
+- **Mac 選單列**：`menubar/chutora-usage.1m.py` 是 SwiftBar／xbar 外掛，在選單列顯示 Claude 與 Codex 的 5 小時、每週額度（如 `C 5h42% 週18% · X 5h10% 週3%`），點開看重置時間與上一輪 token。Claude 的資料讀自 `usage.json`，Codex 的讀自 `~/.codex/sessions/` 最新 rollout 檔的 `token_count` 事件。用 `bash install.sh --with-menubar` 安裝，詳見 [menubar/README.md](../menubar/README.md)。
+- **駕駛艙「額度」區**：`agent-board` 面板多一區，顯示 5 小時／每週用量、重置時間與上一輪 token；本機執行時也會寫 `usage.json`。Cowork 在雲端，狀態列與選單列拿不到，只能看面板。
+- **限制**：Opus／Sonnet 週分項額度外掛與狀態列拿不到，所以不顯示；實測狀態見 [spec.md](spec.md#支援平台目標四個平台都有效)。
 
 ### 子 agent 看板與回覆模式切換鍵（選用）
 

@@ -26,7 +26,7 @@ chutora 裝完就能用；這個 skill 只是把「想要完整功能」要做�
 
 ## 3. autoCompactWindow 153000
 
-- 做什麼：在 `~/.claude/settings.json` 加 `"autoCompactWindow": 153000`，讓對話約 12 萬自動壓縮（扣掉 buffer 後）；10 萬提醒後留 2 萬緩衝寫 handoff，壓縮後 SessionStart hook 會自動帶回交接筆記，不需要手動 /clear。
+- 做什麼：在 `~/.claude/settings.json` 加 `"autoCompactWindow": 153000`，讓對話約 12 萬自動壓縮（扣掉 buffer 後）；給 handoff 留下緩衝，壓縮後 SessionStart hook 會自動帶回交接筆記，不需要手動 /clear。
 - 先跑 `python3 "${CLAUDE_SKILL_DIR}/apply_settings.py" --status`：
   - `autoCompactWindow` 已有值 → **不覆蓋**，只告知現值並詢問使用者要不要自己改。
   - `modelSettingsOverridesAutoCompact` 為 true → 提醒有逐模型覆蓋，那些模型不吃這個全域值。
