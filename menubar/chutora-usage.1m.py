@@ -212,13 +212,17 @@ def _live_pct(window, now):
     return pct
 
 
+def is_stale(src, now):
+    return src["updated_at"] is not None and now - src["updated_at"] > STALE_SECONDS
+
+
 def title_part(letter, src, now):
     parts = []
     for label, key in (("5h", "five_hour"), ("週", "seven_day")):
         pct = _live_pct(src[key], now)
         if pct is not None:
             parts.append("%s%d%%" % (label, _pct(pct)))
-    return letter + " " + (" ".join(parts) if parts else "—")
+    return letter + " " + (" ".join(parts) if parts else "—") + ("(舊)" if is_stale(src, now) else "")
 
 
 def section(name, src, now, claude=False):
@@ -241,8 +245,7 @@ def section(name, src, now, claude=False):
         lines.append("上一輪 token：input %s／cache %s／output %s | size=12" % (tok(lt["input"]), cache, tok(lt["output"])))
     if claude and src.get("net") is not None:
         lines.append("淨省≈ %s tokens | size=12" % tok(src["net"]))
-    stale = src["updated_at"] is not None and now - src["updated_at"] > STALE_SECONDS
-    lines.append(ago_text(src["updated_at"], now) + ("（舊資料）" if stale else "") + " | size=11 color=" + C_GRAY)
+    lines.append(ago_text(src["updated_at"], now) + ("（舊資料）" if is_stale(src, now) else "") + " | size=11 color=" + C_GRAY)
     return lines
 
 
@@ -275,9 +278,11 @@ def build(home, codex_home, now):
             "---",
             "重新整理 | refresh=true",
         ])
-    pcts = [p for _, _, s, _ in sources for k in ("five_hour", "seven_day") for p in [_live_pct(s[k], now)] if p is not None]
+    # 舊資料的 % 不參與標題上色；全部來源都舊時標題整體灰色
+    fresh = [s for _, _, s, _ in sources if not is_stale(s, now)]
+    pcts = [p for s in fresh for k in ("five_hour", "seven_day") for p in [_live_pct(s[k], now)] if p is not None]
     worst = max(pcts) if pcts else None
-    out = [" · ".join(title_part(l, s, now) for l, _, s, _ in sources) + (" | size=12" + _color(worst)), "---"]
+    out = [" · ".join(title_part(l, s, now) for l, _, s, _ in sources) + (" | size=12" + (" color=" + C_GRAY if not fresh else _color(worst))), "---"]
     for i, (_, name, src, is_claude) in enumerate(sources):
         if i:
             out.append("---")

@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import time
 import os
 import subprocess
 import sys
@@ -13,6 +14,7 @@ mb = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mb)
 
 NOW = 1_800_000_000  # 固定時間
+FRESH = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(NOW - 60))  # Codex 事件時間戳：比 NOW 早 1 分鐘（不算舊資料）
 
 
 def claude_json(home, **over):
@@ -82,7 +84,7 @@ class MenubarTest(unittest.TestCase):
         self.assertEqual(lines[-1], "重新整理 | refresh=true")
 
     def test_only_codex(self):
-        rollout(self.codex, [tc("2026-01-01T00:00:00Z")])
+        rollout(self.codex, [tc(FRESH)])
         out = self.build()
         self.assertEqual(out.split("\n")[0].split(" | ")[0], "X 5h10% 週3%")
         self.assertIn("5 小時：10%　重置 1h00m 後", out)
@@ -92,7 +94,7 @@ class MenubarTest(unittest.TestCase):
 
     def test_both(self):
         claude_json(self.home)
-        rollout(self.codex, [tc("2026-01-01T00:00:00Z")])
+        rollout(self.codex, [tc(FRESH)])
         out = self.build()
         self.assertEqual(out.split("\n")[0].split(" | ")[0], "C 5h42% 週18% · X 5h10% 週3%")
         self.assertIn("Claude Code | size=13", out)
@@ -112,13 +114,28 @@ class MenubarTest(unittest.TestCase):
             self.assertEqual(self.title(), "Chutora —", bad)
 
     def test_bad_json_codex_line_skipped(self):
-        rollout(self.codex, [tc("2026-01-01T00:00:00Z", primary=(55, 300)), '{"payload": {"type": "token_count" 壞', "not json"])
+        rollout(self.codex, [tc(FRESH, primary=(55, 300)), '{"payload": {"type": "token_count" 壞', "not json"])
         self.assertEqual(self.title().split(" | ")[0], "X 5h55% 週3%")
 
     def test_stale(self):
         claude_json(self.home)
         out = mb.build(self.home, self.codex, NOW + 7 * 3600)
         self.assertIn("7 小時前更新（舊資料）", out)
+
+    def test_stale_marked_in_title_and_not_colored(self):
+        # Claude 舊（7 小時前）、Codex 新：標題 C 加(舊)；Claude 的高用量不讓標題變色
+        claude_json(self.home, limits={"updated_at": NOW - 7 * 3600, "five_hour": {"pct": 96, "resets_at": NOW + 600},
+                                       "seven_day": {"pct": 18, "resets_at": NOW + 3 * 86400}},
+                    claude={"updated_at": NOW - 7 * 3600, "net": 1})
+        rollout(self.codex, [tc(FRESH)])
+        head = mb.build(self.home, self.codex, NOW).split("\n")[0]
+        self.assertTrue(head.startswith("C 5h96% 週18%(舊) · X 5h10% 週3% | size=12"), head)
+        self.assertNotIn("color=", head)
+
+    def test_all_stale_title_gray(self):
+        claude_json(self.home)
+        head = mb.build(self.home, self.codex, NOW + 7 * 3600).split("\n")[0]
+        self.assertEqual(head, "C 週18%(舊) | size=12 color=#8E8E93")
 
     def test_reset_passed_shows_dash(self):
         claude_json(self.home)
@@ -140,9 +157,9 @@ class MenubarTest(unittest.TestCase):
 
     def test_large_rollout_reads_only_tail(self):
         junk = json.dumps({"type": "response_item", "payload": {"type": "message", "text": "x" * 2000}})
-        old = tc("2026-01-01T00:00:00Z", primary=(99, 300))
+        old = tc(FRESH, primary=(99, 300))
         # 最舊的 token_count（99%）被 ~1MB 垃圾蓋過去；尾端只有新的 token_count
-        lines = [old] + [junk] * 500 + [tc("2026-01-01T00:01:00Z", primary=(21, 300))] + [junk] * 10
+        lines = [old] + [junk] * 500 + [tc(FRESH, primary=(21, 300))] + [junk] * 10
         path = rollout(self.codex, lines)
         self.assertGreater(os.path.getsize(path), 900 * 1024)
         self.assertEqual(self.title().split(" | ")[0], "X 5h21% 週3%")
@@ -151,14 +168,14 @@ class MenubarTest(unittest.TestCase):
         self.assertEqual(self.title(), "Chutora —")
 
     def test_picks_newest_file_and_classifies_by_window_minutes(self):
-        rollout(self.codex, [tc("2026-01-01T00:00:00Z", primary=(77, 300))], name="rollout-old.jsonl", day="2026/11/08", mtime=NOW - 9999)
+        rollout(self.codex, [tc(FRESH, primary=(77, 300))], name="rollout-old.jsonl", day="2026/11/08", mtime=NOW - 9999)
         # 方案只有週窗：primary 就是 10080，不能當成 5 小時
-        rollout(self.codex, [tc("2026-01-01T00:00:00Z", primary=(30, 10080), secondary=(5, 43200))], name="rollout-new.jsonl", mtime=NOW)
+        rollout(self.codex, [tc(FRESH, primary=(30, 10080), secondary=(5, 43200))], name="rollout-new.jsonl", mtime=NOW)
         self.assertEqual(self.title().split(" | ")[0], "X 週30%")
 
     def test_codex_home_env_and_script_never_errors(self):
         env = dict(os.environ, HOME=self.home, CODEX_HOME=self.codex)
-        rollout(self.codex, [tc("2026-01-01T00:00:00Z")])
+        rollout(self.codex, [tc(FRESH)])
         r = subprocess.run([sys.executable, SCRIPT], env=env, capture_output=True, text=True)
         self.assertEqual(r.returncode, 0)
         self.assertTrue(r.stdout.startswith("X 5h10% 週3%"))
