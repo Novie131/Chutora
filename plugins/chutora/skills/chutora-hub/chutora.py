@@ -802,8 +802,14 @@ def main(argv):
         return toggle("decide", rest)
     if sub in ("lang", "language", "語言"):
         return set_lang(rest)
-    print(T(f"不認得的指令：{sub}。可用：status、doctor、mode、trim、dedup、mcp-trim、ask、guard、observe、changes、ok、undo、decide、lang。",
-            f"Unknown command: {sub}. Available: status, doctor, mode, trim, dedup, mcp-trim, ask, guard, observe, changes, ok, undo, decide, lang."))
+    if sub in ("ledger", "損益表", "帳"):
+        led = hook_mod("ledger")
+        if not led:
+            print(T("找不到 ledger.py（hooks 沒裝好？先跑 /chutora doctor）。", "ledger.py not found (hooks missing? run /chutora doctor)."))
+            return 1
+        return led.main(argv[1:], L)
+    print(T(f"不認得的指令：{sub}。可用：status、doctor、mode、trim、dedup、mcp-trim、ask、guard、observe、changes、ok、undo、decide、lang、ledger。",
+            f"Unknown command: {sub}. Available: status, doctor, mode, trim, dedup, mcp-trim, ask, guard, observe, changes, ok, undo, decide, lang, ledger."))
     return 2
 
 
