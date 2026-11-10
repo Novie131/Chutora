@@ -146,6 +146,7 @@ body() {
     strip "$AUTO_HANDOFF" 80 "$HANDOFF_MAX_BYTES"
   fi
   snapshot_pointer
+  cowork_hint
 }
 
 # 自動交接快照（snapshot.py 在 PreCompact／SessionEnd 寫的）：有就只帶一行指標，內容要用時再讀。
@@ -162,6 +163,14 @@ snapshot_pointer() {
   [ -n "$t" ] || return 0
   if [ "$L" = en ]; then printf '\nAuto handoff snapshot: %s (%s)\n' "$f" "$t"
   else printf '\n自動交接快照：%s（%s）\n' "$f" "$t"; fi
+}
+
+# Cowork：hook 跑在雲端，寫不到使用者電腦上的 claude-memory/（snapshot.py 的快照會留在雲端、隨容器消失），
+# 所以只在 Cowork 多帶一句，請 Claude 告一段落時自己用 device_bash 寫。其他平台不輸出（不多花 token）。
+cowork_hint() {
+  case "${CLAUDE_CODE_ENTRYPOINT:-}" in remote_cowork*) ;; *) return 0 ;; esac
+  if [ "$L" = en ]; then printf '\nCowork: if a connected folder has claude-memory/, at each milestone update its handoff-auto.md via device_bash (first line `<!-- time: YYYY-MM-DD HH:MM -->`, then progress, decisions, next steps).\n'
+  else printf '\nCowork：連接資料夾有 claude-memory/ 時，告一段落就用 device_bash 更新其中的 handoff-auto.md（首行 `<!-- time: YYYY-MM-DD HH:MM -->`，接著進度、決定、下一步）。\n'; fi
 }
 
 # 記下本 session 實際注入文字的「ASCII 字元數 非ASCII字元數」（code point，不是 byte）給狀態列用 est_tokens 算固定開銷；

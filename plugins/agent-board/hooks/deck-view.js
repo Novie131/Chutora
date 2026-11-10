@@ -12,7 +12,7 @@ const L = {
     trimmed: '瘦身與去重擋下（估算）', ctx: '主對話 context', timeline: '動作時間線', files: '碰過的檔案',
     edited: '改過', read: '讀過', expand: '展開 ▸', fold: '收起 ▾', plain: '白話', raw: '原始指令',
     collapse: '▾ 縮小', main: '主對話', none: '—', doing: '正在', did: '剛完成', failed: '失敗',
-    quota: '額度', h5: '5 小時', wk: '每週', reset: '重置', noQuota: '沒有額度讀數', lastTurn: '上一輪 token',
+    quota: '總額度（不含分模型）', h5: '5 小時', wk: '每週', reset: '重置', noQuota: '沒有額度讀數', lastTurn: '上一輪 token',
     tIn: '輸入', tCw: '快取寫', tCr: '快取讀', tOut: '輸出',
   },
   en: {
@@ -21,7 +21,7 @@ const L = {
     trimmed: 'kept out by trimming (est.)', ctx: 'main context', timeline: 'Timeline', files: 'Files touched',
     edited: 'Edited', read: 'Read', expand: 'Show ▸', fold: 'Hide ▾', plain: 'Plain', raw: 'Raw',
     collapse: '▾ Collapse', main: 'main', none: '—', doing: '', did: 'Just did', failed: 'Failed',
-    quota: 'Usage limits', h5: '5-hour', wk: 'Weekly', reset: 'resets', noQuota: 'No usage reading', lastTurn: 'Last turn tokens',
+    quota: 'Usage limits (all models)', h5: '5-hour', wk: 'Weekly', reset: 'resets', noQuota: 'No usage reading', lastTurn: 'Last turn tokens',
     tIn: 'in', tCw: 'cache write', tCr: 'cache read', tOut: 'out',
   },
 }

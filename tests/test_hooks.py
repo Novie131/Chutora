@@ -283,6 +283,17 @@ class SessionStartBase(unittest.TestCase):
                               env=env, cwd=self.proj, timeout=30,
                               **({"input": stdin} if stdin is not None else {"stdin": subprocess.DEVNULL}))
 
+    def test_cowork_hint_only_in_cowork(self):
+        """Cowork（hook 在雲端、寫不到使用者電腦）才多帶一句 handoff-auto 提示；其他平台不輸出。"""
+        for ep in ("remote_cowork", "remote_cowork_trigger"):
+            for lang, word in (("zh", "告一段落"), ("en", "milestone")):
+                out = self.run_hook(CLAUDE_CODE_ENTRYPOINT=ep, CHUTORA_LANG=lang).stdout
+                self.assertIn("handoff-auto.md", out, (ep, lang))
+                self.assertIn("device_bash", out)
+                self.assertIn(word, out)
+        for env in ({}, {"CLAUDE_CODE_ENTRYPOINT": "cli"}, {"CLAUDE_CODE_ENTRYPOINT": "claude-vscode"}):
+            self.assertNotIn("device_bash", self.run_hook(CHUTORA_LANG="zh", **env).stdout, env)
+
     def shown(self):
         p = self.data / ".route-setup-shown"
         return p.read_text().strip() if p.exists() else None

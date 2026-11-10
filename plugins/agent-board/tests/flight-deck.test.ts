@@ -195,7 +195,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
       viewport: { columns: 100, rows: 40 },
       props: { title: '駕駛艙', isFocused: true, bodyColumns: 70, placement: 'inline', scroll: { offset: 0, bodyRows: 30 }, view: {} },
     } as any)
-    expect(await ui.find({ type: 'Text', text: /^額度$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^總額度（不含分模型）$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^97%$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /重置 1h30m 後/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /上一輪 token：輸入 12 · 快取寫 1\.5k · 快取讀 90k · 輸出 300/ })).toBeDefined()
