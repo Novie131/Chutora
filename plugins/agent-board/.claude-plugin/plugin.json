@@ -1,6 +1,6 @@
 {
   "name": "agent-board",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "駕駛艙（Flight Deck）：在 Claude Code 面板即時顯示 Claude 正在做什麼：動作時間線、待辦進度、各模型工作量、碰過的檔案與子 agent 狀態。",
   "author": {
     "name": "Novie131"
